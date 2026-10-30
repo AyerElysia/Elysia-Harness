@@ -5,7 +5,9 @@
 set -uo pipefail
 
 ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
-LOG=/tmp/dsh-web.log
+LOG_DIR="${ELYSIA_LOG_DIR:-$ROOT/homes/web/logs}"
+LOG=${ELYSIA_WEB_LOG:-$LOG_DIR/elyharn-web.log}
+mkdir -p "$LOG_DIR"
 
 if ss -tlnp 2>/dev/null | grep -q ':3299 '; then
   echo "[跳过] web 已在运行"
@@ -14,7 +16,8 @@ if ss -tlnp 2>/dev/null | grep -q ':3299 '; then
 fi
 
 cd "$ROOT"
-setsid bash scripts/dsh-web.sh --no-open --port 3299 > "$LOG" 2>&1 < /dev/null &
+# Append across manual restarts to preserve startup diagnostics.
+setsid bash scripts/dsh-web.sh --no-open --port 3299 >> "$LOG" 2>&1 < /dev/null &
 echo "[启动] 等待就绪…"
 sleep 18
 if ! ss -tlnp 2>/dev/null | grep -q ':3299 '; then

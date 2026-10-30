@@ -6,7 +6,7 @@
 # running it and kill the caller before it can report anything.
 set -uo pipefail
 
-PIDS=$(pgrep -f 'src/bin.ts --profile web' || true)
+PIDS=$(pgrep -f 'src/bin.ts --profile web.*--port 3299' || true)
 if [ -z "$PIDS" ]; then
   echo "未运行"
   exit 0
