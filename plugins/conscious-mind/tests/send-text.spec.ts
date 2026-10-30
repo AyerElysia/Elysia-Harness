@@ -137,7 +137,7 @@ describe('send_text tool', () => {
       const tool = ctx.tools.get('send_text')
       expect(tool).toBeDefined()
       expect(tool?.parameters.required).toEqual([
-        'channel', 'conversation', 'content', 'thought', 'mood', 'decision', 'expected_response',
+        'channel', 'conversation', 'thought', 'mood', 'decision', 'expected_response', 'content',
       ])
       let calls = 0
       ctx.outboundText.register('qq', async () => {

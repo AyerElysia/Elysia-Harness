@@ -249,12 +249,42 @@ importers:
       '@deepseek-ai/cordis':
         specifier: workspace:~
         version: link:../../dsh/vendor/cordis
+      '@deepseek-ai/dsh-agent':
+        specifier: workspace:*
+        version: link:../../dsh/packages/core/agent
+      '@deepseek-ai/dsh-agent-default-model':
+        specifier: workspace:*
+        version: link:../../dsh/packages/core/agent-default-model
+      '@deepseek-ai/dsh-agent-loop-testkit':
+        specifier: workspace:*
+        version: link:../../dsh/packages/test-support/agent-loop-testkit
+      '@deepseek-ai/dsh-attachment':
+        specifier: workspace:*
+        version: link:../../dsh/packages/attachment/attachment
+      '@deepseek-ai/dsh-attachment-local':
+        specifier: workspace:*
+        version: link:../../dsh/packages/attachment/attachment-local
+      '@deepseek-ai/dsh-brand':
+        specifier: workspace:*
+        version: link:../../dsh/packages/util/brand
+      '@deepseek-ai/dsh-fs-local':
+        specifier: workspace:*
+        version: link:../../dsh/packages/fs/fs-local
       '@deepseek-ai/dsh-llm':
         specifier: workspace:*
         version: link:../../dsh/packages/llm/llm
+      '@deepseek-ai/dsh-scope':
+        specifier: workspace:*
+        version: link:../../dsh/packages/core/scope
+      '@deepseek-ai/dsh-session':
+        specifier: workspace:*
+        version: link:../../dsh/packages/core/session
       '@deepseek-ai/dsh-system-prompt':
         specifier: workspace:*
         version: link:../../dsh/packages/core/system-prompt
+      '@deepseek-ai/dsh-tool-fs':
+        specifier: workspace:*
+        version: link:../../dsh/packages/fs/tool-fs
       '@deepseek-ai/dsh-tools':
         specifier: workspace:*
         version: link:../../dsh/packages/core/tools

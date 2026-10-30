@@ -4,7 +4,7 @@
  * @module @elysia/conscious-mind/turn
  */
 
-import type { InboundText } from './inbound.ts'
+import { inboundEventText, type InboundEvent } from './inbound.ts'
 import type { PendingTurn } from './pending.ts'
 import { outboundContent, readToolArguments, spokenReply, type ModelToolMessage } from './reply-args.ts'
 import type { SendTextArgs, SendTextResult } from './send-text.ts'
@@ -26,13 +26,13 @@ interface Completion {
   raw: string
 }
 
-function batchPrompt(batch: readonly InboundText[]): string {
+function batchPrompt(batch: readonly InboundEvent[]): string {
   const first = batch[0]
-  const lines = batch.map(message => `${message.senderName || message.senderId}：${message.text}`)
+  const lines = batch.map(message => `${message.senderName || message.senderId}：${inboundEventText(message)}`)
   return `渠道 ${first?.channel ?? ''}\n会话 ${first?.conversation ?? ''}\n这一批先后到达，还没回复：\n${lines.join('\n')}\n用一次 send_text 回到这一个会话。content 必须是对方能看见的非空文字。`
 }
 
-async function complete(turn: SendTextTurn, system: string, batch: readonly InboundText[], correction?: string): Promise<Completion> {
+async function complete(turn: SendTextTurn, system: string, batch: readonly InboundEvent[], correction?: string): Promise<Completion> {
   const messages = [
     { role: 'system', content: system },
     { role: 'user', content: batchPrompt(batch) },
@@ -63,7 +63,7 @@ async function complete(turn: SendTextTurn, system: string, batch: readonly Inbo
   return { message, args: read.args, raw: read.raw }
 }
 
-function toSendArgs(completion: Completion, batch: readonly InboundText[]): SendTextArgs {
+function toSendArgs(completion: Completion, batch: readonly InboundEvent[]): SendTextArgs {
   const parsed = completion.args
   const latest = batch.at(-1)
   const replyTo = latest?.messageId ?? ''
@@ -84,7 +84,7 @@ function logRejected(completion: Completion): void {
   process.stderr.write(`send_text 正文拒绝 content=${JSON.stringify(outboundContent(completion.args))} raw=${completion.raw || '(无参数)'} assistant=${assistant || '(无)'}\n`)
 }
 
-async function modelReply(turn: SendTextTurn, system: string, batch: readonly InboundText[]): Promise<SendTextArgs | undefined> {
+async function modelReply(turn: SendTextTurn, system: string, batch: readonly InboundEvent[]): Promise<SendTextArgs | undefined> {
   const first = await complete(turn, system, batch)
   const firstSpoken = spokenReply(outboundContent(first.args))
   if (firstSpoken !== undefined) return { ...toSendArgs(first, batch), content: firstSpoken }

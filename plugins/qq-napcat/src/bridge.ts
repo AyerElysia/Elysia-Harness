@@ -48,7 +48,14 @@ ctx.inboundPending.replyWith(createSendTextTurn({
   execute: async args => await tool.execute(args, { signal: new AbortController().signal } as never) as SendTextResult,
 }, async () => renderPrompt(await ctx.systemPrompt.assemble())))
 
-const link = new NapcatLink(settings, message => ctx.inboundPending.receive(message))
+const link = new NapcatLink(settings, message => ctx.inboundPending.receive({
+  channel: message.channel,
+  conversation: message.conversation,
+  messageId: message.messageId,
+  senderId: message.senderId,
+  senderName: message.senderName,
+  content: [{ type: 'text', text: message.text }],
+}))
 ctx.outboundText.register('qq', delivery => link.session.sendText(delivery))
 await link.start()
 process.stderr.write(`新架构在听 127.0.0.1:${port}\n`)

@@ -15,7 +15,22 @@
       "path": "../../dsh/vendor/schemastery"
     },
     {
+      "path": "../../dsh/packages/core/agent"
+    },
+    {
+      "path": "../../dsh/packages/core/agent-default-model"
+    },
+    {
+      "path": "../../dsh/packages/attachment/attachment"
+    },
+    {
+      "path": "../../dsh/packages/util/brand"
+    },
+    {
       "path": "../../dsh/packages/llm/llm"
+    },
+    {
+      "path": "../../dsh/packages/core/session"
     },
     {
       "path": "../../dsh/packages/core/system-prompt"

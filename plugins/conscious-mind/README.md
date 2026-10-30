@@ -4,7 +4,7 @@ English | [中文](README.zh.md)
 
 Elysia's conscious mind: one agent, one long-lived session.
 
-The plugin does not redo the session log, compaction, prompt assembly, or tool loop the Harness already provides. These two things are its own.
+The plugin does not redo the session log, compaction, prompt assembly, or tool loop the Harness already provides. The prefix, sending tool, inbound queue, and conscious-mind reply turn are its own.
 
 ## Prefix
 
@@ -48,19 +48,25 @@ One semantic difference from Elysium: `content` is split on newlines into multip
 
 ## pending
 
-Inbound messages do not each get their own reply. QQ, Feishu, and KOOK all call the conscious mind's `inboundPending.receive()`. Messages wait in the same pending list. After 1.2 seconds of quiet, one turn takes every message accumulated for the same `conversation` and answers once. Messages arriving during that reply stay pending and become the next batch after the turn ends.
+Inbound messages do not each get their own reply. Channel adapters are intended to call the conscious mind's `inboundPending.receive()`, entering one shared pending list. KOOK is connected; QQ and Feishu still await this integration. Each new message resets the collection wait; after 1.2 seconds of quiet, the queue **drains every event waiting at that moment**, preserving arrival order and mixing channels and conversations when necessary. Messages arriving during the reply stay pending and enter the next collection wait after the turn ends. A successful turn does not automatically retry an event merely because its conversation received no reply; a failed turn puts the whole batch back at the front of the in-memory queue.
 
-### Parameters
+## Conscious-mind reply turn
+
+When the Harness provides the `agents` service, the plugin connects pending to the conscious mind automatically. She has one agent and one long-lived session with the fixed id `elysia-conscious-mind`: reuse a live agent first, then try resume. If resume fails and no concurrently resumed agent is available, the code still attempts create under the same id; it does not yet distinguish a missing session from other resume failures. Each batch becomes one user message delivered through `followup()` to the native Harness agent loop, and the driver awaits `whenIdle()`. The Harness owns the model, session history, compaction, and tool calls; there is no separate chat-completions fetch.
+
+This session exposes `send_text`, DSH's native `read_image`, and the scoped `pass` tool. Other global tools, including code, file mutation, and search tools, are masked. `read_image` reads existing local image files; inbound chat images use the separate attachment-admission path. `pass` requires `reason`, records why she chose silence, and touches no channel. She may answer one or more conversations or stay silent; the runtime forces neither choice. Drained events remain in the long session history. The older `createSendTextTurn` remains available for standalone experiments but is not the reply turn installed by the ElyHarn service.
+
+## send_text parameters
 
 | Parameter | Type | Required | Meaning |
 |---|---|---|---|
 | `channel` | string | yes | Channel name: `qq`, `feishu`, `kook`, and comparable names registered later. |
 | `conversation` | string | yes | Which conversation. The format is defined by each channel plugin; the inbound message carries this setting and a reply copies it back. |
-| `content` | string | yes | Plain text to send to the other person. Never put thought, reason, or other metadata in it. |
 | `thought` | string | yes | The concise inner activity the subject chooses to submit this time. Must be non-empty natural language, not backfilled from provider reasoning or `content`, and not used as visible text; an empty value fails the whole call. |
 | `mood` | string | yes (key) | The current mood. Pass an empty string when there is no definite emotion; never invent a default. |
 | `decision` | string | yes (key) | How to respond or act. Pass an empty string when genuinely inapplicable; do not copy `content`. |
 | `expected_response` | string | yes (key) | What the other person is expected to do or feel after reading it. Pass an empty string when there is no definite expectation. |
+| `content` | string | yes | Plain text written last and sent to the other person. Never put thought, reason, or other metadata in it. |
 | `reply_to` | string | no | Message id to quote-reply to. Attaches only to the first segment after splitting. Omitted by default in direct messages. |
 
 One call submits the four inner fields and the body together; they land in the same model trace as the final reply.
@@ -74,7 +80,7 @@ Registered with `defineTool`. The parameter root is one object, and a key's `req
 ```ts
 defineTool({
   name: 'send_text',
-  description: '把文字发到外部渠道。assistant 正文不会出现在任何渠道上。content 里的换行会拆成多条消息。thought 必须是这次真实的非空思考。',
+  description: '把文字发到外部渠道。assistant 正文不会出现在任何渠道上。先写 thought、mood、decision、expected_response，最后写 content。content 里的换行会拆成多条消息。thought 必须是这次真实的非空思考。',
   parameters: {
     channel: {
       type: 'string',
@@ -85,11 +91,6 @@ defineTool({
       type: 'string',
       required: true,
       description: '这个渠道上的哪一段对话。入口消息里带着，回复时照抄。',
-    },
-    content: {
-      type: 'string',
-      required: true,
-      description: '发给对方的纯文本。换行拆成多条消息。不要写入 thought、reason 等元信息。',
     },
     thought: {
       type: 'string',
@@ -111,6 +112,11 @@ defineTool({
       required: true,
       description: '预期对方看到后的反应。没有明确预期时传空字符串。',
     },
+    content: {
+      type: 'string',
+      required: true,
+      description: '最后才写的、发给对方的纯文本。换行拆成多条消息。不要写入 thought、reason 等元信息。',
+    },
     reply_to: {
       type: 'string',
       description: '要引用的消息 id。只挂在拆分后的第一段。私聊默认省略。',
@@ -127,14 +133,14 @@ The parameter Schema the model receives is:
   "properties": {
     "channel": { "type": "string", "description": "渠道名，例如 qq、feishu、kook。必须是已经登记的渠道。" },
     "conversation": { "type": "string", "description": "这个渠道上的哪一段对话。入口消息里带着，回复时照抄。" },
-    "content": { "type": "string", "description": "发给对方的纯文本。换行拆成多条消息。不要写入 thought、reason 等元信息。" },
     "thought": { "type": "string", "description": "这次表达自己写下的内心活动。必须非空。不要从 reasoning 或 content 回填，也不要写进发出去的正文。" },
     "mood": { "type": "string", "description": "此刻的心情。没有明确情绪时传空字符串，不要编造默认情绪。" },
     "decision": { "type": "string", "description": "决定如何回应。不适用时传空字符串，不要复制 content。" },
     "expected_response": { "type": "string", "description": "预期对方看到后的反应。没有明确预期时传空字符串。" },
+    "content": { "type": "string", "description": "最后才写的、发给对方的纯文本。换行拆成多条消息。不要写入 thought、reason 等元信息。" },
     "reply_to": { "type": "string", "description": "要引用的消息 id。只挂在拆分后的第一段。私聊默认省略。" }
   },
-  "required": ["channel", "conversation", "content", "thought", "mood", "decision", "expected_response"]
+  "required": ["channel", "conversation", "thought", "mood", "decision", "expected_response", "content"]
 }
 ```
 

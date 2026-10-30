@@ -1,6 +1,18 @@
 # The Elysia conscious mind as a profile bundle: the standing-prompt prefix,
 # the send_text tool, and the inbound pending queue. Requires `systemPrompt`;
 # the tool attaches when the profile also provides `tools`.
+
+# Web presets disable the base host-plane filesystem tools. The conscious mind
+# composes only DSH's read_image tool globally so tools.restrict() can expose it
+# to the one standing Session; text-file mutation remains unavailable.
+- id: tool-fs
+  disabled: false
+  config:
+    read: false
+    readImage: true
+    write: false
+    edit: false
+
 - insert:
     - id: elysia-conscious-mind
       name: '@elysia/conscious-mind'

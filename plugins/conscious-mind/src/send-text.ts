@@ -12,11 +12,11 @@ import type { OutboundText } from './outbound.ts'
 export interface SendTextArgs {
   channel: string
   conversation: string
-  content: string
   thought: string
   mood: string
   decision: string
   expected_response: string
+  content: string
   reply_to?: string
 }
 
@@ -111,15 +111,15 @@ export async function deliverSendText(outbound: OutboundText, args: SendTextArgs
 export function defineSendTextTool(outbound: OutboundText) {
   return defineTool({
     name: 'send_text',
-    description: '把文字发到外部渠道。assistant 正文不会出现在任何渠道上。content 里的换行会拆成多条消息。thought 必须是这次真实的非空思考。',
+    description: '把文字发到外部渠道。assistant 正文不会出现在任何渠道上。先写 thought、mood、decision、expected_response，最后写 content。content 里的换行会拆成多条消息。thought 必须是这次真实的非空思考。',
     parameters: {
       channel: { type: 'string', required: true, description: '渠道名，例如 qq、feishu、kook。必须是已经登记的渠道。' },
       conversation: { type: 'string', required: true, description: '这个渠道上的哪一段对话。入口消息里带着，回复时照抄。' },
-      content: { type: 'string', required: true, description: '发给对方的纯文本。换行拆成多条消息。不要写入 thought、reason 等元信息。' },
       thought: { type: 'string', required: true, description: '这次表达自己写下的内心活动。必须非空。不要从 reasoning 或 content 回填，也不要写进发出去的正文。' },
       mood: { type: 'string', required: true, description: '此刻的心情。没有明确情绪时传空字符串，不要编造默认情绪。' },
       decision: { type: 'string', required: true, description: '决定如何回应。不适用时传空字符串，不要复制 content。' },
       expected_response: { type: 'string', required: true, description: '预期对方看到后的反应。没有明确预期时传空字符串。' },
+      content: { type: 'string', required: true, description: '最后才写的、发给对方的纯文本。换行拆成多条消息。不要写入 thought、reason 等元信息。' },
       reply_to: { type: 'string', description: '要引用的消息 id。只挂在拆分后的第一段。私聊默认省略。' },
     },
     isConcurrencySafe: () => false,

@@ -4,7 +4,7 @@
 
 爱莉希雅的主意识。一个 agent，一条长期 session。
 
-插件不重做 Harness 已有的会话日志、压缩、提示词组装和工具循环。下面两件是这个插件自己的。
+插件不重做 Harness 已有的会话日志、压缩、提示词组装和工具循环。前缀、发送工具、入口队列和主意识回复轮是这个插件自己的。
 
 ## 前缀
 
@@ -48,19 +48,25 @@ files:
 
 ## pending
 
-入口消息不按渠道各自回复。QQ、飞书、KOOK 都调用主意识的 `inboundPending.receive()`。消息先留在同一个 pending 里。安静 1.2 秒后，同一次只取走同一个 `conversation` 里积着的全部消息，再做一次回复。回复过程中新到的消息继续留在 pending 里，这一轮结束之后再作为下一批。
+入口消息不按渠道各自回复。渠道适配器应调用主意识的 `inboundPending.receive()`，让消息进入同一个 pending；目前 KOOK 已接入，QQ、飞书仍待接。每条新消息都会重置收集等待，队列连续静默 1.2 秒后，把**当时 pending 里的全部事件一次取走**，保留到达顺序，交给同一个回复轮；不同渠道、不同会话可以处在同一批。回复过程中新到的消息继续留在 pending，这一轮结束后再进入下一次静默收集等待。成功轮次不会因为某个会话没有收到回复而自动补答；轮次异常则将整批放回内存队首。
 
-### 参数
+## 主意识回复轮
+
+Harness 提供 `agents` 服务时，插件自动把 pending 接到主意识。主意识只有一个 agent、一条固定 id 为 `elysia-conscious-mind` 的长期 session：先复用已有 agent，再尝试 resume。resume 失败后若没有并发恢复出的 agent，当前代码仍会尝试按同一 id create，尚未区分 session 不存在与其他恢复失败。每批事件写成一个 user message，通过 `followup()` 交给 Harness 原生 agent loop，并等待 `whenIdle()`。模型、会话历史、压缩和工具调用都由 Harness 管理，不再走独立的 chat-completions fetch。
+
+这条 session 暴露 `send_text`、DSH 原生的 `read_image` 和本作用域注册的 `pass`；代码、文件写入与编辑、搜索等其他全局工具都被屏蔽。`read_image` 只用于主动读取已有本地图片，聊天图片走独立的附件入站链路。`pass` 必填 `reason`，只记录这一轮为什么不说话，不触碰任何渠道。她可以回复一个或多个会话，也可以不说话，运行时不强迫二选一中的任何一个。已取走的事件留在长期 session 历史中。旧的 `createSendTextTurn` 仍保留给独立实验，但不是 ElyHarn 服务安装的主意识回复轮。
+
+## send_text 参数
 
 | 参数 | 类型 | 必填 | 含义 |
 |---|---|---|---|
 | `channel` | string | 是 | 渠道名：`qq`、`feishu`、`kook`，以及以后注册的同类名字。 |
 | `conversation` | string | 是 | 哪一段对话。标识格式由渠道插件各自定义；入口消息自带这个现场，回复时照抄。 |
-| `content` | string | 是 | 要发给对方的纯文本正文。严禁写入 thought、reason 等元信息。 |
 | `thought` | string | 是 | 本次主体自己选择提交的简洁内心活动。必须是非空自然语言，不从 provider reasoning 或 content 回填，也不当作可见正文；为空则整次调用失败。 |
 | `mood` | string | 是（键） | 此刻的心情或情绪状态。没有明确情绪时传空字符串，禁止编造默认情绪。 |
 | `decision` | string | 是（键） | 决定如何回应或行动。确实不适用时传空字符串，不要复制 content。 |
 | `expected_response` | string | 是（键） | 预期对方看到回复后的反应。没有明确预期时传空字符串。 |
+| `content` | string | 是 | 最后才写的、发给对方的纯文本正文。严禁写入 thought、reason 等元信息。 |
 | `reply_to` | string | 否 | 引用回复的目标消息 ID，只跟随拆分后的第一段。私聊默认不用。 |
 
 一次调用同时提交四个内在字段与正文，它们和最终回复落在同一模型轨迹中。
@@ -74,7 +80,7 @@ files:
 ```ts
 defineTool({
   name: 'send_text',
-  description: '把文字发到外部渠道。assistant 正文不会出现在任何渠道上。content 里的换行会拆成多条消息。thought 必须是这次真实的非空思考。',
+  description: '把文字发到外部渠道。assistant 正文不会出现在任何渠道上。先写 thought、mood、decision、expected_response，最后写 content。content 里的换行会拆成多条消息。thought 必须是这次真实的非空思考。',
   parameters: {
     channel: {
       type: 'string',
@@ -85,11 +91,6 @@ defineTool({
       type: 'string',
       required: true,
       description: '这个渠道上的哪一段对话。入口消息里带着，回复时照抄。',
-    },
-    content: {
-      type: 'string',
-      required: true,
-      description: '发给对方的纯文本。换行拆成多条消息。不要写入 thought、reason 等元信息。',
     },
     thought: {
       type: 'string',
@@ -111,6 +112,11 @@ defineTool({
       required: true,
       description: '预期对方看到后的反应。没有明确预期时传空字符串。',
     },
+    content: {
+      type: 'string',
+      required: true,
+      description: '最后才写的、发给对方的纯文本。换行拆成多条消息。不要写入 thought、reason 等元信息。',
+    },
     reply_to: {
       type: 'string',
       description: '要引用的消息 id。只挂在拆分后的第一段。私聊默认省略。',
@@ -127,14 +133,14 @@ defineTool({
   "properties": {
     "channel": { "type": "string", "description": "渠道名，例如 qq、feishu、kook。必须是已经登记的渠道。" },
     "conversation": { "type": "string", "description": "这个渠道上的哪一段对话。入口消息里带着，回复时照抄。" },
-    "content": { "type": "string", "description": "发给对方的纯文本。换行拆成多条消息。不要写入 thought、reason 等元信息。" },
     "thought": { "type": "string", "description": "这次表达自己写下的内心活动。必须非空。不要从 reasoning 或 content 回填，也不要写进发出去的正文。" },
     "mood": { "type": "string", "description": "此刻的心情。没有明确情绪时传空字符串，不要编造默认情绪。" },
     "decision": { "type": "string", "description": "决定如何回应。不适用时传空字符串，不要复制 content。" },
     "expected_response": { "type": "string", "description": "预期对方看到后的反应。没有明确预期时传空字符串。" },
+    "content": { "type": "string", "description": "最后才写的、发给对方的纯文本。换行拆成多条消息。不要写入 thought、reason 等元信息。" },
     "reply_to": { "type": "string", "description": "要引用的消息 id。只挂在拆分后的第一段。私聊默认省略。" }
   },
-  "required": ["channel", "conversation", "content", "thought", "mood", "decision", "expected_response"]
+  "required": ["channel", "conversation", "thought", "mood", "decision", "expected_response", "content"]
 }
 ```
 
@@ -193,6 +199,14 @@ output: {
 - 段间停顿的时长与归属：`send_text` 统一负责，还是渠道插件各自决定；
 - 主动外联：给没有入口消息现场的会话发信，要不要先经过显式仲裁（Elysium 里是 `nucleus_proactive_query` 与 `nucleus_proactive_command` 两件套）；
 - 渠道插件注册接口的形状（Cordis service 还是事件）。QQ、飞书、KOOK 的会话格式分别由 `qq-napcat`、`feishu-app`、`kook-bot` 定义。
+
+## 第二阶段约定
+
+### 看图片
+
+聊天图片与 `read_image` 是两条不同链路。`read_image` 已独立开放给主意识，用于读取已有本地文件；聊天图片由渠道下载，文字和图片按平台顺序组成 DSH `PromptContentPart[]`，每条平台消息单独通过 `ctx.attachments.admitPromptContent()` 持久化，再进入全局 pending。KOOK 已接入这条链路，QQ 和飞书仍待接。图片入站本身不依赖 `read_image`，也不开放其他文件工具。
+
+主意识回复轮把事件元信息放在文本块里，随后按原顺序放入文字和 `{ type: 'image', attachment }` 原生图片块。Session 只保存附件引用，图片投影和 Compact 交给 DSH；不把成功收到的图片降级成 `[图片]`，也不把 Base64 写进历史。下载或任一图片准入失败时，整条消息不入队并记录错误；回复轮重试复用同一附件引用。完整事件 Schema、顺序和验收要求见 `REQUIREMENTS.zh.md`。
 
 ## 终端入口
 
