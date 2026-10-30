@@ -95,3 +95,12 @@ homes/*/.codex/
 homes/*/.claude/
 homes/*/.agent-presets/
 homes/*/profiles/*/node_modules
+
+# ── 两人在服务器上的对接区 ──────────────────────────────────────────────────
+# One machine's current hand-off state between the two people working on it.
+# Durable conclusions belong in docs/; these notes can be deleted once handled.
+handoff/
+
+# Local market indexes and retained session backups are runtime state.
+homes/*/profiles/*/.dsh-market/
+homes/*/session-backups/

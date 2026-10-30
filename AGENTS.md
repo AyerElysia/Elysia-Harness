@@ -11,6 +11,7 @@ at `dsh/AGENTS.md`; read those before changing anything inside it.
 | `plugins/*` | Our packages. Each is a Cordis plugin with a `dsh.bundle.patch`, so it mounts and unmounts independently. |
 | `homes/web`, `homes/tui` | One harness home per surface. Profile definitions are tracked; sessions, logs, credentials, and installed plugin deps are not. |
 | `homes/shared` | Configuration both surfaces read, such as model providers. |
+| `docs/` | Architecture notes. `docs/architecture.md` states the target shape (one session, four channel ingresses) and marks what is done versus still missing; read it before changing how a channel reaches the conscious mind. |
 
 ## Rules
 
