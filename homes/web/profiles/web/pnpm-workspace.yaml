@@ -1,0 +1,18 @@
+packages:
+  - .
+
+nodeLinker: hoisted
+autoInstallPeers: false
+
+# Build scripts pnpm refuses until reviewed. cloudflared fetches the tunnel
+# binary; the DSH native helpers need their postinstall. The rest are optional
+# backends whose scripts we do not rely on.
+allowBuilds:
+  cloudflared: true
+  koffi: true
+  node-pty: true
+  "@deepseek-ai/dsh-subprocess-local": true
+  "@google/genai": false
+  protobufjs: false
+  # dsh-market is fetched from git, so its build runs at install time.
+  "dshmarket@https://codeload.github.com/dsh-market/dsh-market/tar.gz/e320461dba3a7e99845f83c7bd106a2f1889dc7f": true

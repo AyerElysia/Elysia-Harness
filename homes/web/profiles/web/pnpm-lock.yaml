@@ -1,7 +1,7 @@
 lockfileVersion: '9.0'
 
 settings:
-  autoInstallPeers: true
+  autoInstallPeers: false
   excludeLinksFromLockfile: false
 
 importers:
@@ -10,27 +10,44 @@ importers:
     dependencies:
       '@elysia/conscious-mind':
         specifier: file:../../../../plugins/conscious-mind
-        version: file:../../../../plugins/conscious-mind
+        version: file:../../../../plugins/conscious-mind(@deepseek-ai/schemastery@3.18.5)
       '@elysia/feishu-app':
         specifier: file:../../../../plugins/feishu-app
-        version: file:../../../../plugins/feishu-app(@elysia/conscious-mind@file:../../../../plugins/conscious-mind)
+        version: file:../../../../plugins/feishu-app(@deepseek-ai/schemastery@3.18.5)(@elysia/conscious-mind@file:../../../../plugins/conscious-mind(@deepseek-ai/schemastery@3.18.5))
       '@elysia/kook-bot':
         specifier: file:../../../../plugins/kook-bot
-        version: file:../../../../plugins/kook-bot(@elysia/conscious-mind@file:../../../../plugins/conscious-mind)
+        version: file:../../../../plugins/kook-bot(@deepseek-ai/schemastery@3.18.5)(@elysia/conscious-mind@file:../../../../plugins/conscious-mind(@deepseek-ai/schemastery@3.18.5))
       '@elysia/qq-napcat':
         specifier: file:../../../../plugins/qq-napcat
-        version: file:../../../../plugins/qq-napcat(@elysia/conscious-mind@file:../../../../plugins/conscious-mind)
+        version: file:../../../../plugins/qq-napcat(@deepseek-ai/schemastery@3.18.5)(@elysia/conscious-mind@file:../../../../plugins/conscious-mind(@deepseek-ai/schemastery@3.18.5))
       '@elysia/request-archive':
         specifier: file:../../../../plugins/request-archive
-        version: file:../../../../plugins/request-archive
+        version: file:../../../../plugins/request-archive(@deepseek-ai/schemastery@3.18.5)
+      '@linxin666/dsh-remote-web-ui':
+        specifier: 0.4.8
+        version: 0.4.8
+      dshmarket:
+        specifier: github:dsh-market/dsh-market
+        version: https://codeload.github.com/dsh-market/dsh-market/tar.gz/e320461dba3a7e99845f83c7bd106a2f1889dc7f
 
 packages:
+
+  '@deepseek-ai/cosmokit@1.8.6':
+    resolution: {integrity: sha512-ZSD/fN52L498LBIOYwjIOlaLv5veY6ZEwI2yzvZUKQtctn0QAPqu8tKdJ+OF5+Tv6NBq1U+wJWH+QI6OGy5EvQ==}
+
+  '@deepseek-ai/schemastery@3.18.5':
+    resolution: {integrity: sha512-Mnobvqf9rHsZYv4g5edj5ddxS1oF1kIdSlz0DunUgnY3LWG5F26MqvH3YOOsSaodCgyzJ16OMN9O99/s5Crtdw==}
 
   '@elysia/conscious-mind@file:../../../../plugins/conscious-mind':
     resolution: {directory: ../../../../plugins/conscious-mind, type: directory}
     peerDependencies:
       '@deepseek-ai/cordis': workspace:~
+      '@deepseek-ai/dsh-agent': workspace:*
+      '@deepseek-ai/dsh-agent-default-model': workspace:*
+      '@deepseek-ai/dsh-attachment': workspace:*
+      '@deepseek-ai/dsh-brand': workspace:*
       '@deepseek-ai/dsh-llm': workspace:*
+      '@deepseek-ai/dsh-session': workspace:*
       '@deepseek-ai/dsh-system-prompt': workspace:*
       '@deepseek-ai/dsh-tools': workspace:*
       '@deepseek-ai/schemastery': workspace:~
@@ -46,6 +63,7 @@ packages:
     resolution: {directory: ../../../../plugins/kook-bot, type: directory}
     peerDependencies:
       '@deepseek-ai/cordis': workspace:~
+      '@deepseek-ai/dsh-attachment': workspace:*
       '@deepseek-ai/schemastery': workspace:~
       '@elysia/conscious-mind': workspace:*
 
@@ -65,20 +83,146 @@ packages:
       '@deepseek-ai/dsh-llm': workspace:*
       '@deepseek-ai/schemastery': workspace:~
 
+  '@linxin666/dsh-remote-web-ui@0.4.8':
+    resolution: {integrity: sha512-MqmTb0IL1wGvUYdKFN4v5blj7F839hPMzl1BhUeYKp8xBFK3XT1s7YC4Ks1h/G0N6sIuRSeYq/UpAuDwtPVyKg==}
+    engines: {node: ^22.19.0 || >=24.0.0}
+    peerDependencies:
+      '@deepseek-ai/dsh': '>=0.2.1-rc.2'
+      react: ^18.2.0
+      react-dom: ^18.2.0
+
+  '@standard-schema/spec@1.1.0':
+    resolution: {integrity: sha512-l2aFy5jALhniG5HgqrD6jXLi/rUWrKvqN/qJx6yoJsgKhblVd+iqqU4RCXavm/jPityDo5TCvKMnpjKnOriy0w==}
+
+  argparse@2.0.1:
+    resolution: {integrity: sha512-8+9WqebbFzpX9OR+Wa6O29asIogeRMzcGtAINdpMHHyAg10f05aSFVBbcEqGf/PXw1EjAZ+q2/bEBg3DvurK3Q==}
+
+  cloudflared@0.7.3:
+    resolution: {integrity: sha512-dR4QMS4PbD287QqOV/vAoE1BcQCXphLOVrN9vjNUgkLrPDA5qxn9Dz0VId0P7/Czj4Mxu3hoLgbrVx5OtOWr5Q==}
+    hasBin: true
+
+  clsx@2.1.1:
+    resolution: {integrity: sha512-eYm0QWBtUrBWZWG0d386OGAw16Z995PiOVo2B7bjWSbHedGl5e0ZWaq65kOGgUSNesEIDkB9ISbTg/JK9dhCZA==}
+    engines: {node: '>=6'}
+
+  dshmarket@https://codeload.github.com/dsh-market/dsh-market/tar.gz/e320461dba3a7e99845f83c7bd106a2f1889dc7f:
+    resolution: {gitHosted: true, integrity: sha512-DRVSY4I6gYfPx1cqzZZ9QC9obFElLOwR6ozXIZXTfaMc2XP+fsxGwVlRonGROzXUzVsNFJ27YuWRG/V6I7mjuw==, tarball: https://codeload.github.com/dsh-market/dsh-market/tar.gz/e320461dba3a7e99845f83c7bd106a2f1889dc7f}
+    version: 1.70.2
+    peerDependencies:
+      '@deepseek-ai/cordis': ^4.0.1
+      '@deepseek-ai/dsh-settings': ^0.1.0-rc.7 || ^0.1.1-rc.2 || ^0.1.2-alpha.2 || ^0.2.0-rc.1 || ^0.2.1-alpha.3 || ^0.2.1-rc.1
+      '@deepseek-ai/schemastery': ^3.18.1
+    peerDependenciesMeta:
+      '@deepseek-ai/dsh-settings':
+        optional: true
+      '@deepseek-ai/schemastery':
+        optional: true
+
+  js-yaml@4.3.2:
+    resolution: {integrity: sha512-SFNOvSJ+Dgf/9An904Yx+CgSlIPCkIpao4qo51lpee25TIRejdH3rhR4EZMGoNx3/TP3O+wzWuiTFl4sqbltzA==}
+    hasBin: true
+
+  qrcode.react@4.2.0:
+    resolution: {integrity: sha512-QpgqWi8rD9DsS9EP3z7BT+5lY5SFhsqGjpgW5DY/i3mK4M9DTBNz3ErMi8BWYEfI3L0d8GIbGmcdFAS1uIRGjA==}
+    peerDependencies:
+      react: ^16.8.0 || ^17.0.0 || ^18.0.0 || ^19.0.0
+
+  undici@7.30.1:
+    resolution: {integrity: sha512-03KrMbjIFDWQR5RNPrSw3bd1r12JpyFQl9/yxjUbJtqkjmllqC5lFjZh6ujeuJCKr8EOQvRW872Oy/az+nLYxg==}
+    engines: {node: '>=20.18.1'}
+
+  ws@8.21.3:
+    resolution: {integrity: sha512-201TZ/kPWxoPr/OKWjquZR1SWKXcvxdH+e1xrx89b3YbmzLMFCLfnaG1HFIgWzJOEWZ7MvpK++odZufgYR50Rw==}
+    engines: {node: '>=10.0.0'}
+    peerDependencies:
+      bufferutil: ^4.0.1
+      utf-8-validate: '>=5.0.2'
+    peerDependenciesMeta:
+      bufferutil:
+        optional: true
+      utf-8-validate:
+        optional: true
+
+  yaml@2.9.1:
+    resolution: {integrity: sha512-3NxN8+78OdzbT7C/WjGsyfPAtJaN3FNDsWxv7Y7mcDsT/oOmgW8BpyQQFFBnvZE3j9Y2Sdz1ULFLezL7Eb2yFw==}
+    engines: {node: '>= 14.6'}
+    hasBin: true
+
+  zod@4.6.7:
+    resolution: {integrity: sha512-g8W2D2kU6a8untc053fX1uVBKzM7yqAxW/3zwk83+6RyF2+SKOuV+c0wBDhUwzV1PaGapmZH+rmcUzPf+3CGwg==}
+
 snapshots:
 
-  '@elysia/conscious-mind@file:../../../../plugins/conscious-mind': {}
+  '@deepseek-ai/cosmokit@1.8.6': {}
 
-  '@elysia/feishu-app@file:../../../../plugins/feishu-app(@elysia/conscious-mind@file:../../../../plugins/conscious-mind)':
+  '@deepseek-ai/schemastery@3.18.5':
     dependencies:
-      '@elysia/conscious-mind': file:../../../../plugins/conscious-mind
+      '@deepseek-ai/cosmokit': 1.8.6
+      '@standard-schema/spec': 1.1.0
 
-  '@elysia/kook-bot@file:../../../../plugins/kook-bot(@elysia/conscious-mind@file:../../../../plugins/conscious-mind)':
+  '@elysia/conscious-mind@file:../../../../plugins/conscious-mind(@deepseek-ai/schemastery@3.18.5)':
     dependencies:
-      '@elysia/conscious-mind': file:../../../../plugins/conscious-mind
+      '@deepseek-ai/schemastery': 3.18.5
 
-  '@elysia/qq-napcat@file:../../../../plugins/qq-napcat(@elysia/conscious-mind@file:../../../../plugins/conscious-mind)':
+  '@elysia/feishu-app@file:../../../../plugins/feishu-app(@deepseek-ai/schemastery@3.18.5)(@elysia/conscious-mind@file:../../../../plugins/conscious-mind(@deepseek-ai/schemastery@3.18.5))':
     dependencies:
-      '@elysia/conscious-mind': file:../../../../plugins/conscious-mind
+      '@deepseek-ai/schemastery': 3.18.5
+      '@elysia/conscious-mind': file:../../../../plugins/conscious-mind(@deepseek-ai/schemastery@3.18.5)
 
-  '@elysia/request-archive@file:../../../../plugins/request-archive': {}
+  '@elysia/kook-bot@file:../../../../plugins/kook-bot(@deepseek-ai/schemastery@3.18.5)(@elysia/conscious-mind@file:../../../../plugins/conscious-mind(@deepseek-ai/schemastery@3.18.5))':
+    dependencies:
+      '@deepseek-ai/schemastery': 3.18.5
+      '@elysia/conscious-mind': file:../../../../plugins/conscious-mind(@deepseek-ai/schemastery@3.18.5)
+      ws: 8.21.3
+    transitivePeerDependencies:
+      - bufferutil
+      - utf-8-validate
+
+  '@elysia/qq-napcat@file:../../../../plugins/qq-napcat(@deepseek-ai/schemastery@3.18.5)(@elysia/conscious-mind@file:../../../../plugins/conscious-mind(@deepseek-ai/schemastery@3.18.5))':
+    dependencies:
+      '@deepseek-ai/schemastery': 3.18.5
+      '@elysia/conscious-mind': file:../../../../plugins/conscious-mind(@deepseek-ai/schemastery@3.18.5)
+      ws: 8.21.3
+    transitivePeerDependencies:
+      - bufferutil
+      - utf-8-validate
+
+  '@elysia/request-archive@file:../../../../plugins/request-archive(@deepseek-ai/schemastery@3.18.5)':
+    dependencies:
+      '@deepseek-ai/schemastery': 3.18.5
+
+  '@linxin666/dsh-remote-web-ui@0.4.8':
+    dependencies:
+      '@deepseek-ai/schemastery': 3.18.5
+      cloudflared: 0.7.3
+      clsx: 2.1.1
+      qrcode.react: 4.2.0
+      yaml: 2.9.1
+      zod: 4.6.7
+
+  '@standard-schema/spec@1.1.0': {}
+
+  argparse@2.0.1: {}
+
+  cloudflared@0.7.3: {}
+
+  clsx@2.1.1: {}
+
+  dshmarket@https://codeload.github.com/dsh-market/dsh-market/tar.gz/e320461dba3a7e99845f83c7bd106a2f1889dc7f:
+    dependencies:
+      js-yaml: 4.3.2
+      undici: 7.30.1
+
+  js-yaml@4.3.2:
+    dependencies:
+      argparse: 2.0.1
+
+  qrcode.react@4.2.0: {}
+
+  undici@7.30.1: {}
+
+  ws@8.21.3: {}
+
+  yaml@2.9.1: {}
+
+  zod@4.6.7: {}
