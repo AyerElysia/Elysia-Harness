@@ -2,12 +2,16 @@ import { mkdtemp, writeFile } from 'node:fs/promises'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import { Context } from '@deepseek-ai/cordis'
-import { describe, expect, it } from 'vitest'
+import { AttachmentId, AttachmentStore } from '@deepseek-ai/dsh-attachment'
+import type { ImageAttachmentRef, SaveImageAttachment, StoredImageAttachment } from '@deepseek-ai/dsh-attachment'
+import { describe, expect, it, vi } from 'vitest'
 import { OutboundText } from '@elysia/conscious-mind/outbound'
+import { InboundPending } from '@elysia/conscious-mind/src/pending.ts'
 import { KookClient } from '../src/client.ts'
 import { parseElysiumKookConfig } from '../src/config.ts'
 import { handleKookFrame } from '../src/frame.ts'
-import { kookInboundText } from '../src/inbound.ts'
+import { kookInboundEvent, kookInboundText } from '../src/inbound.ts'
+import type { KookInboundEvent } from '../src/inbound.ts'
 import * as KookBot from '../src/index.ts'
 
 const settings = parseElysiumKookConfig(`
@@ -19,6 +23,33 @@ use_kmarkdown = true
 reply_with_quote = true
 `)
 
+class FakeAttachments extends AttachmentStore {
+  readonly imageLimits = {
+    maxImageBytes: 1024 * 1024,
+    maxImagesPerMessage: 4,
+    maxMessageImageBytes: 4 * 1024 * 1024,
+    maxImagePixels: 16_000_000,
+    maxImageDimension: 4096,
+    mediaTypes: ['image/png', 'image/jpeg', 'image/webp', 'image/gif'],
+  } as const
+
+  async validateImage(_input: SaveImageAttachment): Promise<void> {}
+
+  async saveImage(input: SaveImageAttachment): Promise<ImageAttachmentRef> {
+    return {
+      attachmentId: AttachmentId('kook-image-1'),
+      mediaType: input.mediaType,
+      bytes: input.data.byteLength,
+      width: 1,
+      height: 1,
+    }
+  }
+
+  async readImage(_ref: ImageAttachmentRef): Promise<StoredImageAttachment> {
+    throw new Error('not used')
+  }
+}
+
 describe('Elysium KOOK config', () => {
   it('reads the bot name and the send flags', () => {
     expect(settings.botName).toBe('爱莉希雅')
@@ -28,7 +59,7 @@ describe('Elysium KOOK config', () => {
   })
 })
 
-describe('KOOK text', () => {
+describe('KOOK inbound events', () => {
   it('turns a direct text event into a conversation and drops the bot itself', () => {
     const inbound = kookInboundText({
       channel_type: 'PERSON',
@@ -54,6 +85,24 @@ describe('KOOK text', () => {
     })
   })
 
+  it('accepts an image event as an image source rather than text', () => {
+    const inbound = kookInboundEvent({
+      channel_type: 'PERSON',
+      type: 2,
+      content: 'https://img.kookapp.cn/example.png',
+      msg_id: 'k-image',
+      author_id: '1370110560',
+      extra: { author: { username: '小希' } },
+    }, '999')
+    expect(inbound?.content).toEqual([{ type: 'image', url: 'https://img.kookapp.cn/example.png' }])
+    expect(kookInboundText({
+      channel_type: 'PERSON', type: 2, content: 'https://img.kookapp.cn/example.png',
+      msg_id: 'k-image', author_id: '1370110560',
+    }, '999')).toBeUndefined()
+  })
+})
+
+describe('KOOK outbound text', () => {
   it('sends one channel segment as kmarkdown and quotes the first reply', async () => {
     const calls: { url: string; authorization?: string; body?: unknown }[] = []
     const client = new KookClient(settings, async (url, init) => {
@@ -100,10 +149,81 @@ bot_name = "爱莉希雅"
     const ctx = new Context()
     try {
       new OutboundText(ctx)
+      new InboundPending(ctx)
+      new FakeAttachments(ctx)
       const fiber = await ctx.plugin(KookBot, { configPath, listen: false })
       expect(typeof ctx.outboundText.sender('kook')).toBe('function')
       await fiber.dispose()
       expect(ctx.outboundText.sender('kook')).toBeUndefined()
+    } finally {
+      await ctx.fiber.dispose()
+    }
+  })
+
+  it('forwards text as an admitted event without changing its content', async () => {
+    const ctx = new Context()
+    try {
+      new FakeAttachments(ctx)
+      const pending = new InboundPending(ctx)
+      const receive = vi.spyOn(pending, 'receive')
+      const emitted: KookInboundEvent[] = []
+      ctx.on('kook/message', message => { emitted.push(message) })
+      const inbound = kookInboundEvent({
+        channel_type: 'PERSON', type: 9, content: '在吗', msg_id: 'k-forward',
+        author_id: '1370110560', extra: { author: { username: '小希' } },
+      }, '999')!
+      await KookBot.forwardKookInbound(ctx, inbound, new KookClient(settings))
+      expect(emitted).toEqual([inbound])
+      expect(receive).toHaveBeenCalledWith({
+        channel: 'kook', conversation: 'kook:direct:1370110560', messageId: 'k-forward',
+        senderId: '1370110560', senderName: '小希', content: [{ type: 'text', text: '在吗' }],
+      })
+    } finally {
+      await ctx.fiber.dispose()
+    }
+  })
+
+  it('downloads an image without leaking the token and queues only its durable reference', async () => {
+    const ctx = new Context()
+    try {
+      new FakeAttachments(ctx)
+      const pending = new InboundPending(ctx)
+      const receive = vi.spyOn(pending, 'receive')
+      const fetchImage = vi.fn(async () => new Response(new Uint8Array([1, 2, 3, 4]), {
+        status: 200,
+        headers: { 'content-type': 'image/png' },
+      }))
+      const inbound = kookInboundEvent({
+        channel_type: 'PERSON', type: 2, content: 'https://img.kookapp.cn/example.png',
+        msg_id: 'k-image-forward', author_id: '1370110560', extra: { author: { username: '小希' } },
+      }, '999')!
+      await KookBot.forwardKookInbound(ctx, inbound, new KookClient(settings, fetchImage))
+      expect(new Headers(fetchImage.mock.calls[0]?.[1]?.headers).get('authorization')).toBeNull()
+      const event = receive.mock.calls[0]?.[0]
+      expect(event?.content[0]?.type).toBe('image')
+      expect(event?.content[0]).toMatchObject({
+        attachment: { attachmentId: 'kook-image-1', mediaType: 'image/png', bytes: 4 },
+      })
+      expect(JSON.stringify(event)).not.toContain('AQIDBA==')
+      expect(JSON.stringify(event)).not.toContain('img.kookapp.cn')
+    } finally {
+      await ctx.fiber.dispose()
+    }
+  })
+
+  it('does not enqueue a partial event when image download fails', async () => {
+    const ctx = new Context()
+    try {
+      new FakeAttachments(ctx)
+      const pending = new InboundPending(ctx)
+      const receive = vi.spyOn(pending, 'receive')
+      const inbound = kookInboundEvent({
+        channel_type: 'PERSON', type: 2, content: 'https://img.kookapp.cn/missing.png',
+        msg_id: 'k-image-failed', author_id: '1370110560',
+      }, '999')!
+      const client = new KookClient(settings, async () => new Response('missing', { status: 404 }))
+      await expect(KookBot.forwardKookInbound(ctx, inbound, client)).resolves.toBeUndefined()
+      expect(receive).not.toHaveBeenCalled()
     } finally {
       await ctx.fiber.dispose()
     }

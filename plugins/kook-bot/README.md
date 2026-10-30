@@ -23,18 +23,31 @@ Direct messages use `/direct-message/create`; channels use `/message/create`. Wh
 
 ## Receiving
 
-Text inside Gateway signal 0 becomes:
+Text (type 1), KMarkdown (type 9), and images (type 2) inside Gateway signal 0 become:
 
 ```ts
-interface KookInboundText {
+interface KookInboundEvent {
   channel: 'kook'
   conversation: string
   target: { kind: 'direct'; userId: string } | { kind: 'channel'; channelId: string }
   messageId: string
   senderId: string
   senderName: string
-  text: string
+  content: readonly (
+    | { type: 'text'; text: string }
+    | { type: 'image'; url: string }
+  )[]
 }
 ```
 
 The bot's own messages are dropped. With `listen: true` the plugin opens the Gateway. One token can hold only one gateway, and connecting again displaces the running Elysium instance.
+
+`forwardKookInbound` handles events in arrival order. Text goes directly through DSH `admitPromptContent()`; images are downloaded over HTTPS without sending the Bot Token to the image URL, then admitted through the same path. On success, observers receive the original channel event through `kook/message`, while shared pending receives text and durable `ImageAttachmentRef` values. Raw Base64 and image URLs never enter the conscious-mind event or Session. A download, format, or attachment-validation failure keeps the whole event out of pending and logs the error rather than emitting an `[image]` placeholder. Pending only collects and wakes; this plugin never decides how to reply.
+
+`kookInboundText` remains only for the text-only direct-message history helper; live Gateway ingress uses `kookInboundEvent`.
+
+## Deployment switches
+
+The web surface's `scripts/dsh-web.sh` exports `ELYSIA_KOOK_CONFIG` (Elysium's kook_adapter config), so the profile mounts this plugin and registers the `kook` sender.
+
+Since 2026-10-26 KOOK belongs to ElyHarn: the Python-side kook_adapter has been disabled since 2026-10-23 16:23 (`enabled = false`, gateway stopped), and `dsh-web.sh` exports `ELYSIA_KOOK_LISTEN=1` by default so this plugin holds the gateway. One token keeps one socket — when running several ElyHarn surfaces, every other surface must boot with `ELYSIA_KOOK_LISTEN=0`.

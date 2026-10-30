@@ -20,22 +20,24 @@
     "cordis.patch.yml"
   ],
   "license": "MIT",
+  "dependencies": {
+    "ws": "8.21.3"
+  },
   "peerDependencies": {
     "@deepseek-ai/cordis": "workspace:~",
     "@deepseek-ai/schemastery": "workspace:~",
+    "@deepseek-ai/dsh-attachment": "workspace:*",
     "@elysia/conscious-mind": "workspace:*"
   },
   "devDependencies": {
     "@deepseek-ai/cordis": "workspace:~",
     "@deepseek-ai/schemastery": "workspace:~",
+    "@deepseek-ai/dsh-attachment": "workspace:*",
     "@elysia/conscious-mind": "workspace:*"
   },
   "dsh": {
     "bundle": {
       "patch": "./cordis.patch.yml"
     }
-  },
-  "dependencies": {
-    "ws": "8.21.3"
   }
 }

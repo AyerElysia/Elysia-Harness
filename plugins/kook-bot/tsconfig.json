@@ -16,6 +16,9 @@
     },
     {
       "path": "../conscious-mind"
+    },
+    {
+      "path": "../../dsh/packages/attachment/attachment"
     }
   ]
 }

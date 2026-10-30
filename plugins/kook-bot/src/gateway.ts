@@ -7,7 +7,7 @@
 import { createRequire } from 'node:module'
 import type { KookClient } from './client.ts'
 import { handleKookFrame, type KookSocketState } from './frame.ts'
-import { kookInboundText, type KookInboundText } from './inbound.ts'
+import { kookInboundEvent, type KookInboundEvent } from './inbound.ts'
 
 interface SocketLike {
   send(data: string): void
@@ -24,7 +24,8 @@ interface WsModule {
 const require = createRequire(import.meta.url)
 
 async function loadWs(): Promise<WsModule> {
-  // Resolve the declared package dependency independently of pnpm's layout.
+  // `ws` is a declared dependency of this package; never resolve it through a
+  // hardcoded .pnpm store path, which breaks whenever the checkout layout moves.
   return require('ws') as WsModule
 }
 
@@ -35,15 +36,16 @@ export class KookGateway {
   private heartbeat: ReturnType<typeof setInterval> | undefined
   private readonly state: KookSocketState = { sn: 0, sessionId: '' }
   private connectedWaiters: (() => void)[] = []
+  private inboundChain: Promise<void> = Promise.resolve()
   selfId = ''
 
   /**
    * @param client - REST client that issues the gateway URL and the bot id.
-   * @param onInbound - notified for each accepted text message.
+   * @param onInbound - awaited in event order for download and attachment admission.
    */
   constructor(
     private readonly client: KookClient,
-    private readonly onInbound: (message: KookInboundText) => void = () => {},
+    private readonly onInbound: (message: KookInboundEvent) => void | Promise<void> = () => {},
   ) {}
 
   get connected(): boolean {
@@ -132,8 +134,15 @@ export class KookGateway {
           this.connectedWaiters = []
           resolve()
         } else if (action.type === 'event') {
-          const inbound = kookInboundText(action.event, this.selfId)
-          if (inbound !== undefined) this.onInbound(inbound)
+          const inbound = kookInboundEvent(action.event, this.selfId)
+          if (inbound !== undefined) {
+            this.inboundChain = this.inboundChain
+              .then(() => this.onInbound(inbound))
+              .catch((error: unknown) => {
+                const reason = error instanceof Error ? error.message : String(error)
+                process.stderr.write(`KOOK 消息 ${inbound.messageId} 处理失败: ${reason}\n`)
+              })
+          }
         } else if (action.type === 'reconnect') {
           socket.close()
         }

@@ -39,7 +39,10 @@
       disabled: !!js process.env.ELYSIA_KOOK_CONFIG === undefined
       config:
         configPath: !!js process.env.ELYSIA_KOOK_CONFIG ?? ''
-        listen: false
+        # One token keeps one gateway. Opening it here replaces the socket the
+        # live Python Elysium holds, so listen only turns on through an explicit
+        # ELYSIA_KOOK_LISTEN=1 after that adapter has been stood down.
+        listen: !!js process.env.ELYSIA_KOOK_LISTEN === '1'
 
     - id: elysia-request-archive
       name: '@elysia/request-archive'

@@ -16,8 +16,9 @@ const settings = loadElysiumKookConfig()
 const client = new KookClient(settings)
 const received: string[] = []
 const gateway = new KookGateway(client, (message) => {
-  received.push(`${message.conversation} ${message.senderName} ${message.text}`)
-  process.stderr.write(`收到 ${message.conversation} ${message.senderName}: ${message.text}\n`)
+  const text = message.content.map(part => part.type === 'text' ? part.text : '<图片>').join('')
+  received.push(`${message.conversation} ${message.senderName} ${text}`)
+  process.stderr.write(`收到 ${message.conversation} ${message.senderName}: ${text}\n`)
 })
 
 const ctx = new Context()

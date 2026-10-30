@@ -95,6 +95,29 @@ export class KookClient {
     return undefined
   }
 
+  /** Download one platform image without forwarding the bot credential to its URL. */
+  async downloadImage(url: string, maxBytes: number): Promise<{
+    mediaType: 'image/png' | 'image/jpeg' | 'image/webp' | 'image/gif'
+    data: string
+  }> {
+    const target = new URL(url)
+    if (target.protocol !== 'https:') throw new Error('KOOK 图片地址必须使用 HTTPS')
+    const response = await this.fetchImpl(target, { signal: AbortSignal.timeout(20_000) })
+    if (!response.ok) throw new Error(`KOOK 图片下载失败: HTTP ${response.status}`)
+    const declaredLength = Number(response.headers.get('content-length') ?? 0)
+    if (Number.isFinite(declaredLength) && declaredLength > maxBytes) {
+      throw new Error(`KOOK 图片超过 ${maxBytes} 字节上限`)
+    }
+    const bytes = new Uint8Array(await response.arrayBuffer())
+    if (bytes.byteLength === 0) throw new Error('KOOK 图片内容为空')
+    if (bytes.byteLength > maxBytes) throw new Error(`KOOK 图片超过 ${maxBytes} 字节上限`)
+    const mediaType = response.headers.get('content-type')?.split(';', 1)[0]?.trim().toLowerCase()
+    if (mediaType !== 'image/png' && mediaType !== 'image/jpeg' && mediaType !== 'image/webp' && mediaType !== 'image/gif') {
+      throw new Error(`KOOK 图片类型不受支持: ${mediaType ?? '未声明'}`)
+    }
+    return { mediaType, data: Buffer.from(bytes).toString('base64') }
+  }
+
   async sendText(delivery: OutboundDelivery): Promise<OutboundReceipt> {
     const target = parseKookConversation(delivery.conversation)
     const body: Record<string, unknown> = {

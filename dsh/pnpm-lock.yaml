@@ -314,6 +314,9 @@ importers:
       '@deepseek-ai/cordis':
         specifier: workspace:~
         version: link:../../dsh/vendor/cordis
+      '@deepseek-ai/dsh-attachment':
+        specifier: workspace:*
+        version: link:../../dsh/packages/attachment/attachment
       '@elysia/conscious-mind':
         specifier: workspace:*
         version: link:../conscious-mind
