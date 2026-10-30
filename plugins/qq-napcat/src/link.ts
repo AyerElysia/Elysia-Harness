@@ -5,8 +5,6 @@
 
 import { createServer, type IncomingMessage, type Server } from 'node:http'
 import { createRequire } from 'node:module'
-import { dirname, join } from 'node:path'
-import { fileURLToPath } from 'node:url'
 import type { QqNapcatSettings } from './config.ts'
 import { OneBotSession, type OneBotSocket } from './session.ts'
 import type { QqInboundText } from './inbound.ts'
@@ -31,13 +29,11 @@ interface WsModule {
 }
 
 const require = createRequire(import.meta.url)
-const wsEntry = join(
-  dirname(fileURLToPath(import.meta.url)),
-  '../../../../node_modules/.pnpm/ws@8.21.3/node_modules/ws/index.js',
-)
 
 async function loadWs(): Promise<WsModule> {
-  return require(wsEntry) as WsModule
+  // `ws` is a declared dependency of this package; never resolve it through a
+  // hardcoded .pnpm store path, which breaks whenever the checkout layout moves.
+  return require('ws') as WsModule
 }
 
 /** A connected NapCat session plus the listening socket, when this side is the server. */

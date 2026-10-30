@@ -5,8 +5,6 @@
  */
 
 import { createRequire } from 'node:module'
-import { dirname, join } from 'node:path'
-import { fileURLToPath } from 'node:url'
 import type { KookClient } from './client.ts'
 import { handleKookFrame, type KookSocketState } from './frame.ts'
 import { kookInboundText, type KookInboundText } from './inbound.ts'
@@ -24,13 +22,10 @@ interface WsModule {
 }
 
 const require = createRequire(import.meta.url)
-const wsEntry = join(
-  dirname(fileURLToPath(import.meta.url)),
-  '../../../../node_modules/.pnpm/ws@8.21.3/node_modules/ws/index.js',
-)
 
 async function loadWs(): Promise<WsModule> {
-  return require(wsEntry) as WsModule
+  // Resolve the declared package dependency independently of pnpm's layout.
+  return require('ws') as WsModule
 }
 
 /** A connected KOOK gateway. */

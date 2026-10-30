@@ -277,6 +277,9 @@ importers:
       '@deepseek-ai/schemastery':
         specifier: link:../../dsh/vendor/schemastery
         version: link:../../dsh/vendor/schemastery
+      ws:
+        specifier: 8.21.3
+        version: 8.21.3
     devDependencies:
       '@deepseek-ai/cordis':
         specifier: workspace:~
@@ -290,6 +293,9 @@ importers:
       '@deepseek-ai/schemastery':
         specifier: link:../../dsh/vendor/schemastery
         version: link:../../dsh/vendor/schemastery
+      ws:
+        specifier: 8.21.3
+        version: 8.21.3
     devDependencies:
       '@deepseek-ai/cordis':
         specifier: workspace:~
@@ -568,21 +574,6 @@ importers:
       '@deepseek-ai/schemastery':
         specifier: link:../../vendor/schemastery
         version: link:../../vendor/schemastery
-      '@elysia/conscious-mind':
-        specifier: workspace:*
-        version: link:../../../plugins/conscious-mind
-      '@elysia/feishu-app':
-        specifier: workspace:*
-        version: link:../../../plugins/feishu-app
-      '@elysia/kook-bot':
-        specifier: workspace:*
-        version: link:../../../plugins/kook-bot
-      '@elysia/qq-napcat':
-        specifier: workspace:*
-        version: link:../../../plugins/qq-napcat
-      '@elysia/request-archive':
-        specifier: workspace:*
-        version: link:../../../plugins/request-archive
       commander:
         specifier: ^15.0.0
         version: 15.0.0

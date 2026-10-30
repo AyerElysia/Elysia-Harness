@@ -34,5 +34,8 @@
     "bundle": {
       "patch": "./cordis.patch.yml"
     }
+  },
+  "dependencies": {
+    "ws": "8.21.3"
   }
 }
