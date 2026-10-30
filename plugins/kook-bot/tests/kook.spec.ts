@@ -5,7 +5,7 @@ import { Context } from '@deepseek-ai/cordis'
 import { AttachmentId, AttachmentStore } from '@deepseek-ai/dsh-attachment'
 import type { ImageAttachmentRef, SaveImageAttachment, StoredImageAttachment } from '@deepseek-ai/dsh-attachment'
 import { describe, expect, it, vi } from 'vitest'
-import { OutboundText } from '@elysia/conscious-mind/outbound'
+import { OutboundText, OutboundVoice } from '@elysia/conscious-mind/outbound'
 import { InboundPending } from '@elysia/conscious-mind/src/pending.ts'
 import { KookClient } from '../src/client.ts'
 import { parseElysiumKookConfig } from '../src/config.ts'
@@ -126,6 +126,60 @@ describe('KOOK outbound text', () => {
   })
 })
 
+describe('KOOK outbound voice', () => {
+  it('uploads a uniquely named asset and sends its URL as a native voice message', async () => {
+    const calls: { url: string; init?: RequestInit }[] = []
+    const client = new KookClient(settings, async (url, init) => {
+      calls.push({ url: String(url), init })
+      if (String(url).endsWith('/asset/create')) {
+        return Response.json({ code: 0, data: { url: 'https://cdn.kookapp.cn/voice.mp3' } })
+      }
+      return Response.json({ code: 0, data: { msg_id: 'k-voice' } })
+    }, async () => ({
+      body: new Uint8Array([0xff, 0xfb, 1, 2]),
+      filename: 'elysia-voice-test.mp3',
+      contentType: 'audio/mpeg',
+    }))
+    const receipt = await client.sendVoice({
+      conversation: 'kook:direct:42', audio: new Uint8Array([1, 2, 3, 4]), mediaType: 'audio/wav',
+    })
+    expect(receipt).toEqual({ messageId: 'k-voice' })
+    expect(calls.map(call => call.url.split('/').at(-2))).toEqual(['asset', 'direct-message'])
+    const upload = calls[0]?.init?.body as FormData
+    const file = upload.get('file') as File
+    expect(file.name).toBe('elysia-voice-test.mp3')
+    expect(file.type).toBe('audio/mpeg')
+    expect(new Headers(calls[0]?.init?.headers).get('authorization')).toBe('Bot bot-token')
+    expect(JSON.parse(String(calls[1]?.init?.body))).toEqual({
+      target_id: '42', content: 'https://cdn.kookapp.cn/voice.mp3', type: 8,
+    })
+  })
+
+  it('falls back to one file message only when KOOK rejects native voice', async () => {
+    const calls: { url: string; init?: RequestInit }[] = []
+    const client = new KookClient(settings, async (url, init) => {
+      calls.push({ url: String(url), init })
+      if (String(url).endsWith('/asset/create')) {
+        return Response.json({ code: 0, data: { url: 'https://cdn.kookapp.cn/voice.mp3' } })
+      }
+      const body = JSON.parse(String(init?.body)) as { type: number }
+      if (body.type === 8) return Response.json({ code: 40000, message: '不允许发送此消息类型' })
+      return Response.json({ code: 0, data: { msg_id: 'k-voice-file' } })
+    }, async () => ({
+      body: new Uint8Array([0xff, 0xfb, 1, 2]),
+      filename: 'elysia-voice-test.mp3',
+      contentType: 'audio/mpeg',
+    }))
+    await expect(client.sendVoice({
+      conversation: 'kook:direct:42', audio: new Uint8Array([1, 2, 3, 4]), mediaType: 'audio/wav',
+    })).resolves.toEqual({ messageId: 'k-voice-file' })
+    expect(calls.filter(call => call.url.endsWith('/asset/create'))).toHaveLength(1)
+    expect(calls.filter(call => call.url.endsWith('/direct-message/create')).map(call => {
+      return (JSON.parse(String(call.init?.body)) as { type: number }).type
+    })).toEqual([8, 4])
+  })
+})
+
 describe('KOOK gateway frames', () => {
   it('accepts hello, keeps the newest event, and clears the session on reconnect', () => {
     const state = { sn: 0, sessionId: '' }
@@ -149,12 +203,15 @@ bot_name = "爱莉希雅"
     const ctx = new Context()
     try {
       new OutboundText(ctx)
+      new OutboundVoice(ctx)
       new InboundPending(ctx)
       new FakeAttachments(ctx)
       const fiber = await ctx.plugin(KookBot, { configPath, listen: false })
       expect(typeof ctx.outboundText.sender('kook')).toBe('function')
+      expect(typeof ctx.outboundVoice.sender('kook')).toBe('function')
       await fiber.dispose()
       expect(ctx.outboundText.sender('kook')).toBeUndefined()
+      expect(ctx.outboundVoice.sender('kook')).toBeUndefined()
     } finally {
       await ctx.fiber.dispose()
     }

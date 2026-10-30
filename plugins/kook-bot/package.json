@@ -1,7 +1,7 @@
 {
   "name": "@elysia/kook-bot",
   "description": "KOOK channel plugin: Gateway socket and REST text send for send_text",
-  "version": "0.2.1-rc.2",
+  "version": "0.2.1-rc.3",
   "private": true,
   "type": "module",
   "main": "./src/index.ts",

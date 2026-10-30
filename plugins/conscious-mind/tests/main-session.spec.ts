@@ -131,7 +131,7 @@ describe('main session turn', () => {
     setup?.({ tools: { register, restrict } } as unknown as Context)
     expect(register).toHaveBeenCalledOnce()
     expect(register.mock.calls[0]?.[0].name).toBe('pass')
-    expect(restrict).toHaveBeenCalledWith({ allow: ['send_text', 'read_image'] })
+    expect(restrict).toHaveBeenCalledWith({ allow: ['send_text', 'send_voice', 'read_image'] })
 
     await turn(batch.slice(0, 1))
     expect(calls.filter(call => call === 'create')).toHaveLength(1)
@@ -160,6 +160,6 @@ describe('main agent tool scope', () => {
     const restrict = vi.fn()
     composeMainAgent({ tools: { register, restrict } } as unknown as Context)
     expect(register.mock.calls[0]?.[0].name).toBe('pass')
-    expect(restrict).toHaveBeenCalledWith({ allow: ['send_text', 'read_image'] })
+    expect(restrict).toHaveBeenCalledWith({ allow: ['send_text', 'send_voice', 'read_image'] })
   })
 })

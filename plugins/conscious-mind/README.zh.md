@@ -54,7 +54,7 @@ files:
 
 Harness 提供 `agents` 服务时，插件自动把 pending 接到主意识。主意识只有一个 agent、一条固定 id 为 `elysia-conscious-mind` 的长期 session：先复用已有 agent，再尝试 resume。resume 失败后若没有并发恢复出的 agent，当前代码仍会尝试按同一 id create，尚未区分 session 不存在与其他恢复失败。每批事件写成一个 user message，通过 `followup()` 交给 Harness 原生 agent loop，并等待 `whenIdle()`。模型、会话历史、压缩和工具调用都由 Harness 管理，不再走独立的 chat-completions fetch。
 
-这条 session 暴露 `send_text`、DSH 原生的 `read_image` 和本作用域注册的 `pass`；代码、文件写入与编辑、搜索等其他全局工具都被屏蔽。`read_image` 只用于主动读取已有本地图片，聊天图片走独立的附件入站链路。`pass` 必填 `reason`，只记录这一轮为什么不说话，不触碰任何渠道。她可以回复一个或多个会话，也可以不说话，运行时不强迫二选一中的任何一个。已取走的事件留在长期 session 历史中。旧的 `createSendTextTurn` 仍保留给独立实验，但不是 ElyHarn 服务安装的主意识回复轮。
+这条 session 暴露 `send_text`、`send_voice`、DSH 原生的 `read_image` 和本作用域注册的 `pass`；代码、文件写入与编辑、搜索等其他全局工具都被屏蔽。`read_image` 只用于主动读取已有本地图片，聊天图片走独立的附件入站链路。`pass` 必填 `reason`，只记录这一轮为什么不说话，不触碰任何渠道。她可以回复一个或多个会话，也可以不说话，运行时不强迫二选一中的任何一个。已取走的事件留在长期 session 历史中。旧的 `createSendTextTurn` 仍保留给独立实验，但不是 ElyHarn 服务安装的主意识回复轮。
 
 ## send_text 参数
 
@@ -207,6 +207,50 @@ output: {
 聊天图片与 `read_image` 是两条不同链路。`read_image` 已独立开放给主意识，用于读取已有本地文件；聊天图片由渠道下载，文字和图片按平台顺序组成 DSH `PromptContentPart[]`，每条平台消息单独通过 `ctx.attachments.admitPromptContent()` 持久化，再进入全局 pending。KOOK 已接入这条链路，QQ 和飞书仍待接。图片入站本身不依赖 `read_image`，也不开放其他文件工具。
 
 主意识回复轮把事件元信息放在文本块里，随后按原顺序放入文字和 `{ type: 'image', attachment }` 原生图片块。Session 只保存附件引用，图片投影和 Compact 交给 DSH；不把成功收到的图片降级成 `[图片]`，也不把 Base64 写进历史。下载或任一图片准入失败时，整条消息不入队并记录错误；回复轮重试复用同一附件引用。完整事件 Schema、顺序和验收要求见 `REQUIREMENTS.zh.md`。
+
+### 发送语音
+
+> 状态：工具已实现并开放给主意识。KOOK 上传一次音频后优先发送原生语音；平台明确拒绝该类型时，按旧版 Elysium 行为降级为音频文件消息，不重复上传。BreezeTTS 合成失败、平台发送失败和投递状态未知会分别返回。QQ、飞书的语音发送仍待接。
+
+`send_voice` 只把 `text` 口语合成为爱莉的本地音色并发送，不接受 `path`。已有音频和其他已有文件一样，统一通过 `send_file` 发送；不让两个工具重复承担同一种文件发送能力。`send_file` 尚未实现。
+
+这是针对 BreezeTTS 的工具。原生声音事件和 `expression_instruction` 沿用 Elysium 的 `life_send_voice` 语义；参考音频、`ref_text`、可信基础 `instruction`、`cfg_scale`、`seed` 都由部署侧管理。工具不提供 `voice_style` 或 `text_language`，不能更换参考音色，也不使用 QQ 自带的角色语音。
+
+#### 参数 Schema
+
+参数顺序固定为 `channel`、`conversation`、`text`、`expression_instruction`，仅前三项必填：
+
+```ts
+parameters: {
+  channel: {
+    type: 'string',
+    required: true,
+    description: '已登记且支持语音的渠道名。',
+  },
+  conversation: {
+    type: 'string',
+    required: true,
+    description: '该渠道上的会话 ID，照抄入站事件。',
+  },
+  text: {
+    type: 'string',
+    required: true,
+    description: '交给 BreezeTTS 合成的口语；可包含其原生声音事件标记。',
+  },
+  expression_instruction: {
+    type: 'string',
+    description: '可选的本次情绪、语气、速度、停顿等表达控制；会附加到可信 Breeze instruction 后，不能覆盖参考音色。',
+  },
+}
+```
+
+`text` 可直接包含 `[笑]`、`[叹气]`、`[咳嗽]`、`[清嗓子]`。单次合成后只尝试一次平台投递，不自动重新合成或重传；工具返回 `sent`、`synthesis-failed`、`send-failed` 或 `unknown`，并保留 `textCharacters`、`audioBytes`、`messageId`、`error` 等可用结果。
+
+#### 用法怎样进入模型上下文
+
+README 和需求文档本身不会进入模型上下文。`send-voice.ts` 通过 DSH `defineTool` 注册，DSH 在模型请求中下发工具的 `description` 与参数 Schema。这对应 Elysium 的 `action_description` 和 `Annotated` 参数说明，不另建提示词通道。
+
+工具描述明确固定爱莉本地音色、`text` 中的 Breeze 原生声音事件、`expression_instruction` 只控制本次表达、已有音频改用 `send_file`、QQ 角色语音不是本地 TTS。底层采样与参考音频字段不写进模型说明。`TOOLS.md` 只写使用语音表达的稳定偏好，不复制参数 Schema。完整文案与测试要求见 `REQUIREMENTS.zh.md`。
 
 ## 终端入口
 

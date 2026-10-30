@@ -54,7 +54,7 @@ Inbound messages do not each get their own reply. Channel adapters are intended 
 
 When the Harness provides the `agents` service, the plugin connects pending to the conscious mind automatically. She has one agent and one long-lived session with the fixed id `elysia-conscious-mind`: reuse a live agent first, then try resume. If resume fails and no concurrently resumed agent is available, the code still attempts create under the same id; it does not yet distinguish a missing session from other resume failures. Each batch becomes one user message delivered through `followup()` to the native Harness agent loop, and the driver awaits `whenIdle()`. The Harness owns the model, session history, compaction, and tool calls; there is no separate chat-completions fetch.
 
-This session exposes `send_text`, DSH's native `read_image`, and the scoped `pass` tool. Other global tools, including code, file mutation, and search tools, are masked. `read_image` reads existing local image files; inbound chat images use the separate attachment-admission path. `pass` requires `reason`, records why she chose silence, and touches no channel. She may answer one or more conversations or stay silent; the runtime forces neither choice. Drained events remain in the long session history. The older `createSendTextTurn` remains available for standalone experiments but is not the reply turn installed by the ElyHarn service.
+This session exposes `send_text`, `send_voice`, DSH's native `read_image`, and the scoped `pass` tool. Other global tools, including code, file mutation, and search tools, are masked. `read_image` reads existing local image files; inbound chat images use the separate attachment-admission path. `pass` requires `reason`, records why she chose silence, and touches no channel. She may answer one or more conversations or stay silent; the runtime forces neither choice. Drained events remain in the long session history. The older `createSendTextTurn` remains available for standalone experiments but is not the reply turn installed by the ElyHarn service.
 
 ## send_text parameters
 
@@ -199,6 +199,12 @@ One call's `content` is split on newlines into several segments, each sent as an
 - Who owns the inter-segment pause duration: `send_text` uniformly, or each channel plugin;
 - Proactive outreach: whether sending into a conversation with no inbound setting should first pass an explicit arbitration (Elysium uses the `nucleus_proactive_query` and `nucleus_proactive_command` pair);
 - The shape of the channel plugin registration interface (a Cordis service or an event). The QQ, Feishu, and KOOK conversation formats are defined by `qq-napcat`, `feishu-app`, and `kook-bot` respectively.
+
+## send_voice
+
+`send_voice` synthesizes spoken text with the fixed local BreezeTTS voice and routes the audio through a registered voice sender. The optional `expression_instruction` controls this expression without changing the reference voice. It reports `sent`, `synthesis-failed`, `send-failed`, or `unknown` rather than automatically synthesizing or sending again.
+
+KOOK voice delivery is implemented: upload once, prefer a native voice message, and fall back to an audio-file message only after the platform explicitly rejects the native type. QQ and Feishu voice senders are still pending. `send_voice` does not accept an existing audio path; `send_file` for existing files is not implemented yet.
 
 ## Terminal entry
 

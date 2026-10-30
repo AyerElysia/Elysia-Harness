@@ -63,12 +63,12 @@ export function formatInboundBatch(batch: readonly InboundEvent[]): ContentBlock
 
 /**
  * Compose the main agent's scoped world: pass exists only here. Global tools
- * are limited to send_text and read_image; code, file mutation,
+ * are limited to send_text, send_voice, and read_image; code, file mutation,
  * and search stay masked.
  */
 export function composeMainAgent(agentCtx: Context): void {
   agentCtx.tools.register(definePassTool())
-  agentCtx.tools.restrict({ allow: ['send_text', 'read_image'] })
+  agentCtx.tools.restrict({ allow: ['send_text', 'send_voice', 'read_image'] })
 }
 
 async function resumeOrCreateMainAgent(ctx: Context): Promise<AgentHandle> {

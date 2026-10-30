@@ -1,7 +1,7 @@
 {
   "name": "@elysia/conscious-mind",
   "description": "Elysia's conscious mind: the standing-prompt prefix, send_text, the pending queue, and the reply turn",
-  "version": "0.2.1-rc.2",
+  "version": "0.2.1-rc.3",
   "private": true,
   "type": "module",
   "main": "./src/index.ts",

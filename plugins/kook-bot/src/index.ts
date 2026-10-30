@@ -25,12 +25,14 @@ export { KookClient } from './client.ts'
 export type { KookDirectChat } from './client.ts'
 export { KookGateway } from './gateway.ts'
 export { handleKookFrame } from './frame.ts'
+export { prepareKookVoiceAsset } from './voice.ts'
+export type { KookVoiceAsset } from './voice.ts'
 
 /** Cordis plugin name. */
 export const name = 'kook-bot'
 
 /** Outbound registries, durable attachments, and the shared pending queue. */
-export const inject = ['outboundText', 'inboundPending', 'attachments']
+export const inject = ['outboundText', 'outboundVoice', 'inboundPending', 'attachments']
 
 /** Optional path override. The bot token still comes from that file. */
 export interface Config {
@@ -94,6 +96,7 @@ export function apply(ctx: Context, config: Config): void {
     if (active) await forwardKookInbound(ctx, message, client)
   })
   ctx.effect(() => ctx.outboundText.register('kook', delivery => client.sendText(delivery)))
+  ctx.effect(() => ctx.outboundVoice.register('kook', delivery => client.sendVoice(delivery)))
   ctx.effect(() => () => { active = false })
   if (config.listen) {
     ctx.effect(() => {

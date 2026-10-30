@@ -42,6 +42,7 @@ it('composes the real read_image registration into the main agent allow-list', a
   await ctx.plugin(LocalAttachmentStore, { dshHome: home })
   await ctx.plugin(ToolFs, { read: false, readImage: true, write: false, edit: false })
   ctx.tools.register(globalTool('send_text'))
+  ctx.tools.register(globalTool('send_voice'))
 
   const key = { id: 'elysia-conscious-mind' as SessionId } as Agent
   let scope!: Scope
@@ -50,6 +51,6 @@ it('composes the real read_image registration into the main agent allow-list', a
   }))
   composeMainAgent(scope.ctx)
 
-  expect(ctx.tools.schemas().map(tool => tool.name).sort()).toEqual(['read_image', 'send_text'])
-  expect(ctx.tools.schemas(key).map(tool => tool.name).sort()).toEqual(['pass', 'read_image', 'send_text'])
+  expect(ctx.tools.schemas().map(tool => tool.name).sort()).toEqual(['read_image', 'send_text', 'send_voice'])
+  expect(ctx.tools.schemas(key).map(tool => tool.name).sort()).toEqual(['pass', 'read_image', 'send_text', 'send_voice'])
 })

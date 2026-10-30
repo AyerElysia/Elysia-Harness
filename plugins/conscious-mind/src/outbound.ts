@@ -34,30 +34,29 @@ export class OutboundDeliveryUnknown extends Error {
   }
 }
 
+/** One synthesized voice handed to a channel plugin. */
+export interface OutboundVoiceDelivery {
+  conversation: string
+  audio: Uint8Array
+  mediaType: 'audio/wav'
+  signal?: AbortSignal
+}
+
+/** Send one voice. Platform-specific transcoding and upload stay in the channel. */
+export type OutboundSendVoice = (delivery: OutboundVoiceDelivery) => Promise<OutboundReceipt>
+
 declare module '@deepseek-ai/cordis' {
   interface Context {
     outboundText: OutboundText
+    outboundVoice: OutboundVoice
   }
 }
 
-/**
- * Registry of channel senders. A missing channel is a failed call, not a
- * fallback onto another platform.
- */
-export class OutboundText extends Service {
-  private readonly senders = new Map<string, OutboundSend>()
+/** Shared registry behavior for one delivery kind. */
+abstract class OutboundRegistry<Send> extends Service {
+  private readonly senders = new Map<string, Send>()
 
-  constructor(ctx: Context) {
-    super(ctx, 'outboundText')
-  }
-
-  /**
-   * Register the sender for one channel name.
-   * @param channel - channel name, matched exactly after trim.
-   * @param send - delivers one segment on that channel.
-   * @returns a disposer that removes this registration.
-   */
-  register(channel: string, send: OutboundSend): () => void {
+  register(channel: string, send: Send): () => void {
     const name = channel.trim()
     if (name.length === 0) throw new Error('outbound channel name is empty')
     if (this.senders.has(name)) throw new Error(`outbound channel already registered: ${name}`)
@@ -67,12 +66,21 @@ export class OutboundText extends Service {
     }
   }
 
-  /**
-   * Look up a registered sender.
-   * @param channel - channel name from a send_text call.
-   * @returns the sender, or undefined when that channel is not mounted.
-   */
-  sender(channel: string): OutboundSend | undefined {
+  sender(channel: string): Send | undefined {
     return this.senders.get(channel.trim())
+  }
+}
+
+/** Channel-agnostic text senders. */
+export class OutboundText extends OutboundRegistry<OutboundSend> {
+  constructor(ctx: Context) {
+    super(ctx, 'outboundText')
+  }
+}
+
+/** Channel-agnostic synthesized-voice senders. */
+export class OutboundVoice extends OutboundRegistry<OutboundSendVoice> {
+  constructor(ctx: Context) {
+    super(ctx, 'outboundVoice')
   }
 }

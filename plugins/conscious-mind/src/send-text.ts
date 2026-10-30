@@ -111,7 +111,7 @@ export async function deliverSendText(outbound: OutboundText, args: SendTextArgs
 export function defineSendTextTool(outbound: OutboundText) {
   return defineTool({
     name: 'send_text',
-    description: '把文字发到外部渠道。assistant 正文不会出现在任何渠道上。先写 thought、mood、decision、expected_response，最后写 content。content 里的换行会拆成多条消息。thought 必须是这次真实的非空思考。',
+    description: '把文字发到外部渠道。assistant 正文不会出现在任何渠道上。只用于文字：对方要求语音、想听声音时，不要调用本工具解释或代替，必须改用 send_voice；以本轮实际工具表为准，不要沿用过去没有语音工具的旧判断。先写 thought、mood、decision、expected_response，最后写 content。content 里的换行会拆成多条消息。thought 必须是这次真实的非空思考。',
     parameters: {
       channel: { type: 'string', required: true, description: '渠道名，例如 qq、feishu、kook。必须是已经登记的渠道。' },
       conversation: { type: 'string', required: true, description: '这个渠道上的哪一段对话。入口消息里带着，回复时照抄。' },

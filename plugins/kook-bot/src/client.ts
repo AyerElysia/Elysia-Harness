@@ -1,12 +1,14 @@
 /**
- * KOOK text send through the same bot token Elysium already configured.
+ * KOOK text and voice send through the same bot token Elysium already configured.
  * @module @elysia/kook-bot/client
  */
 
-import type { OutboundDelivery, OutboundReceipt } from '@elysia/conscious-mind/outbound'
+import { OutboundDeliveryUnknown } from '@elysia/conscious-mind/outbound'
+import type { OutboundDelivery, OutboundReceipt, OutboundVoiceDelivery } from '@elysia/conscious-mind/outbound'
 import { KOOK_API_BASE, type KookSettings } from './config.ts'
 import { parseKookConversation } from './conversation.ts'
 import { kookDirectMessageEvent, kookInboundText, type KookInboundText } from './inbound.ts'
+import { prepareKookVoiceAsset, type KookVoiceAsset } from './voice.ts'
 
 /** One KOOK direct-message window. */
 export interface KookDirectChat {
@@ -22,17 +24,12 @@ export interface KookBotInfo {
   name: string
 }
 
-/**
- * Calls the KOOK REST API. The bot token stays in the Authorization header.
- */
+/** Calls the KOOK REST API. The bot token stays in the Authorization header. */
 export class KookClient {
-  /**
-   * @param settings - token and send flags from Elysium.
-   * @param fetchImpl - HTTP implementation. Tests pass a fake.
-   */
   constructor(
     readonly settings: KookSettings,
     private readonly fetchImpl: typeof fetch = fetch,
+    private readonly prepareVoice: (audio: Uint8Array, mediaType: 'audio/wav') => Promise<KookVoiceAsset> = prepareKookVoiceAsset,
   ) {}
 
   /**
@@ -132,7 +129,50 @@ export class KookClient {
     return messageId.length > 0 ? { messageId } : {}
   }
 
-  private async request(method: 'GET' | 'POST', path: string, body?: unknown): Promise<Record<string, unknown>> {
+  /** Upload once, then use native voice or KOOK's supported file fallback. */
+  async sendVoice(delivery: OutboundVoiceDelivery): Promise<OutboundReceipt> {
+    const target = parseKookConversation(delivery.conversation)
+    const asset = await this.prepareVoice(delivery.audio, delivery.mediaType)
+    const url = await this.uploadAsset(asset, delivery.signal)
+    const path = target.kind === 'direct' ? '/direct-message/create' : '/message/create'
+    const body = {
+      target_id: target.kind === 'direct' ? target.userId : target.channelId,
+      content: url,
+    }
+    let data: Record<string, unknown>
+    try {
+      data = await this.request('POST', path, { ...body, type: 8 }, delivery.signal)
+    } catch (error) {
+      if (!(error instanceof KookApiError) || error.code !== 40000) throw voiceSendFailure(error)
+      try {
+        data = await this.request('POST', path, { ...body, type: 4 }, delivery.signal)
+      } catch (fallbackError) {
+        throw voiceSendFailure(fallbackError)
+      }
+    }
+    const messageId = String(data.msg_id ?? '')
+    return messageId.length > 0 ? { messageId } : {}
+  }
+
+  private async uploadAsset(asset: KookVoiceAsset, signal?: AbortSignal): Promise<string> {
+    const bytes = Uint8Array.from(asset.body)
+    const form = new FormData()
+    form.set('file', new Blob([bytes.buffer], { type: asset.contentType }), asset.filename)
+    const timeout = AbortSignal.timeout(60_000)
+    const response = await this.fetchImpl(`${KOOK_API_BASE}/asset/create`, {
+      method: 'POST',
+      headers: { authorization: `Bot ${this.settings.token}` },
+      body: form,
+      signal: signal === undefined ? timeout : AbortSignal.any([signal, timeout]),
+    })
+    const data = await this.responseData(response)
+    const url = String(data.url ?? '')
+    if (url.length === 0) throw new Error('KOOK 上传返回空地址')
+    return url
+  }
+
+  private async request(method: 'GET' | 'POST', path: string, body?: unknown, signal?: AbortSignal): Promise<Record<string, unknown>> {
+    const timeout = AbortSignal.timeout(20_000)
     const response = await this.fetchImpl(`${KOOK_API_BASE}${path}`, {
       method,
       headers: {
@@ -140,14 +180,31 @@ export class KookClient {
         'content-type': 'application/json; charset=utf-8',
       },
       ...body === undefined ? {} : { body: JSON.stringify(body) },
-      signal: AbortSignal.timeout(20_000),
+      signal: signal === undefined ? timeout : AbortSignal.any([signal, timeout]),
     })
+    return await this.responseData(response)
+  }
+
+  private async responseData(response: Response): Promise<Record<string, unknown>> {
     const payload = await response.json() as { code?: unknown; message?: unknown; data?: unknown }
     if (!response.ok || Number(payload.code ?? 0) !== 0) {
-      throw new Error(`KOOK 接口失败: ${String(payload.code ?? response.status)} ${String(payload.message ?? '')}`.trim())
+      throw new KookApiError(Number(payload.code ?? response.status), String(payload.message ?? ''))
     }
     return payload.data !== null && typeof payload.data === 'object' ? payload.data as Record<string, unknown> : {}
   }
+}
+
+class KookApiError extends Error {
+  constructor(readonly code: number, detail: string) {
+    super(`KOOK 接口失败: ${code} ${detail}`.trim())
+  }
+}
+
+function voiceSendFailure(error: unknown): Error {
+  if (error instanceof TypeError || error instanceof Error && (error.name === 'TimeoutError' || error.name === 'AbortError')) {
+    return new OutboundDeliveryUnknown()
+  }
+  return error instanceof Error ? error : new Error(String(error))
 }
 
 function itemsOf(data: Record<string, unknown>): Record<string, unknown>[] {
