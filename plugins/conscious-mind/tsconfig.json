@@ -30,6 +30,9 @@
       "path": "../../dsh/packages/llm/llm"
     },
     {
+      "path": "../../dsh/packages/core/scope"
+    },
+    {
       "path": "../../dsh/packages/core/session"
     },
     {

@@ -5,6 +5,28 @@
 # `../plugins/*` and the installation anchor reaches it.
 
 - insert:
+    - id: preset-elysia
+      name: '@deepseek-ai/dsh-agent-preset'
+      config:
+        id: elysia
+        name: 爱莉
+        description: 按爱莉的固定提示词组合装配一个独立 session
+        plugins:
+          - id: elysia-standing-prompts
+            name: '@elysia/conscious-mind/standing-prompts'
+            config:
+              baseDir: !!js process.env.ELYSIA_PROMPTS_DIR ?? process.env.DSH_HOME +
+                '/standing-prompts'
+              files:
+                - SOUL.md
+                - USER.md
+                - MEMORY.md
+                - EXISTENCE.md
+                - TOOLS.md
+              required:
+                - SOUL.md
+              complete: true
+
     - id: elysia-conscious-mind
       name: '@elysia/conscious-mind'
       config:

@@ -8,9 +8,18 @@
 
 ## 前缀
 
-前缀是系统提示词里那一段稳定身份。固定提示词都放在一个目录里。插件不扫描这个目录，只按配置里的文件名顺序读取、拼成一段。
+固定提示词按 agent/session 装配，不再覆盖整个部署。`src/standing-prompts.ts` 导出 Cordis 子插件 `@elysia/conscious-mind/standing-prompts`，只能挂在 agent scope；全局挂载会失败。主意识运行层继续提供 pending 和发送服务，但不再注册全局 complete 前缀，因此普通 session 不会因为部署了主意识运行层就读到这份主意识前缀。
 
-目录和文件名都写在本插件的配置里，例如：
+子插件配置如下：
+
+| 字段 | 含义 |
+|---|---|
+| `baseDir` | 非空提示词目录。绝对路径直接使用；相对路径在挂载时按进程 cwd 解析。 |
+| `files` | 非空、有序且不重复的文件名列表。只读取名单，不扫描目录或自动挑文件。 |
+| `required` | 必须存在且非空的文件，默认 `['SOUL.md']`；每个必需文件都必须在 `files` 中。 |
+| `complete` | 默认 `true`，拼接结果作为当前作用域的整份系统提示词；`false` 则注册普通提示词段，与其他段共同组装。 |
+
+挂在 agent scope 中的子插件配置示例：
 
 ```yaml
 baseDir: /home/ayerelysia/Elysia/Data/standing-prompts
@@ -20,19 +29,20 @@ files:
   - MEMORY.md
   - EXISTENCE.md
   - TOOLS.md
+required:
+  - SOUL.md
+complete: true
 ```
 
-`baseDir` 可以是绝对路径。相对路径在插件挂载时按进程的当前目录解析。Harness 没有「提示词目录」这个配置；`personaPrefix` 只接受一段写死在配置里的字符串。目录路径由本插件自己的配置字段保存。
+主意识运行层仍接收 `baseDir`、`files` 和 `required`，在 `composeMainAgent` 中将它们以 `complete: true` 传给子插件。create 和 resume 使用同一个 setup 回调。既有主 session 的 id `elysia-conscious-mind` 与 cwd `/home/ayerelysia/Elysia/Elysium/Elysia-Harness/homes/web/conscious-mind` 保持不变；这份实现不改写旧 session header，也不修改主体提示词正文。
 
-加载复用 `ctx.systemPrompt.section()`。注册一段 `complete: true`、`interpolate: false` 的段，`text` 是函数。agent loop 每个模型步骤都会 `assemble()`，函数在这一刻按 `files` 顺序把文件读出来，用空行接上。段的 `text` 回调是同步的，而 `complete` 段在异步 waterfall 之前就定稿，所以这里用同步读盘，不用 `ctx.fs.readText`。`interpolate: false` 让正文里的 `{{` 保持原样。`complete` 让这一段成为整份系统提示词，盖住 Harness 自带的 `harness:identity`。
+主运行层为回复处理器保存所选配置的快照。文件名单属于该 agent 的固定装配，不在每轮重新挑选。每次 `systemPrompt.assemble()` 都按名单顺序重新读正文，去掉首尾空白后用空行拼接。必需文件缺失或为空时组装失败；可选文件缺失或为空则跳过，其他读盘错误继续抛出。文件名不能越出目录。没有文件监视器，也不回退到旧前缀缓存。
 
-`SOUL.md` 读不到或是空的，这一轮中止，不用上一轮的缓存继续说。名单里其他文件缺失或为空就跳过。文件名必须落在这个目录里。
+加载继续复用 `ctx.systemPrompt.section()`，使用 `interpolate: false` 和同步 `text` 回调，正文中的 `{{` 保持原样。complete 模式只让当前作用域的这段文本成为整份提示词，覆盖该 agent 的 Harness 身份段，不覆盖其他 session。后续模型步骤中的提示词变化由 DSH 既有投影处理；会话闲着时修改文件本身不会触发一轮。
 
-爱莉的五份正文不放在这个包里，放在 `/home/ayerelysia/Elysia/Data/standing-prompts`：`SOUL.md`、`USER.md`、`MEMORY.md`、`EXISTENCE.md`、`TOOLS.md`。
+Web profile 目前实际添加了一个 `elysia` preset，挂载同一子插件并选择上面五份文件。`elysia-core` 仍只有需求，尚无对应 preset 配置。preset 创建的 session 与平台主 session 分开；真实重启后是否保留 preset 装配仍需验证。主运行层只接受作用域装配凭据完整且配置匹配的 live agent，不会自动热迁移旧的未装配实例。独立终端入口也在自己的 scope 中挂载这个子插件。
 
-文件变动也不另做监视。`ctx.fs.watch` 和技能目录用的 Chokidar 都没有接到系统提示词上；`system-prompt/change` 只在注册或卸下提示词段时发出，文件内容变了不会发。下一轮 `assemble()` 会重新读盘，agent loop 拿渲染后的整段字符串和当前 `system/message` 比较：一样就不写会话；不一样就由 `SystemPromptProjection` 更新。路由声明了 `systemPromptUpdate: 'in-history'` 且这次请求序列还在延续，新前缀追加到历史后面；否则原地替换开头那一条。会话闲着的时候改文件，要等到下一次模型步骤才会被读到。
-
-现在在哪个聊天、直播怎么接话，不写进前缀。那是入口消息上的现场。说话习惯写在这些文件里，不写在插件代码里。
+主体文件正文保存在本包之外，插件只读取名单，不创作或迁移正文。当前渠道和会话现场仍来自入站事件，不写进稳定前缀。
 
 ## send_text
 
@@ -52,9 +62,9 @@ files:
 
 ## 主意识回复轮
 
-Harness 提供 `agents` 服务时，插件自动把 pending 接到主意识。主意识只有一个 agent、一条固定 id 为 `elysia-conscious-mind` 的长期 session：先复用已有 agent，再尝试 resume。resume 失败后若没有并发恢复出的 agent，当前代码仍会尝试按同一 id create，尚未区分 session 不存在与其他恢复失败。每批事件写成一个 user message，通过 `followup()` 交给 Harness 原生 agent loop，并等待 `whenIdle()`。模型、会话历史、压缩和工具调用都由 Harness 管理，不再走独立的 chat-completions fetch。
+Harness 提供 `agents` 服务时，插件自动把 pending 接到主意识。主意识只有一个 agent、一条固定 id 为 `elysia-conscious-mind` 的长期 session：已有 live agent 必须具备完整且配置匹配的提示词/工具装配凭据，才可复用；没有 live agent 时尝试 resume。resume 失败后若没有兼容的并发恢复实例，当前代码仍会尝试按同一 id create，尚未区分 session 不存在与其他恢复失败。不兼容的 live 实例会明确失败，不执行 followup，入站批次留在 pending。每批事件写成一个 user message，通过 `followup()` 交给 Harness 原生 agent loop，并等待 `whenIdle()`。模型、会话历史、压缩和工具调用都由 Harness 管理，不再走独立的 chat-completions fetch。
 
-这条 session 暴露 `send_text`、`send_voice`、DSH 原生的 `read_image` 和本作用域注册的 `pass`；代码、文件写入与编辑、搜索等其他全局工具都被屏蔽。`read_image` 只用于主动读取已有本地图片，聊天图片走独立的附件入站链路。`pass` 必填 `reason`，只记录这一轮为什么不说话，不触碰任何渠道。她可以回复一个或多个会话，也可以不说话，运行时不强迫二选一中的任何一个。已取走的事件留在长期 session 历史中。旧的 `createSendTextTurn` 仍保留给独立实验，但不是 ElyHarn 服务安装的主意识回复轮。
+create/resume 的 setup 路径通过 `composeMainAgent` 挂载作用域前缀，并暴露 `send_text`、`send_voice`、DSH 原生的 `read_image` 和本作用域注册的 `pass`。setup 成功后，在以 agent context 为键的进程内 WeakMap 中记录固定配置签名和完成状态，不记录正文；相同配置重复 setup 复用同一 promise，不同配置拒绝替换，scope 卸载时清除凭据。既有或竞态恢复的 live agent 只有凭据完整且匹配时才能借用；旧未装配实例需经正常作用域恢复，不改写 header 或私有历史。代码、文件写入与编辑、搜索等其他全局工具都被屏蔽。`read_image` 只用于主动读取已有本地图片，聊天图片走独立的附件入站链路。`pass` 必填 `reason`，只记录这一轮为什么不说话，不触碰任何渠道。她可以回复一个或多个会话，也可以不说话，运行时不强迫二选一中的任何一个。已取走的事件留在长期 session 历史中。旧的 `createSendTextTurn` 仍保留给独立实验，但不是 ElyHarn 服务安装的主意识回复轮。
 
 ## send_text 参数
 
@@ -212,7 +222,7 @@ output: {
 
 > 状态：工具已实现并开放给主意识。KOOK 上传一次音频后优先发送原生语音；平台明确拒绝该类型时，按旧版 Elysium 行为降级为音频文件消息，不重复上传。BreezeTTS 合成失败、平台发送失败和投递状态未知会分别返回。QQ、飞书的语音发送仍待接。
 
-`send_voice` 只把 `text` 口语合成为爱莉的本地音色并发送，不接受 `path`。已有音频和其他已有文件一样，统一通过 `send_file` 发送；不让两个工具重复承担同一种文件发送能力。`send_file` 尚未实现。
+`send_voice` 只把 `text` 口语合成为爱莉的本地音色并发送，不接受 `path`。新需求约定已有图片、音频、视频和其他文件统一通过 `send_file(channel, conversation, path)` 发送，由共享层检查文件，再交给各渠道适配器转换和投递；不让多个工具重复承担已有文件发送。`send_file`、`OutboundFile` 和对应渠道注册尚未实现。
 
 这是针对 BreezeTTS 的工具。原生声音事件和 `expression_instruction` 沿用 Elysium 的 `life_send_voice` 语义；参考音频、`ref_text`、可信基础 `instruction`、`cfg_scale`、`seed` 都由部署侧管理。工具不提供 `voice_style` 或 `text_language`，不能更换参考音色，也不使用 QQ 自带的角色语音。
 
@@ -254,14 +264,14 @@ README 和需求文档本身不会进入模型上下文。`send-voice.ts` 通过
 
 ## 终端入口
 
-在 `deepseek-harness` 目录下，用 Node 22：
+在当前仓库的 `dsh/` 目录下，用 Node 22：
 
 ```sh
-pnpm exec tsx --tsconfig tsconfig.base.json packages/elysia/conscious-mind/src/tui.ts
+pnpm exec tsx --tsconfig tsconfig.base.json ../plugins/conscious-mind/src/tui.ts
 ```
 
 这台机器上的 Node 22 和 pnpm 在 `/home/ayerelysia/.local/share/node-v22/bin`。`/quit` 退出。
 
 每一轮都重新组装前缀，再发给模型。模型默认走 Elysium `config/models.toml` 里的 `providers.NexusAI`，模型名 `gemini-3.8-flash`。可以用 `ELYSIA_BASE_URL`、`ELYSIA_API_KEY`、`ELYSIA_MODEL`，或 `--base-url`、`--model` 换掉。`--once "一句话"` 只问一轮。
 
-这一入口把模型正文打在终端上，还没有发到 QQ、飞书、Kook。
+这个独立入口在自己的 scope 中组装提示词，保留进程内历史并自行发起模型请求。它把模型正文打在终端上，不驱动平台主意识的耐久 session，也不发送到 QQ、飞书、Kook。

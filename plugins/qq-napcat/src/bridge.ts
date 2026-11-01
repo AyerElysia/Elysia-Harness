@@ -3,7 +3,7 @@
  * conscious-mind plugin. This file only carries NapCat text into that queue.
  */
 import { Context } from '@deepseek-ai/cordis'
-import SystemPrompt, { renderPrompt } from '@deepseek-ai/dsh-system-prompt'
+import SystemPrompt from '@deepseek-ai/dsh-system-prompt'
 import { readFileSync } from 'node:fs'
 import { dirname, join, resolve } from 'node:path'
 import { fileURLToPath } from 'node:url'
@@ -46,7 +46,7 @@ ctx.inboundPending.replyWith(createSendTextTurn({
   ...chat,
   parameters: tool.parameters,
   execute: async args => await tool.execute(args, { signal: new AbortController().signal } as never) as SendTextResult,
-}, async () => renderPrompt(await ctx.systemPrompt.assemble())))
+}, async () => ConsciousMind.loadStandingPrompt(PROMPTS, FILES, ['SOUL.md'])))
 
 const link = new NapcatLink(settings, message => ctx.inboundPending.receive({
   channel: message.channel,

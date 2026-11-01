@@ -12,7 +12,11 @@ import { readFileSync } from 'node:fs'
 import { dirname, join, resolve } from 'node:path'
 import { fileURLToPath } from 'node:url'
 import * as ConsciousMind from './index.ts'
+import * as StandingPrompt from './standing-prompts.ts'
 import { StandingPromptError } from './load.ts'
+import type { Agent } from '@deepseek-ai/dsh-agent'
+import { createScope } from '@deepseek-ai/dsh-scope'
+import type { SessionId } from '@deepseek-ai/dsh-session'
 
 /** Standing-prompt directory; `ELYSIA_PROMPTS_DIR` overrides it, else it sits under `ELYSIA_ROOT`. */
 const PROMPTS = process.env.ELYSIA_PROMPTS_DIR
@@ -29,6 +33,11 @@ interface ChatConfig {
 interface ChatMessage {
   role: 'system' | 'user' | 'assistant'
   content: string
+}
+
+interface TuiContext {
+  ctx: Context
+  key: Agent
 }
 
 function argValue(name: string): string | undefined {
@@ -70,15 +79,18 @@ function loadChatConfig(): ChatConfig {
   return { baseURL: baseURL.replace(/\/+$/, ''), apiKey, model }
 }
 
-async function mount(): Promise<Context> {
+async function mount(): Promise<TuiContext> {
   const ctx = new Context()
   await ctx.plugin(SystemPrompt, { includeHarnessIdentity: false, includeRuntimeContext: false })
   await ctx.plugin(ConsciousMind, { baseDir: PROMPTS, files: FILES })
-  return ctx
+  const key = { id: 'elysia-tui' as SessionId } as Agent
+  const scope = createScope(ctx, key)
+  await scope.ctx.plugin(StandingPrompt, { baseDir: PROMPTS, files: FILES })
+  return { ctx, key }
 }
 
-async function prefix(ctx: Context): Promise<string> {
-  return renderPrompt(await ctx.systemPrompt.assemble())
+async function prefix(app: TuiContext): Promise<string> {
+  return renderPrompt(await app.ctx.systemPrompt.assemble({ scope: app.key }))
 }
 
 async function complete(config: ChatConfig, messages: readonly ChatMessage[]): Promise<string> {
@@ -133,8 +145,8 @@ async function complete(config: ChatConfig, messages: readonly ChatMessage[]): P
   return text
 }
 
-async function turn(ctx: Context, config: ChatConfig, history: ChatMessage[], input: string): Promise<void> {
-  const system = await prefix(ctx)
+async function turn(app: TuiContext, config: ChatConfig, history: ChatMessage[], input: string): Promise<void> {
+  const system = await prefix(app)
   const messages: ChatMessage[] = [{ role: 'system', content: system }, ...history, { role: 'user', content: input }]
   const reply = await complete(config, messages)
   history.push({ role: 'user', content: input }, { role: 'assistant', content: reply })
@@ -142,13 +154,13 @@ async function turn(ctx: Context, config: ChatConfig, history: ChatMessage[], in
 
 async function main(): Promise<void> {
   const config = loadChatConfig()
-  const ctx = await mount()
+  const app = await mount()
   try {
-    const system = await prefix(ctx)
+    const system = await prefix(app)
     const once = argValue('--once')
     process.stderr.write(`爱莉  ${config.model}\n前缀 ${PROMPTS}  ${system.length} 字\n终端里看到的是模型正文，还没有发到外部渠道。\n`)
     if (once !== undefined) {
-      await turn(ctx, config, [], once)
+      await turn(app, config, [], once)
       return
     }
     const input = createInterface({ input: process.stdin, output: process.stdout })
@@ -166,7 +178,7 @@ async function main(): Promise<void> {
         return
       }
       input.pause()
-      void turn(ctx, config, history, text).then(() => {
+      void turn(app, config, history, text).then(() => {
         input.resume()
         ask()
       }).catch((error: unknown) => {
@@ -179,7 +191,7 @@ async function main(): Promise<void> {
     ask()
     await new Promise<void>((resolveClose) => { input.on('close', () => resolveClose()) })
   } finally {
-    await ctx.fiber.dispose()
+    await app.ctx.fiber.dispose()
   }
 }
 

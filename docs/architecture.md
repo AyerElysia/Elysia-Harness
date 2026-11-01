@@ -1,6 +1,6 @@
 # Elysia-Harness 架构
 
-> 状态：目标架构与现状盘点。最近一次核对：2026-10-30。
+> 状态：目标架构与现状盘点。最近一次核对：2026-11-01。
 > 本文描述「一条主意识 session、四个渠道汇入」的目标形态，并逐层标注当前实现状态。
 > 与代码冲突时以代码为准；发现冲突请直接改本文，不要让两种说法并存。源码已实现不等于完成真实模型、平台或重启验收。
 
@@ -64,7 +64,8 @@ session 是运行边界，不是主体边界；潜意识拟建独立 session，�
 
 | 组件 | 位置 | 职责 | 不做什么 |
 |---|---|---|---|
-| `plugins/conscious-mind` | 本仓库 | 主 session 的持有者、pending 队列、system prompt、`send_text`/`send_voice`/`pass` 工具、出站注册表 | 不认识任何平台协议 |
+| `plugins/conscious-mind` | 本仓库 | 主 session、pending、发送工具与出站注册表；在主 agent scope 中装配固定提示词 | 不注册部署级 complete 前缀，不认识平台协议 |
+| `conscious-mind/standing-prompts` | 本仓库子插件 | 按当前 agent 的配置读取有序文件并注册 scoped prompt section | 无 agent scope 时拒绝挂载，不写主体正文 |
 | `plugins/qq-napcat` | 本仓库 | NapCat OneBot 连接、`qq` sender | 不持有 session |
 | `plugins/kook-bot` | 本仓库 | KOOK Gateway、图文附件入站、文字与语音 sender | 不持有 session |
 | `plugins/feishu-app` | 本仓库 | 飞书长连接、`feishu` sender | 不持有 session |
@@ -87,13 +88,14 @@ session 是运行边界，不是主体边界；潜意识拟建独立 session，�
 | 队列 | `conscious-mind/pending.ts` | ✅ 内存队列 | 1.2 秒静默收集后跨渠道全取单批；轮次异常放回队首；尚无耐久队列 |
 | 主 session | `conscious-mind/main-session.ts` | ✅ 已带 `meta.cwd` | 固定 id，优先复用或 resume，create 时写入稳定绝对路径；见 6.1 |
 | 元信息 | `formatInboundBatch` | ✅ | 元信息文本 + 原生文字/图片块；更强结构化仍待做，见 6.2 |
-| system prompt | `StandingPromptSection` | ✅ | `complete: true`，每次组装重读文件 |
+| system prompt | `standing-prompts.ts` | ✅ 源码已改为 scoped | 主 agent create/resume setup 挂子插件，每次 assemble 重读；live 借用须完整且匹配的装配凭据 |
+| Web preset | `homes/web/profiles/web/cordis.patch.yml` | ✅ 已配置 `elysia` | 独立 session 的五文件 scoped 装配；`elysia-core` 仍只有需求，重启恢复尚需验证 |
 | 记忆 | — | ⏳ 待选 | DSH 无 memory 包，见第 8 节 |
 | 人物目录 | — | 🔴 待自建 | 见 6.3 |
 | `send_text` | `send-text.ts` | ✅ | 显式指定渠道和会话；内在字段不外发 |
 | `send_voice` | `send-voice.ts`、`breeze-tts.ts` | ✅ | BreezeTTS 本地音色；当前只有 KOOK 注册语音 sender |
 | `read_image` | DSH 原生工具 | ✅ 已开放 | 主动读取已有本地图片，不代替聊天附件入站 |
-| `send_file` | — | 🔴 未实现 | 不能把工具描述中的引用当作已有能力 |
+| `send_file` | 统一文件投递需求 | 🔴 未实现 | 已有图片/音频/视频/其他文件共用工具与 `OutboundFile`，尚无源码或渠道注册 |
 | `pass` | `pass.ts` | ✅ | — |
 | `list_contacts` | — | 🔴 待自建 | 依赖人物目录 |
 | 出站路由 | `outbound.ts` | ✅ | 按渠道名精确匹配，缺失即失败 |
@@ -113,11 +115,21 @@ session 是运行边界，不是主体边界；潜意识拟建独立 session，�
 /home/ayerelysia/Elysia/Elysium/Elysia-Harness/homes/web/conscious-mind
 ```
 
-创建时传入 `meta: { cwd: MAIN_SESSION_CWD }`；先复用已有 agent，再尝试 resume，未恢复成功时尝试按同一 id 创建。Web UI 并发恢复了该 agent 时复用它。挂载时预热 session，并安装主意识受限工具作用域，避免等待首批入站期间被默认 preset 接管。
+创建时传入 `meta: { cwd: MAIN_SESSION_CWD }`。已有 live agent 仅在提示词/工具装配凭据完整且配置匹配时复用；不兼容时明确失败，不执行 followup，批次回到 pending。没有 live agent 才尝试 resume；resume 失败后若没有兼容的并发恢复实例，仍按同一 id 尝试 create，尚未区分 session 不存在与其他恢复失败。create/resume 的 setup 调用 `composeMainAgent`，挂载作用域提示词子插件并限制工具；挂载时预热 session。
 
 `dsh/packages/api/session-controller/src/list.ts` 的持久化列表依赖 `record.header.cwd`：没有 cwd 的冷 session 不出现在该列表。当前源码已经提供此字段，不能继续标为待修。
 
 这个绝对路径是现有 session 的稳定身份锚点，后续部署或迁移不能随意改动。旧 session 元数据修复、异常 resume 与真实重启恢复仍需单独验证，不因该字段已经实现就宣称恢复验收完成。
+
+### 6.1.1 会话级固定提示词
+
+`plugins/conscious-mind/src/index.ts` 不再注册部署级 complete prompt。新增子插件 `@elysia/conscious-mind/standing-prompts`，仅在 agent scope 中注册 `elysia:standing-prompts`；无 scope 时明确失败。普通 session 不再因挂载主意识运行层而继承主意识前缀。
+
+子插件接收 `baseDir`、`files`、`required`、`complete`。`baseDir` 与 `files` 必须非空，`files` 有序且不重复，`required` 默认为 `['SOUL.md']` 且必须是文件名单的子集。`complete` 默认 true，作为当前 agent 的整份提示词；false 则与其他 section 一起组装。主意识运行层显式传 true。
+
+主回复处理器保存所选配置的快照。文件名单属于该 agent 的固定装配，每次 assemble 重新读正文，不按轮次换名单、不扫描目录。必需文件缺失或为空会失败，可选缺失/空文件跳过，其他读取错误抛出。文件正文、旧主 session id/cwd 和已有 header 不由这项改动迁移或改写。
+
+Web profile 当前只添加 `elysia` preset，配置五份文件并挂载同一 scoped 子插件；`elysia-core` 尚未配置。preset 创建的是独立 session，不自动加入平台 pending。独立 `tui.ts` 也在自己的 scope 中装配前缀，但仍是进程内历史与直接模型请求的实验入口。真实 preset 重启恢复仍需验证。主意识 setup 成功后，以 agent context 为键在进程内 WeakMap 记录固定配置签名和完成状态，不包含文件正文；scope 卸载时清除。相同配置重复 setup 复用 promise，不同配置拒绝替换。既有或竞态恢复的 live agent 须匹配完整凭据；旧未装配实例不会自动热迁移，需通过正常恢复 setup 装配，不改写 header 或私有历史。
 
 ### 6.2 入站元信息与图片
 
@@ -223,19 +235,20 @@ DSH 的 `packages/` 里**没有任何 memory 包**。现状可用的只有：
 `main-session.ts` 的 `composeMainAgent`：
 
 ```ts
+await agentCtx.plugin(StandingPrompt, promptConfig)
 agentCtx.tools.register(definePassTool())
 agentCtx.tools.restrict({ allow: ['send_text', 'send_voice', 'read_image'] })
 ```
 
-主 agent 只有 `send_text`、`send_voice`、`read_image` 和本作用域注册的 `pass`。`read_image` 只读取已有本地图片；没有代码、文件写入与编辑、搜索类工具。聊天图片使用独立的附件入站链路，不依赖这个工具。
+按 `composeMainAgent` 装配后的主 agent 只有 `send_text`、`send_voice`、`read_image` 和本作用域注册的 `pass`；只有装配凭据完整且配置匹配的 live agent 才可借用。`read_image` 只读取已有本地图片；没有代码、文件写入与编辑、搜索类工具。聊天图片使用独立的附件入站链路，不依赖这个工具。
 
-`send_voice` 经 BreezeTTS 合成固定本地音色，再交给渠道语音 sender。当前 KOOK 已实现上传与原生语音发送，平台明确拒绝该类型时才退为音频文件消息；状态未知不自动重发。QQ、飞书语音仍待接入。`send_file` 尚未实现，已有音频或任意文件发送不能据此宣称可用。
+`send_voice` 经 BreezeTTS 合成固定本地音色，再交给渠道语音 sender。当前 KOOK 已实现上传与原生语音发送，平台明确拒绝该类型时才退为音频文件消息；状态未知不自动重发。QQ、飞书语音仍待接入。统一 `send_file(channel, conversation, path)`、共享文件检查与 `OutboundFile` 以及渠道投递仍只有需求，不能据此宣称已有文件发送可用。
 
 新增 `list_contacts`、`schedule_*` 时必须同步改这一行 `allow` 列表。注意 `restrict` 是白名单语义——漏加就是工具不可见。
 
 ## 10. 注意事项
 
-1. **preset 只影响新建 session**。`@deepseek-ai/dsh-agent-preset` 的 README：「修改只影响之后创建的 Agent」。新装插件对已存在的 session 不一定生效，往往需要重建 session。
+1. **preset 与 live agent 分别核对**。Web 只配置了 `elysia` preset；该配置不证明旧 session 已采用它，也不证明重启恢复后的插件装配。主意识 create/resume 显式传 setup，现存 live agent 只有配置匹配的完整装配凭据才能借用；旧未装配实例不自动迁移，不得通过删除或重建主 session 代替验证。
 2. **cwd 不可变**。见 6.1。
 3. **一个插件永不编辑 `dsh/`**（仓库根 `AGENTS.md`）。需要不同行为时在上面加 bundle row 或 patch 层。
 4. **渠道插件不得持有 session**。见第 4 节。

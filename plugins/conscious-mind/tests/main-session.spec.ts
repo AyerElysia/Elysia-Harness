@@ -1,12 +1,38 @@
 import type { Context } from '@deepseek-ai/cordis'
 import { AttachmentId } from '@deepseek-ai/dsh-attachment'
 import type { ToolRunContext } from '@deepseek-ai/dsh-tools'
-import { describe, expect, it, vi } from 'vitest'
+import { describe, expect, it, onTestFinished, vi } from 'vitest'
 import type { InboundEvent } from '../src/inbound.ts'
 import { MAIN_SESSION_CWD, MAIN_SESSION_ID, composeMainAgent, createMainSessionTurn, formatInboundBatch } from '../src/main-session.ts'
 import { definePassTool } from '../src/pass.ts'
+import * as StandingPrompt from '../src/standing-prompts.ts'
 
 const exec = { signal: new AbortController().signal } as ToolRunContext
+const promptConfig = { baseDir: '/tmp/elysia-test-prompts', files: ['SOUL.md'], required: ['SOUL.md'], complete: true }
+
+function compositionContext() {
+  const disposers: (() => void)[] = []
+  const plugin = vi.fn().mockResolvedValue({ dispose: vi.fn().mockResolvedValue(undefined) })
+  const register = vi.fn().mockReturnValue(vi.fn())
+  const restrict = vi.fn().mockReturnValue(vi.fn())
+  const ctx = {
+    plugin,
+    tools: { register, restrict },
+    effect(callback: () => () => void) { disposers.push(callback()) },
+  } as unknown as Context
+  return { ctx, plugin, register, restrict, dispose: () => { for (const dispose of disposers.splice(0)) dispose() } }
+}
+
+function owningContext(agents: unknown) {
+  let dispose: (() => void) | undefined
+  const ctx = {
+    agents,
+    agentDefaultModel: { currentSelection: () => ({ provider: 'test', model: 'test' }) },
+    effect(callback: () => () => void) { dispose = callback() },
+  } as unknown as Context
+  onTestFinished(() => dispose?.())
+  return ctx
+}
 
 const batch: InboundEvent[] = [
   {
@@ -92,7 +118,7 @@ describe('main session turn', () => {
       },
       async dispose() { calls.push('dispose') },
     }
-    let setup: ((agentCtx: Context) => void) | undefined
+    let setup: ((agentCtx: Context) => Promise<void>) | undefined
     let disposer: (() => void) | undefined
     const ctx = {
       logger: () => ({ info: vi.fn() }),
@@ -102,13 +128,13 @@ describe('main session turn', () => {
       },
       agents: {
         get: () => undefined,
-        async resume(options: { setup: (agentCtx: Context) => void; agentOptions: unknown }) {
+        async resume(options: { setup: (agentCtx: Context) => Promise<void>; agentOptions: unknown }) {
           calls.push('resume')
           expect(options.agentOptions).toEqual({ provider: 'd1api', model: 'deepseek-v4.1-flash' })
           setup = options.setup
           throw new Error('no saved session')
         },
-        async create(options: { sessionId: string; setup: (agentCtx: Context) => void; agentOptions: unknown; meta: unknown }) {
+        async create(options: { sessionId: string; setup: (agentCtx: Context) => Promise<void>; agentOptions: unknown; meta: unknown }) {
           calls.push('create')
           expect(options.sessionId).toBe(MAIN_SESSION_ID)
           expect(options.agentOptions).toEqual({ provider: 'd1api', model: 'deepseek-v4.1-flash' })
@@ -119,7 +145,7 @@ describe('main session turn', () => {
         },
       },
     } as unknown as Context
-    const turn = createMainSessionTurn(ctx)
+    const turn = createMainSessionTurn(ctx, promptConfig)
     expect(calls).toEqual(['resume'])
     await turn(batch)
     expect(calls).toEqual(['resume', 'create', 'followup', 'idle'])
@@ -128,7 +154,9 @@ describe('main session turn', () => {
 
     const register = vi.fn()
     const restrict = vi.fn()
-    setup?.({ tools: { register, restrict } } as unknown as Context)
+    const plugin = vi.fn().mockResolvedValue(undefined)
+    await setup?.({ tools: { register, restrict }, plugin, effect: (callback: () => () => void) => callback() } as unknown as Context)
+    expect(plugin).toHaveBeenCalledWith(StandingPrompt, promptConfig)
     expect(register).toHaveBeenCalledOnce()
     expect(register.mock.calls[0]?.[0].name).toBe('pass')
     expect(restrict).toHaveBeenCalledWith({ allow: ['send_text', 'send_voice', 'read_image'] })
@@ -141,25 +169,87 @@ describe('main session turn', () => {
     expect(calls.at(-1)).toBe('dispose')
   })
 
-  it('reuses an already live main agent instead of creating a duplicate', async () => {
+  it('reuses an already composed live main agent without taking its ownership', async () => {
+    const scoped = compositionContext()
+    await composeMainAgent(scoped.ctx, promptConfig)
     const followup = vi.fn()
-    const agent = { followup, whenIdle: vi.fn().mockResolvedValue(undefined) }
-    const ctx = {
-      agents: { get: () => agent },
-      effect: vi.fn(),
-    } as unknown as Context
-    await createMainSessionTurn(ctx)(batch.slice(0, 1))
+    const agent = { ctx: scoped.ctx, followup, whenIdle: vi.fn().mockResolvedValue(undefined) }
+    const create = vi.fn()
+    const ctx = owningContext({ get: () => agent, create })
+    await createMainSessionTurn(ctx, promptConfig)(batch.slice(0, 1))
     expect(followup).toHaveBeenCalledOnce()
     expect(agent.whenIdle).toHaveBeenCalledOnce()
+    expect(create).not.toHaveBeenCalled()
+    expect(scoped.plugin).toHaveBeenCalledOnce()
+    scoped.dispose()
+  })
+
+  it('refuses an existing uncomposed agent before forwarding any inbound event', async () => {
+    const followup = vi.fn()
+    const agent = { ctx: compositionContext().ctx, followup }
+    const create = vi.fn()
+    const ctx = owningContext({ get: () => agent, create })
+    const turn = createMainSessionTurn(ctx, promptConfig)
+    await expect(turn(batch)).rejects.toThrow(/拒绝借用/)
+    expect(followup).not.toHaveBeenCalled()
+    expect(create).not.toHaveBeenCalled()
+  })
+
+  it('refuses an uncomposed UI agent that wins the resume race', async () => {
+    const followup = vi.fn()
+    const agent = { ctx: compositionContext().ctx, followup }
+    let live = false
+    const create = vi.fn()
+    const resume = vi.fn(async () => { live = true; throw new Error('concurrent resume') })
+    const ctx = owningContext({ get: () => live ? agent : undefined, resume, create })
+    const turn = createMainSessionTurn(ctx, promptConfig)
+    await expect(turn(batch)).rejects.toThrow(/拒绝借用/)
+    expect(resume).toHaveBeenCalledOnce()
+    expect(followup).not.toHaveBeenCalled()
+    expect(create).not.toHaveBeenCalled()
+  })
+
+  it('does not reuse a composition after its scope has been disposed', async () => {
+    const scoped = compositionContext()
+    await composeMainAgent(scoped.ctx, promptConfig)
+    scoped.dispose()
+    const followup = vi.fn()
+    const ctx = owningContext({ get: () => ({ ctx: scoped.ctx, followup }) })
+    await expect(createMainSessionTurn(ctx, promptConfig)(batch)).rejects.toThrow(/拒绝借用/)
+    expect(followup).not.toHaveBeenCalled()
   })
 })
 
 describe('main agent tool scope', () => {
-  it('registers scoped pass and exposes only send_text and read_image globally', () => {
+  it('rejects an empty base directory before normalization or plugin registration', async () => {
+    const scoped = compositionContext()
+    await expect(composeMainAgent(scoped.ctx, { ...promptConfig, baseDir: '' }))
+      .rejects.toThrow(/baseDir must not be empty/)
+    expect(scoped.plugin).not.toHaveBeenCalled()
+    expect(scoped.register).not.toHaveBeenCalled()
+  })
+
+  it('registers scoped pass and exposes only send_text, send_voice, and read_image globally', async () => {
     const register = vi.fn()
     const restrict = vi.fn()
-    composeMainAgent({ tools: { register, restrict } } as unknown as Context)
+    const plugin = vi.fn().mockResolvedValue(undefined)
+    await composeMainAgent({ tools: { register, restrict }, plugin, effect: (callback: () => () => void) => callback() } as unknown as Context, promptConfig)
+    expect(plugin).toHaveBeenCalledWith(StandingPrompt, promptConfig)
     expect(register.mock.calls[0]?.[0].name).toBe('pass')
     expect(restrict).toHaveBeenCalledWith({ allow: ['send_text', 'send_voice', 'read_image'] })
   })
+  it('shares concurrent composition and rejects an attempt to change its fixed file selection', async () => {
+    const scoped = compositionContext()
+    const first = composeMainAgent(scoped.ctx, promptConfig)
+    const second = composeMainAgent(scoped.ctx, { ...promptConfig, files: [...promptConfig.files] })
+    expect(first).toBe(second)
+    await first
+    expect(scoped.plugin).toHaveBeenCalledOnce()
+    expect(scoped.register).toHaveBeenCalledOnce()
+    expect(scoped.restrict).toHaveBeenCalledOnce()
+    await expect(composeMainAgent(scoped.ctx, { ...promptConfig, files: ['SOUL.md', 'USER.md'] }))
+      .rejects.toThrow(/拒绝替换/)
+    scoped.dispose()
+  })
+
 })

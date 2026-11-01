@@ -53,6 +53,82 @@ QQ 窗口 id 仍是 `qq:private:<userId>` 和 `qq:group:<groupId>`。飞书、KO
 
 凡计划新增工具，计划里必须先写清 Schema，再进入实现。至少包括参数名称与顺序、类型、是否必填、能否为空、默认值、校验规则，以及工具结果的 Schema；不能只列工具名和参数名，把字段约束留到写代码时再补。
 
+### 按 session 选择固定提示词
+
+固定提示词目录继续作为唯一文件来源，但「这次加载哪些文件」必须属于 agent 的组合，不能继续是整个 web profile 共用的一份全局配置。复用 DSH 已有的 Agent Preset、session `agentPreset` 持久化和作用域提示词，不新增 `sessionId → files` 映射，也不另造选择协议。
+
+#### 改造前的问题
+
+改造前的选择入口是 `homes/web/profiles/web/cordis.patch.yml` 中 `elysia-conscious-mind.config` 的 `baseDir` 与 `files`。当时 `conscious-mind` 通过全局 `ctx.systemPrompt.section()` 注册 `complete: true` 的完整提示词，因此这些文件会影响该 profile 下的其他 session。当前实现已把这段注册移入主意识的 agent 作用域；主意识仍使用原来的 session ID、cwd 和文件组合。
+
+#### 目标结构
+
+1. 从 `conscious-mind` 抽出作用域限定的 standing-prompt 子插件，入口名为 `@elysia/conscious-mind/standing-prompts`，仍属于同一个插件包。它只负责读取选择的文件并注册当前 agent 的提示词，不持有 pending、渠道、BreezeTTS 或发送工具。
+2. `conscious-mind` 的全局 `apply()` 不再注册这份完整提示词，避免其他 session 被爱莉人格污染。
+3. 用 DSH `@deepseek-ai/dsh-agent-preset` 声明命名组合。session 选择 preset 后，由 DSH 将 `agentPreset` 持久化并在 resume 时恢复；空白 session 可以更换选择，对话开始后的组合保持固定。
+4. 文件内容仍在每次提示词组装时重新读取，保留现有「先读、再改，下一轮生效」的主体文档语义；文件列表属于 session 组合，不在对话中途按轮动态切换。
+5. 普通 `standard` session 不挂载爱莉 standing-prompt 子插件。以后可以增加 `elysia-core` 等只选择部分文件的 preset，但不为每个 session 复制一份提示词文件。
+
+预设声明采用以下形态：
+
+```yaml
+- id: preset-elysia
+  name: '@deepseek-ai/dsh-agent-preset'
+  config:
+    id: elysia
+    name: 爱莉
+    plugins:
+      - id: elysia-standing-prompts
+        name: '@elysia/conscious-mind/standing-prompts'
+        config:
+          baseDir: /home/ayerelysia/Elysia/Data/standing-prompts
+          files:
+            - SOUL.md
+            - USER.md
+            - MEMORY.md
+            - EXISTENCE.md
+            - TOOLS.md
+          required:
+            - SOUL.md
+          complete: true
+```
+
+#### 子插件配置 Schema
+
+这里不新增模型工具，因此没有模型工具输入／输出 Schema；以下是 Cordis 子插件的完整配置契约。
+
+```ts
+interface StandingPromptPluginConfig {
+  /** 固定提示词目录。绝对路径直接使用；相对路径在挂载时相对进程 cwd 解析。 */
+  baseDir: string
+  /** 按此顺序拼接的文件名；非空且不得重复。 */
+  files: string[]
+  /** 缺失或去除首尾空白后为空时使组装失败的文件名；必须是 files 的子集。默认 ['SOUL.md']。 */
+  required?: string[]
+  /** 是否把拼接结果作为该 agent 的唯一 system prompt。默认 true。 */
+  complete?: boolean
+}
+```
+
+- `baseDir` 必须非空。`files` 和 `required` 中每一项都只能是单个文件名，不得为 `.`、`..`，不得包含 `/`、`\\`、NUL 或空字符串。
+- `files` 至少有一项并保持声明顺序；重复文件名、未知必填文件在挂载时直接失败。可选文件缺失或为空继续跳过，必填文件缺失或为空继续沿用现有 `StandingPromptError` 失败语义。
+- 拼接时各文件去除首尾空白，再用一个空行连接；不摘要、不改写正文。`complete: true` 时继续注册现有的 `elysia:standing-prompts` 完整 section；`false` 时只作为普通 section 参与 DSH 其他提示词段落的组合。
+- 子插件只能在 agent 作用域挂载。不得在全局 `apply()` 再注册同名 section，也不得从 session 历史正文、渠道事件或模型工具参数动态接收文件列表。
+- 该配置不包含 `breezeConfigPath`、渠道、pending、工具白名单或 cwd；这些仍由各自已有模块负责。
+
+#### 现有主意识兼容路径
+
+`elysia-conscious-mind` 已经有对话历史，不能重写 session header、伪造 preset 选择或删除重建这条 session。主意识是固定身份的特殊 session，不作为普通 session 自由切换 preset：
+
+- 在现有 `composeMainAgent()` 的 create／resume setup 中，显式挂载上述子插件，配置固定为当前 `elysia` 文件列表与 `complete: true`。
+- create 与 resume 必须走同一组合；预热和 Web UI 借用仍不得绕开这个作用域。
+- 全局完整提示词移除后，主意识下一次组装得到的正文在文件未变化时应与改造前逐字节一致。
+- 其他新建 session 才通过 DSH preset 选择提示词组合；不要求给旧主意识补写 `agentPreset` 记录。
+
+#### 实现验收
+
+至少验证：主意识改造前后提示词逐字节一致；普通 session 不含爱莉固定提示词；不同文件组合只加载各自声明的文件；session 重启后 preset 选择保持一致；修改文件内容下一轮生效但文件列表不随正文或渠道事件改变；非法文件名、重复列表和未知必填文件在挂载时失败；现有 pending、发送工具与读图白名单行为不变。
+
 ### 看图片
 
 图片是同一条 session 里的事件，和文字一起进入 pending。她在这一轮里能看见这张图，并且知道它来自哪个窗口、哪个人。表情包先按图片收。纯文字阶段里收到的图片不要假装看见。KOOK 已按本节实现文字与图片事件，QQ、飞书仍待接入同一结构。

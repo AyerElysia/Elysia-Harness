@@ -49,7 +49,7 @@ it('composes the real read_image registration into the main agent allow-list', a
   await ctx.plugin(Object.assign((inner: Context) => { scope = createScope(inner, key) }, {
     inject: ['tools', 'systemPrompt'],
   }))
-  composeMainAgent(scope.ctx)
+  await composeMainAgent(scope.ctx, { baseDir: home, files: ['SOUL.md'], complete: true })
 
   expect(ctx.tools.schemas().map(tool => tool.name).sort()).toEqual(['read_image', 'send_text', 'send_voice'])
   expect(ctx.tools.schemas(key).map(tool => tool.name).sort()).toEqual(['pass', 'read_image', 'send_text', 'send_voice'])

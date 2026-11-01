@@ -8,9 +8,18 @@ The plugin does not redo the session log, compaction, prompt assembly, or tool l
 
 ## Prefix
 
-The prefix is the stable identity section of the system prompt. The fixed prompt files all live in one directory. The plugin does not scan that directory; it reads the file names named in its configuration, in order, and concatenates them into one section.
+Standing prompts are composed per agent/session, not across the deployment. `src/standing-prompts.ts` exports the Cordis subplugin `@elysia/conscious-mind/standing-prompts`. It must be mounted in an agent scope; mounting it globally fails. The conscious-mind runtime still owns pending and outbound services, but no longer registers a global complete prompt. Ordinary sessions therefore do not inherit the main conscious mind's file prefix from that runtime.
 
-Both the directory and the file names are written in this plugin's configuration, for example:
+The scoped plugin takes these fields:
+
+| Field | Meaning |
+|---|---|
+| `baseDir` | Non-empty prompt directory. Absolute paths are used directly; relative paths resolve against the process cwd when the plugin mounts. |
+| `files` | Non-empty, ordered list of unique file names inside the directory. No directory scan or automatic file selection. |
+| `required` | Files that must exist and be non-empty; defaults to `['SOUL.md']`. Every required name must also be in `files`. |
+| `complete` | Defaults to `true`: the joined text is the scoped agent's complete system prompt. `false` registers an ordinary section alongside other prompt sections. |
+
+For example, a scoped plugin row can use:
 
 ```yaml
 baseDir: /home/ayerelysia/Elysia/Data/standing-prompts
@@ -20,19 +29,20 @@ files:
   - MEMORY.md
   - EXISTENCE.md
   - TOOLS.md
+required:
+  - SOUL.md
+complete: true
 ```
 
-`baseDir` may be absolute. A relative path resolves against the process's current directory when the plugin mounts. The Harness has no "prompt directory" setting; `personaPrefix` accepts only one string hardcoded in configuration. This plugin's own config field holds the directory path.
+The main runtime's own configuration retains `baseDir`, `files`, and `required`; it passes them to this subplugin with `complete: true` in `composeMainAgent`. The same setup callback is supplied to main-agent create and resume. The existing main session id `elysia-conscious-mind` and its cwd `/home/ayerelysia/Elysia/Elysium/Elysia-Harness/homes/web/conscious-mind` are unchanged. This code does not rewrite an existing session header or edit the subject's prompt files.
 
-Loading reuses `ctx.systemPrompt.section()`. It registers a section with `complete: true` and `interpolate: false` whose `text` is a function. The agent loop calls `assemble()` at every model step, and the function reads the files in `files` order at that moment, joining them with a blank line. The section's `text` callback is synchronous, and a `complete` section is finalized before the asynchronous waterfall, so this uses a synchronous disk read rather than `ctx.fs.readText`. `interpolate: false` keeps any `{{` in the body literal. `complete` makes this section the whole system prompt, covering the Harness's own `harness:identity`.
+The main runtime snapshots the selected configuration for its turn handler. The file selection is part of that agent's composition and is not reselected each turn. Contents are re-read in the configured order at each `systemPrompt.assemble()`, trimmed, and joined with a blank line. Missing or empty required files abort assembly; optional missing or empty files are skipped, while other read errors propagate. File names cannot escape the directory. There is no file watcher or fallback to a cached prefix.
 
-If `SOUL.md` is unreadable or empty, the turn aborts instead of continuing on the previous turn's cache. Any other missing or empty file in the list is skipped. File names must stay inside that directory.
+Loading reuses `ctx.systemPrompt.section()` with `interpolate: false` and a synchronous `text` callback. Literal `{{` stays literal. In complete mode, the section supplies this scoped agent's whole prompt, including replacing the Harness identity; it does not replace other sessions' prompts. DSH's existing prompt projection handles changes on the next model step. Editing a file while the session is idle does not itself trigger a turn.
 
-Elysia's five bodies are not in this package; they live in `/home/ayerelysia/Elysia/Data/standing-prompts`: `SOUL.md`, `USER.md`, `MEMORY.md`, `EXISTENCE.md`, `TOOLS.md`.
+The Web profile currently adds one `elysia` preset, mounting the same scoped subplugin with the five files above. `elysia-core` remains a requirement, with no configured preset yet. A preset-created session is separate from the platform main session. Preset composition across a real restart still needs verification. The main runtime accepts a borrowed live agent only when its scope has a matching completed composition receipt; it does not automatically migrate an older unscoped agent. The standalone terminal entry also mounts this subplugin in its own scope.
 
-File changes are not watched either. Neither `ctx.fs.watch` nor the Chokidar the skill directory uses is wired to the system prompt, and `system-prompt/change` fires only when a prompt section is registered or unmounted, not when a file's content changes. The next `assemble()` re-reads from disk; the agent loop compares the rendered section against the current `system/message`, and a difference makes `SystemPromptProjection` update it. A route that declares `systemPromptUpdate: 'in-history'` with an ongoing request sequence appends the new prefix after the history; otherwise the opening entry is replaced in place. Editing files while a session is idle has no effect until the next model step reads them.
-
-Which chat she is in and how a livestream should be joined are not written into the prefix. Those are the setting the inbound message carries. Speaking habits belong in these files, not in plugin code.
+The subject's prompt bodies live outside this package. This plugin reads the selected files; it does not author or migrate their text. Channel/conversation setting stays in inbound events rather than being written into the stable prefix.
 
 ## send_text
 
@@ -52,9 +62,9 @@ Inbound messages do not each get their own reply. Channel adapters are intended 
 
 ## Conscious-mind reply turn
 
-When the Harness provides the `agents` service, the plugin connects pending to the conscious mind automatically. She has one agent and one long-lived session with the fixed id `elysia-conscious-mind`: reuse a live agent first, then try resume. If resume fails and no concurrently resumed agent is available, the code still attempts create under the same id; it does not yet distinguish a missing session from other resume failures. Each batch becomes one user message delivered through `followup()` to the native Harness agent loop, and the driver awaits `whenIdle()`. The Harness owns the model, session history, compaction, and tool calls; there is no separate chat-completions fetch.
+When the Harness provides the `agents` service, the plugin connects pending to the conscious mind automatically. She has one agent and one long-lived session with the fixed id `elysia-conscious-mind`. A live agent is reused only after its completed prompt/tool composition receipt matches the selected configuration. With no live agent, the runtime tries resume. If resume fails and no compatible concurrently resumed agent is available, the code still attempts create under the same id; it does not yet distinguish a missing session from other resume failures. An incompatible live agent instead fails explicitly without followup, leaving the inbound batch pending. Each batch becomes one user message delivered through `followup()` to the native Harness agent loop, and the driver awaits `whenIdle()`. The Harness owns the model, session history, compaction, and tool calls; there is no separate chat-completions fetch.
 
-This session exposes `send_text`, `send_voice`, DSH's native `read_image`, and the scoped `pass` tool. Other global tools, including code, file mutation, and search tools, are masked. `read_image` reads existing local image files; inbound chat images use the separate attachment-admission path. `pass` requires `reason`, records why she chose silence, and touches no channel. She may answer one or more conversations or stay silent; the runtime forces neither choice. Drained events remain in the long session history. The older `createSendTextTurn` remains available for standalone experiments but is not the reply turn installed by the ElyHarn service.
+On the create/resume setup path, `composeMainAgent` installs the scoped prefix and exposes `send_text`, `send_voice`, DSH's native `read_image`, and the scoped `pass` tool. Setup success is recorded in a process-local WeakMap keyed by the agent context, using a fingerprint of the fixed prompt configuration rather than file contents. Repeated setup with the same configuration reuses its promise; a different configuration is rejected. The receipt is cleared when the scope is disposed. Existing or concurrently recovered live agents are borrowed only with a matching completed receipt; an older uncomposed instance must go through normal scoped restoration rather than having its header or history rewritten. Other global tools, including code, file mutation, and search tools, are masked. `read_image` reads existing local image files; inbound chat images use the separate attachment-admission path. `pass` requires `reason`, records why she chose silence, and touches no channel. She may answer one or more conversations or stay silent; the runtime forces neither choice. Drained events remain in the long session history. The older `createSendTextTurn` remains available for standalone experiments but is not the reply turn installed by the ElyHarn service.
 
 ## send_text parameters
 
@@ -204,18 +214,18 @@ One call's `content` is split on newlines into several segments, each sent as an
 
 `send_voice` synthesizes spoken text with the fixed local BreezeTTS voice and routes the audio through a registered voice sender. The optional `expression_instruction` controls this expression without changing the reference voice. It reports `sent`, `synthesis-failed`, `send-failed`, or `unknown` rather than automatically synthesizing or sending again.
 
-KOOK voice delivery is implemented: upload once, prefer a native voice message, and fall back to an audio-file message only after the platform explicitly rejects the native type. QQ and Feishu voice senders are still pending. `send_voice` does not accept an existing audio path; `send_file` for existing files is not implemented yet.
+KOOK voice delivery is implemented: upload once, prefer a native voice message, and fall back to an audio-file message only after the platform explicitly rejects the native type. QQ and Feishu voice senders are still pending. `send_voice` does not accept an existing audio path. The updated requirement reserves one shared `send_file(channel, conversation, path)` for existing images, audio, video, and other files, with shared file checks and channel-specific delivery. `send_file`, `OutboundFile`, and its adapter registrations are not implemented yet.
 
 ## Terminal entry
 
-In the `deepseek-harness` directory, using Node 22:
+From this checkout's `dsh/` directory, using Node 22:
 
 ```sh
-pnpm exec tsx --tsconfig tsconfig.base.json packages/elysia/conscious-mind/src/tui.ts
+pnpm exec tsx --tsconfig tsconfig.base.json ../plugins/conscious-mind/src/tui.ts
 ```
 
 On that machine Node 22 and pnpm are in `/home/ayerelysia/.local/share/node-v22/bin`. `/quit` exits.
 
 Every turn re-assembles the prefix and sends it as the system message. The model defaults to `providers.NexusAI` in Elysium's `config/models.toml`, model name `gemini-3.8-flash`. `ELYSIA_BASE_URL`, `ELYSIA_API_KEY`, `ELYSIA_MODEL`, or `--base-url`, `--model` replace those. `--once "one sentence"` asks a single turn.
 
-This entry prints the model's text to the terminal; it does not send to QQ, Feishu, or Kook yet.
+This standalone entry uses its own scoped prompt composition and process-local history, then makes its own model request. It prints the model's text to the terminal; it does not drive the persistent platform main session or send to QQ, Feishu, or Kook.
