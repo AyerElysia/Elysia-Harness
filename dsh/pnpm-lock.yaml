@@ -240,6 +240,43 @@ importers:
         specifier: ^4.4.3
         version: 4.4.3
 
+  ../plugins/ayla-app:
+    dependencies:
+      '@deepseek-ai/schemastery':
+        specifier: link:../../dsh/vendor/schemastery
+        version: link:../../dsh/vendor/schemastery
+    devDependencies:
+      '@deepseek-ai/cordis':
+        specifier: workspace:~
+        version: link:../../dsh/vendor/cordis
+      '@deepseek-ai/dsh-agent':
+        specifier: workspace:*
+        version: link:../../dsh/packages/core/agent
+      '@deepseek-ai/dsh-agent-loop-testkit':
+        specifier: workspace:*
+        version: link:../../dsh/packages/test-support/agent-loop-testkit
+      '@deepseek-ai/dsh-attachment':
+        specifier: workspace:*
+        version: link:../../dsh/packages/attachment/attachment
+      '@deepseek-ai/dsh-brand':
+        specifier: workspace:*
+        version: link:../../dsh/packages/util/brand
+      '@deepseek-ai/dsh-llm':
+        specifier: workspace:*
+        version: link:../../dsh/packages/llm/llm
+      '@deepseek-ai/dsh-scope':
+        specifier: workspace:*
+        version: link:../../dsh/packages/core/scope
+      '@deepseek-ai/dsh-session':
+        specifier: workspace:*
+        version: link:../../dsh/packages/core/session
+      '@deepseek-ai/dsh-system-prompt':
+        specifier: workspace:*
+        version: link:../../dsh/packages/core/system-prompt
+      '@deepseek-ai/dsh-tools':
+        specifier: workspace:*
+        version: link:../../dsh/packages/core/tools
+
   ../plugins/conscious-mind:
     dependencies:
       '@deepseek-ai/schemastery':
