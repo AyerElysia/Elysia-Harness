@@ -275,23 +275,69 @@ DSH 收到 `error` 后把该次 `send_text` 记为失败（带 `stoppedAt`），
 
 ## 13. 废弃与删除清单（Ayla 侧）
 
-本期**删除**，不保留兼容层：
+> **本节已按 `D1-AUDIT.md`（2026-11-09 只读勘察，923 行）重写。** 初版有 5 处事实错误，其中 3 处会让后端无法启动或全站 500。凡是与审计冲突的，以审计为准。
 
-| 文件 | 原因 |
-|---|---|
-| `apps/elysia_bridge/elysia_client.py`（821 行） | 阶段三 HTTP 客户端，全部接口不再存在 |
-| `apps/elysia_bridge/inline.py`（312 行） | SSE 出站投影线程 + lifespan 启动 |
-| `apps/elysia_bridge/voice_observer.py`（328 行） | 语音 observer WS，本期不做语音 |
-| `apps/elysia_bridge/services.py` 中的 SSE/凭据/投影/语音部分（约 1000 行） | 同上 |
-| `management/commands/run_bridge.py` | SSE 订阅循环入口 |
-| `tests/test_elysia_client.py`、`test_outbound.py`、`test_bridge_loop.py` 等旧契约测试 | 随实现一起退役 |
-| `settings.ELYSIA_BASE_URL / ELYSIA_CREDENTIAL_FILE / ELYSIA_SSE_* / ELYSIA_BRIDGE_INLINE` | 不再读取 |
-| `asgi.py` 里的 lifespan bridge 包装 | 删除后恢复标准路由 |
-| `ElysiaProfile.stream_id / platform / chat_type` | 无消费者，迁移 drop（表内 0 行） |
+### 13.1 整文件删除（12 个）
 
-**保留**：`ElysiaProfile`（`user`/`enabled`/`display_name`/`created_at`）、`views.py` 的 profile 管理端点（语义改为探测通道连通性）、`models.generate_elysia_stream_id` 之外的领域模型代码。
+| 文件 | 行数 | 说明 |
+|---|---:|---|
+| `apps/elysia_bridge/elysia_client.py` | 821 | 阶段三 HTTP 客户端 |
+| `apps/elysia_bridge/inline.py` | 312 | SSE 出站投影线程 |
+| `apps/elysia_bridge/voice_observer.py` | 328 | 语音 observer WS |
+| `management/commands/run_bridge.py` | 116 | SSE 订阅循环入口 |
+| `tests/test_elysia_client.py` | 467 | 旧契约测试 |
+| `tests/test_bridge_loop.py` | 592 | 同上 |
+| `tests/test_outbound.py` | 281 | 同上 |
+| `tests/test_inline.py` | 109 | **初版漏列** |
+| `tests/test_voice_observer.py` | 341 | **初版漏列** |
+| `tests/test_voice_call_client.py` | 419 | **初版漏列** |
+| `tests/test_voice_call_api.py` | 203 | **初版漏列** |
+| `tests/test_voice_live_projection.py` | 320 | **初版漏列** |
 
-> 主动授权：**遇到旧时代遗留的废弃代码直接删除**，不为其写兼容层或迁移路径。删除前必须确认无其他消费者（`grep` 全仓）。
+### 13.2 片段删除与重写
+
+| 对象 | 范围 | 说明 |
+|---|---|---|
+| `services.py` | 删 82–1216（**1135 行**，初版估 1000 偏低） | 保留 1–81（含 `ProfileNotConfigured` 等异常类）与 1247–1278 |
+| `tests/test_inject.py` | 重写 | 只保留「非爱莉会话不 inject / 爱莉本人不入站」语义，其余随旧 inject 删除 |
+
+### 13.3 必须同步修改的连带对象（初版完全漏列）
+
+| # | 对象 | 为什么必须同批改 |
+|---|---|---|
+| B1 | `apps/elysia_bridge/apps.py:9-13` | `ready()` 里 `from ...inline import start_bridge_thread`。删 `inline.py` 后 **`django.setup()` 阶段 ModuleNotFoundError，后端起不来**，`manage.py check` 也挂 |
+| B2 | `config/asgi.py` | `start_inline_bridge` / `stop_inline_bridge` 两个调用点 + lifespan 包装，恢复标准路由 |
+| B3 | `views.py:25` | **模块级** `from .services import ProfileNotConfigured`。services.py 骨架若删掉该异常类，URLconf 直接挂 |
+| B4 | `serializers.py:17` | **模块级** `from .models import generate_elysia_stream_id`。**该函数不能删**，否则 URLconf 挂 |
+| B5 | `views.py` 的 `ElysiaVoiceCall*` 5 个视图 + 3 个 helper（141–306） | 语音编排端点 |
+| B6 | `apps/elysia_bridge/urls.py` 的 5 条 `voice-calls/` 路由（17–42） | 同上 |
+| B7 | `apps/chat/consumers.py` 的 `elysia_voice` 组 + 2 个 handler（150、179、615–624） | 语音 observer 广播接收端 |
+| B8 | `settings.VOICE_OBSERVER_ENABLED`（settings.py:282） | 生产 `.env:65` 为 `true`，删代码后成为死配置 |
+| B9 | `settings.ELYSIA_BASE_URL / ELYSIA_CREDENTIAL_FILE / ELYSIA_SSE_* / ELYSIA_BRIDGE_INLINE` | 其中 `ELYSIA_SSE_RECONNECT_SECONDS` / `ELYSIA_SSE_EVENT_TYPES` **早就是死配置**（定义但全仓无读取） |
+| B10 | `settings_test.py:34` | `ELYSIA_BRIDGE_INLINE` 测试开关 |
+| B11 | `pyproject.toml` 的 `websockets` 依赖 | 唯一使用者是 `voice_observer.py:151` |
+| B12 | `apps/chat/tests/test_friend_private_send.py:14,32,140` | **保留目录里的字段消费者**，传 `stream_id=generate_elysia_stream_id(...)`。初版与 D-2 都未提 |
+
+### 13.4 字段删除的前提（初版判断错误）
+
+`ElysiaProfile.stream_id / platform / chat_type` **不是「无消费者」**：后端有 3 处消费者（`serializers.py:33-35,44,47`、`views.py:69-70,137`）+ 2 个测试文件。可删，但必须同步改这些位置。
+
+**数据前提也不成立**：初版写「表内 0 行」——生产库确实 0 行且迁移到 `0003`，但**本地开发库 `ayla.elysia_profiles` 有 1 行**（id=1, platform=ayla, chat_type=private）。`stream_id` 是 `unique` + 非空 + 无 default，`0004` 回退大概率失败（审计标注为推断，未实测）。
+
+### 13.5 验收口径修正
+
+初版写「全仓 grep 旧符号为零」——**不可达**，历史文档与记忆必然命中（`Ayla/docs/plans/阶段四-M4-4…`、`README.md`、`.workbuddy/memory/`）。
+
+正确口径：**`Ayla/backend/{apps,config,tests}/` 下的 `*.py` 零命中**。
+
+### 13.6 保留
+
+- `ElysiaProfile`（`user`/`enabled`/`display_name`/`created_at`）
+- `models.generate_elysia_stream_id`（**B4 依赖，不得删**）
+- `services.py` 的异常类骨架（1–81）与尾部（1247–1278）
+- `views.py` 的 profile 管理端点（语义改为探测通道连通性）
+
+> 主动授权：**遇到旧时代遗留的废弃代码直接删除**，不为其写兼容层或迁移路径。但删除必须遵守 13.3 的连带修改清单——**先改 import 点，再删被 import 的文件**，每步之后跑一次 `manage.py check`。
 
 ## 14. 风险与取舍
 
@@ -305,6 +351,8 @@ DSH 收到 `error` 后把该次 `send_text` 记为失败（带 `stoppedAt`），
 | R6 | 图片走 `media_id` + 签名 URL，不走 base64 | 帧小、不阻塞心跳、复用 Ayla 媒体鉴权 | DSH 要多次 HTTP 往返 |
 | R7 | 出站不重试 | 与 `send_text` 契约一致，避免重复发送 | 网络抖动会丢该段；由她看到失败自行决定是否重发 |
 | R8 | 删除旧桥接全部代码 | 协议已不存在，保留只会误导 | 语音/直播需在下一期从头设计 |
+| R9 | 按审计结果而非初版清单执行删除 | 初版 5 处事实错误，3 处会导致后端无法启动或全站 500 | 删除顺序被约束为「先改 import 点、再删文件」，每步 `manage.py check` |
+| R10 | `generate_elysia_stream_id` 保留不删 | `serializers.py:17` 模块级 import，删了 URLconf 挂 | 该函数成为遗留孤儿，但代价远小于全站 500 |
 
 ## 15. 实现后需回填
 

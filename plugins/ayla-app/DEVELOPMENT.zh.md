@@ -27,37 +27,86 @@
 
 协议已不存在，保留旧实现只会让下一个人误以为它在工作。
 
-### 步骤
+> **本节已按 `D1-AUDIT.md` 重写。** 初版的步骤顺序会直接导致后端无法启动——必须先断开 import 点，再删被 import 的文件。审计全文见 `Elysia-Harness/plugins/ayla-app/D1-AUDIT.md`。
 
-1. 先确认无其他消费者：
-   ```bash
-   grep -rn "elysia_client\|ElysiaClient\|run_bridge\|run_bridge_loop\|ElysiaCredentialManager\|voice_observer\|start_inline_bridge" Ayla/backend --include=*.py
-   ```
-2. 删除（需求 §13 清单）：
-   - `elysia_client.py`、`inline.py`、`voice_observer.py`、`management/commands/run_bridge.py`
-   - `services.py` 中 SSE / 凭据 / 投影 / 语音部分
-   - 对应测试：`test_elysia_client.py`、`test_outbound.py`、`test_bridge_loop.py`、`test_inject.py` 中只测旧路径的用例
-3. `config/asgi.py`：删掉 lifespan 包装（`_lifespan_app`、`wrapped_application`），恢复标准 `ProtocolTypeRouter`。
-4. `config/settings.py`：删除 `ELYSIA_BASE_URL`、`ELYSIA_CREDENTIAL_FILE`、`ELYSIA_SSE_*`、`ELYSIA_BRIDGE_INLINE`，替换为新的 `AYLA_BRIDGE_*`（见 D-3）。
-5. `.env` / `.env.example` 同步删除旧键。
+### 前置：确认工作树归属
+
+并行 agent 可能正在改前端。开工前：
+
+```bash
+cd Ayla && git status --porcelain | awk '{print $1}' | sort | uniq -c
+git status --porcelain | grep -v 'web/' | grep -v 'flutter/' | head
+```
+
+**后端改动必须与前端撤下分开提交**，不要混在一批。
+
+### 步骤（顺序不可调换）
+
+**第 0 步：断开所有 import 点（先做，不删任何文件）**
+
+| 位置 | 改法 |
+|---|---|
+| `apps/elysia_bridge/apps.py:9-13` | 删掉 `ready()` 里的 `from ...inline import start_bridge_thread` 与调用；`ready()` 可整体删除 |
+| `config/asgi.py` | 删 `_lifespan_app` / `wrapped_application` 与两处 `start_inline_bridge`/`stop_inline_bridge` 调用，恢复标准 `ProtocolTypeRouter` |
+| `views.py:25` | `from .services import ProfileNotConfigured` 若指向待删段，改为保留该异常类或本地定义 |
+| `serializers.py:17` | **`generate_elysia_stream_id` 必须保留**，不要动这行 import |
+| `apps/chat/consumers.py` | 移除 `elysia_voice` 组与两个 handler（150、179、615–624） |
+| `apps/chat/tests/test_friend_private_send.py` | 改掉 `stream_id=generate_elysia_stream_id(...)` 三处 |
+
+改完立刻验证：`python manage.py check` **必须通过**。
+
+**第 1 步：删除文件**
+
+按需求 §13.1 的 12 个整文件删除。
+
+**第 2 步：裁剪 services.py**
+
+删 82–1216，保留 1–81（异常类）与 1247–1278。删完再跑一次 `manage.py check`。
+
+**第 3 步：清理视图与路由**
+
+- `views.py` 的 `ElysiaVoiceCall*` 5 视图 + 3 helper（141–306）
+- `urls.py` 的 5 条 `voice-calls/` 路由（17–42）
+
+**第 4 步：配置与依赖**
+
+- `settings.py`：`ELYSIA_BASE_URL`、`ELYSIA_CREDENTIAL_FILE`、`ELYSIA_SSE_*`、`ELYSIA_BRIDGE_INLINE`、`VOICE_OBSERVER_ENABLED`
+- `settings_test.py:34`
+- `pyproject.toml` 的 `websockets`（唯一使用者已删）
+- `backend/.env` 与 `.env.example` 同步删键
+
+**第 5 步：重写 test_inject.py**
+
+只保留「非爱莉会话不 inject / 爱莉本人不入站」语义。
 
 ### 验收
 
-- 全仓 grep 旧符号为零。
+- `Ayla/backend/{apps,config,tests}/` 下的 `*.py` **零命中**旧符号（不是全仓——历史文档必然命中，见需求 §13.5）。
 - `python manage.py check` 通过。
-- 后端能正常启动（daphne 起来，`/api/v1/health/` 200）。
+- `python -m pytest apps/elysia_bridge -q --ds=config.settings_test_mysql` 通过（数量会减少）。
+- 后端能启动，`/api/v1/health/` 200。
 
-> ⚠️ 删除是破坏性操作。执行前记录 `git status` 与当前 HEAD，删除后立即跑一次 `manage.py check`，不要攒到最后一起验。
+### 已知陷阱
+
+| 陷阱 | 说明 |
+|---|---|
+| `generate_elysia_stream_id` | 名字带 elysia 但**不能删**：`serializers.py:17` 模块级 import，删了 URLconf 挂 |
+| 本地库有 1 行 | 生产 0 行，本地 `ayla.elysia_profiles` 有 1 行；`stream_id` 是 unique+非空+无 default，`0004` 回退可能失败。**回退前先备份该表** |
+| `test_inject.py` 假绿 | 现有 `:172-174` 的 monkeypatch 无效，测试通过是因为异常被 `except` 吞了。重写时不要复制这个模式 |
+| 死配置 | `ELYSIA_SSE_RECONNECT_SECONDS` / `ELYSIA_SSE_EVENT_TYPES` 早已无读取，删了不影响行为 |
+| 同名异义 | `conscious-mind/src/tui.ts` 的 `ELYSIA_BASE_URL` 是 LLM provider 地址；`apps/releases/*` 的 `platform` 是发布平台。**不要误伤** |
+
+> ⚠️ 删除是破坏性操作。每步之后立刻 `manage.py check`，不要攒到最后一起验。删前记录 `git status` 与 HEAD。
 
 ## 3. D-2 数据模型：ElysiaProfile 收敛 + outbox
 
 ### ElysiaProfile
 
-保留 `user`、`enabled`、`display_name`、`created_at`；删除 `stream_id`、`platform`、`chat_type`（需求 §13）。新迁移 `0004`（现有到 `0003`）。
+保留 `user`、`enabled`、`display_name`、`created_at`；删除 `stream_id`、`platform`、`chat_type`。新迁移 `0004`（现有到 `0003`）。
 
-```python
-# 迁移注意：表内 0 行，可直接 RemoveField；不得假设有数据要搬
-```
+**删除前必须先改消费者**（需求 §13.4）：`serializers.py:33-35,44,47`、`views.py:69-70,137`、`apps/chat/tests/test_friend_private_send.py`。这些是模块级或测试级引用，先改再删字段。
+
+**数据前提**：生产库 0 行（迁移到 0003），但**本地开发库有 1 行**。`stream_id` 是 `unique` + 非空 + 无 default，回退 `0003` 可能失败——回退前先 `mysqldump` 该表。
 
 ### 新增 AylaInboundOutbox
 
