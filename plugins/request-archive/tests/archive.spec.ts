@@ -87,6 +87,25 @@ describe('elysia-request-archive', () => {
     }
   })
 
+  it('keeps a completed archive and model call when only the derived index fails', async () => {
+    const dir = directory()
+    writeFileSync(join(dir, '.session-index-v1'), 'blocked index directory')
+    const ctx = new Context()
+    const adapter = new CountingAdapter()
+    try {
+      await ctx.plugin(LlmRuntime)
+      await ctx.plugin(RequestArchive, { dir })
+      ctx.llm.registerAdapter(['test'], adapter)
+      for await (const _chunk of ctx.llm.stream({ ...request('retained'), sessionId: 'fixture' })) {
+        // A derived metadata failure must not reject the completed archive's request.
+      }
+      expect(adapter.calls).toBe(1)
+      expect(readdirSync(dir).filter(name => name.endsWith('.json'))).toHaveLength(1)
+    } finally {
+      await ctx.fiber.dispose()
+    }
+  })
+
   it('does not call the adapter when the archive cannot be written', async () => {
     const blocked = join(directory(), 'not-a-directory')
     writeFileSync(blocked, 'file')

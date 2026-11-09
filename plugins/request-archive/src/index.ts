@@ -9,6 +9,7 @@ import z from '@deepseek-ai/schemastery'
 import { isAbsolute, join, resolve } from 'node:path'
 import type {} from '@deepseek-ai/dsh-llm'
 import { archiveRequest } from './archive.ts'
+import { RequestArchiveIndex } from './index-store.ts'
 
 export { RequestArchiveError, archiveRequest, snapshotRequest } from './archive.ts'
 export type { ArchivedRequest } from './archive.ts'
@@ -46,8 +47,14 @@ export const Config: z<Config> = z.object({
 export function apply(ctx: Context, config: Config): void {
   const configured = config.dir ?? DEFAULT_REQUEST_DIR
   const dir = isAbsolute(configured) ? configured : resolve(process.cwd(), configured)
+  const index = new RequestArchiveIndex(dir)
+  ctx.effect(() => async () => { await index.flush() }, 'request-archive.index-writes')
   ctx.on('llm/stream', (options, next) => {
-    archiveRequest(dir, options)
+    archiveRequest(dir, options, entry => {
+      void index.record(entry).catch(() => {
+        ctx.logger('request-archive').warn('Request archive metadata index write failed; snapshot retained')
+      })
+    })
     return next()
   })
 }

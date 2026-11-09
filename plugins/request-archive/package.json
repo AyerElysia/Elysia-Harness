@@ -13,7 +13,11 @@
     },
     "./src/*": "./src/*",
     "./package.json": "./package.json",
-    "./cordis.patch.yml": "./cordis.patch.yml"
+    "./cordis.patch.yml": "./cordis.patch.yml",
+    "./index-store": {
+      "types": "./src/index-store.ts",
+      "default": "./src/index-store.ts"
+    }
   },
   "files": [
     "src/**/*.ts",
