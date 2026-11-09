@@ -74,6 +74,12 @@ When the Harness provides the `agents` service, the plugin connects pending to t
 
 On the create/resume setup path, `composeMainAgent` installs the scoped prefix and exposes `send_text`, `send_voice`, DSH's native `read`, `read_image`, `write`, `edit`, `glob`, `grep`, and the scoped `pass` tool. Setup success is recorded in a process-local WeakMap keyed by the agent context, using a fingerprint of the fixed prompt configuration rather than file contents. Repeated setup with the same configuration reuses its promise; a different configuration is rejected. The receipt is cleared when the scope is disposed. Existing or concurrently recovered live agents are borrowed only with a matching completed receipt; an older uncomposed instance must go through normal scoped restoration rather than having its header or history rewritten. Code execution and other global tools remain masked. The file tools use the scoped admission rules below; `read_image` reads admitted workspace images; inbound chat images use the separate attachment-admission path. `pass` requires `reason`, records why she chose silence, and touches no channel. She may answer one or more conversations or stay silent; the runtime forces neither choice. Drained events remain in the long session history. The older `createSendTextTurn` remains available for standalone experiments but is not the reply turn installed by the ElyHarn service.
 
+## Main-session context isolation
+
+The main agent suppresses optional DSH runtime context in its own scope. After the `agent/pre-step` producers finish, a source-based filter removes only `agent-instructions` and `runtime-context` messages for the fixed main session. Ordinary user messages mentioning `AGENTS.md` and other sessions remain untouched. During setup, previously visible messages from those two framework sources receive empty surface replacements; the original events and source references remain in the durable log. Empty replacements are not repeated, and other sources, including existing checkpoints, remain visible.
+
+The agent scope owns both registrations. Failed composition immediately removes the filter and runtime suppressor; scope disposal also cleans them up. This does not change the session id/cwd or rewrite subject files or existing events.
+
 ## send_text parameters
 
 | Parameter | Type | Required | Meaning |

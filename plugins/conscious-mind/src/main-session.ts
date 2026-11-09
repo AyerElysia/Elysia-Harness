@@ -11,10 +11,10 @@
 import type { Context } from '@deepseek-ai/cordis'
 import { resolve } from 'node:path'
 import { brandString } from '@deepseek-ai/dsh-brand'
-import type { AgentHandle } from '@deepseek-ai/dsh-agent'
+import type { Agent, AgentHandle } from '@deepseek-ai/dsh-agent'
 import type {} from '@deepseek-ai/dsh-agent-default-model'
 import { createUserMessage, type ContentBlock } from '@deepseek-ai/dsh-llm'
-import type { SessionId } from '@deepseek-ai/dsh-session'
+import type { SessionId, UserMessage } from '@deepseek-ai/dsh-session'
 import type {} from '@deepseek-ai/dsh-tools'
 import type { InboundEvent } from './inbound.ts'
 import type { PendingTurn } from './pending.ts'
@@ -66,6 +66,59 @@ export function formatInboundBatch(batch: readonly InboundEvent[]): ContentBlock
   return content
 }
 
+const DSH_CONTEXT_SOURCES = new Set(['agent-instructions', 'runtime-context'])
+
+function isDshContextMessage(message: UserMessage): boolean {
+  return DSH_CONTEXT_SOURCES.has(message.source.kind)
+}
+
+/**
+ * Retire DSH-owned context from the visible surface without deleting history.
+ * Empty replacements are idempotent and keep ordinary user messages untouched.
+ */
+export function clearMainSessionDshContext(agent: Agent): number {
+  let cleared = 0
+  for (const seq of [...agent.session.surface.nodes]) {
+    // Existing Session history read; surface replacement preserves the event log.
+    const event = agent.session.eventAt(seq)
+    if (event?.type !== 'user/message' || !isDshContextMessage(event.data) || event.data.content.length === 0) continue
+    agent.session.append('user/message', createUserMessage({
+      content: [],
+      source: event.data.source,
+    }), {
+      surfaceOp: { op: 'replace', startSeq: seq, endSeq: seq },
+      sourceEventSeqs: [seq],
+    })
+    cleared += 1
+  }
+  return cleared
+}
+
+/** Keep generic Harness runtime and workspace instructions out of Elysia only. */
+export function isolateMainAgentContext(agentCtx: Context, agent?: Agent): () => void {
+  const restoreRuntimeContext = agentCtx.systemPrompt.suppressRuntimeContext()
+  // Be the outermost waterfall listener: after next() returns, every producer
+  // has finished. Own the root listener's disposer in this agent's scope.
+  const removeFilter = agentCtx.effect(() => agentCtx.root.on('agent/pre-step', async (payload, next) => {
+    const decision = await next()
+    if (decision.kind === 'reject' || payload.agent.id !== MAIN_SESSION_ID) return decision
+    return { ...decision, messages: decision.messages.filter(message => !isDshContextMessage(message)) }
+  }, { prepend: true }), 'elysia-conscious-mind.context-filter()')
+  let disposed = false
+  const dispose = (): void => {
+    if (disposed) return
+    disposed = true
+    try { removeFilter() } finally { restoreRuntimeContext() }
+  }
+  try {
+    if (agent !== undefined) clearMainSessionDshContext(agent)
+  } catch (error) {
+    dispose()
+    throw error
+  }
+  return dispose
+}
+
 interface MainAgentComposition {
   fingerprint: string
   ready: Promise<void>
@@ -99,7 +152,7 @@ function fixedPromptConfig(config: MainSessionConfig): MainSessionConfig {
  * Compose the main agent's scoped prompt and tools. The same fixed standing
  * composition is used on create and resume; other sessions select their own.
  */
-export function composeMainAgent(agentCtx: Context, promptConfig: MainSessionConfig): Promise<void> {
+export function composeMainAgent(agentCtx: Context, promptConfig: MainSessionConfig, agent?: Agent): Promise<void> {
   let config: MainSessionConfig
   try {
     config = fixedPromptConfig(promptConfig)
@@ -119,9 +172,11 @@ export function composeMainAgent(agentCtx: Context, promptConfig: MainSessionCon
   composition.ready = (async () => {
     const prompt = await agentCtx.plugin(StandingPrompt, config)
     let capabilities: { dispose(): Promise<unknown> } | undefined
+    let removeIsolation: (() => void) | undefined
     let removePass: (() => void) | undefined
     let removeRestriction: (() => void) | undefined
     try {
+      removeIsolation = isolateMainAgentContext(agentCtx, agent)
       // Use the same injected child-plugin path as Web presets. Calling the
       // mount function directly would hide workingDirectory in a real Agent scope.
       capabilities = await agentCtx.plugin(FileCapabilities, {
@@ -143,6 +198,7 @@ export function composeMainAgent(agentCtx: Context, promptConfig: MainSessionCon
       const cleanup = await Promise.allSettled([
         Promise.resolve().then(() => removeRestriction?.()),
         Promise.resolve().then(() => removePass?.()),
+        Promise.resolve().then(() => removeIsolation?.()),
         Promise.resolve().then(() => capabilities?.dispose()),
         Promise.resolve().then(() => prompt?.dispose()),
       ])
@@ -171,7 +227,7 @@ async function resumeOrCreateMainAgent(ctx: Context, promptConfig: MainSessionCo
   }
   const existing = borrowed()
   if (existing !== undefined) return existing
-  const setup = (agentCtx: Context): Promise<void> => composeMainAgent(agentCtx, promptConfig)
+  const setup = (agentCtx: Context, agent: Agent): Promise<void> => composeMainAgent(agentCtx, promptConfig, agent)
   const agentOptions = ctx.agentDefaultModel.currentSelection()
   const meta = { cwd: MAIN_SESSION_CWD }
   try {

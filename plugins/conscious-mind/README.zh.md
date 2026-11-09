@@ -74,6 +74,12 @@ Harness 提供 `agents` 服务时，插件自动把 pending 接到主意识。�
 
 create/resume 的 setup 路径通过 `composeMainAgent` 挂载作用域前缀，并暴露 `send_text`、`send_voice`、DSH 原生的 `read`、`read_image`、`write`、`edit`、`glob`、`grep` 和本作用域注册的 `pass`。setup 成功后，在以 agent context 为键的进程内 WeakMap 中记录固定配置签名和完成状态，不记录正文；相同配置重复 setup 复用同一 promise，不同配置拒绝替换，scope 卸载时清除凭据。既有或竞态恢复的 live agent 只有凭据完整且匹配时才能借用；旧未装配实例需经正常作用域恢复，不改写 header 或私有历史。代码执行及其他全局工具继续屏蔽；文件工具使用下述作用域权限。`read_image` 只用于主动读取工作区内获准的本地图片，聊天图片走独立的附件入站链路。`pass` 必填 `reason`，只记录这一轮为什么不说话，不触碰任何渠道。她可以回复一个或多个会话，也可以不说话，运行时不强迫二选一中的任何一个。已取走的事件留在长期 session 历史中。旧的 `createSendTextTurn` 仍保留给独立实验，但不是 ElyHarn 服务安装的主意识回复轮。
 
+## 主意识上下文隔离
+
+主意识在自己的 agent scope 内关闭 DSH 可选运行环境注入，并在 `agent/pre-step` 生产者完成后，按来源排除 `agent-instructions` 和 `runtime-context` 两类框架消息。普通用户消息即使提到 `AGENTS.md` 也会保留；其他 session 不受此过滤影响。装配时，已经可见的这两类旧框架消息通过追加空的 surface replacement 退出当前投影，原始事件和来源引用仍留在耐久日志中，重复装配不会重复替换空消息。其他来源（包括已有检查点）保持可见。
+
+过滤器由当前 agent scope 持有；装配失败会立即撤销过滤器与运行环境抑制，scope 卸载也会清理。此隔离不改变原 session id/cwd，也不直接改写历史或主体文件。
+
 ## send_text 参数
 
 | 参数 | 类型 | 必填 | 含义 |

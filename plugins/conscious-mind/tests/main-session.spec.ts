@@ -2,11 +2,14 @@ import { mkdirSync, mkdtempSync, rmSync } from 'node:fs'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import type { Context } from '@deepseek-ai/cordis'
+import type { Agent } from '@deepseek-ai/dsh-agent'
 import { AttachmentId } from '@deepseek-ai/dsh-attachment'
+import { createUserMessage } from '@deepseek-ai/dsh-llm'
+import { Session, SessionId } from '@deepseek-ai/dsh-session'
 import type { ToolRunContext } from '@deepseek-ai/dsh-tools'
 import { afterAll, describe, expect, it, onTestFinished, vi } from 'vitest'
 import type { InboundEvent } from '../src/inbound.ts'
-import { MAIN_SESSION_CWD, MAIN_SESSION_ID, composeMainAgent, createMainSessionTurn, formatInboundBatch } from '../src/main-session.ts'
+import { MAIN_SESSION_CWD, MAIN_SESSION_ID, clearMainSessionDshContext, composeMainAgent, createMainSessionTurn, formatInboundBatch, isolateMainAgentContext } from '../src/main-session.ts'
 import { definePassTool } from '../src/pass.ts'
 import * as StandingPrompt from '../src/standing-prompts.ts'
 
@@ -31,14 +34,19 @@ function compositionContext() {
   const plugin = vi.fn().mockResolvedValue({ dispose: vi.fn().mockResolvedValue(undefined) })
   const register = vi.fn().mockReturnValue(vi.fn())
   const restrict = vi.fn().mockReturnValue(vi.fn())
-  const on = vi.fn()
+  const removeContextFilter = vi.fn()
+  const restoreRuntimeContext = vi.fn()
+  const on = vi.fn().mockReturnValue(removeContextFilter)
+  const suppressRuntimeContext = vi.fn().mockReturnValue(restoreRuntimeContext)
   const ctx = {
     plugin,
     on,
+    systemPrompt: { suppressRuntimeContext },
     tools: { register, restrict },
-    effect(callback: () => () => void) { disposers.push(callback()) },
+    effect(callback: () => () => void) { const dispose = callback(); disposers.push(dispose); return dispose },
   } as unknown as Context
-  return { ctx, plugin, register, restrict, dispose: () => { for (const dispose of disposers.splice(0)) dispose() } }
+  ;(ctx as { root: Context }).root = ctx
+  return { ctx, plugin, on, register, restrict, suppressRuntimeContext, removeContextFilter, restoreRuntimeContext, dispose: () => { for (const dispose of disposers.splice(0)) dispose() } }
 }
 
 function owningContext(agents: unknown) {
@@ -173,7 +181,7 @@ describe('main session turn', () => {
     const register = vi.fn()
     const restrict = vi.fn()
     const plugin = vi.fn().mockResolvedValue(undefined)
-    await setup?.({ tools: { register, restrict }, on: vi.fn(), plugin, effect: (callback: () => () => void) => callback() } as unknown as Context)
+    await setup?.({ tools: { register, restrict }, systemPrompt: { suppressRuntimeContext: vi.fn() }, root: { on: vi.fn() }, on: vi.fn(), plugin, effect: (callback: () => () => void) => callback() } as unknown as Context)
     expect(plugin).toHaveBeenCalledWith(StandingPrompt, promptConfig)
     expect(register).toHaveBeenCalledOnce()
     expect(register.mock.calls[0]?.[0].name).toBe('pass')
@@ -251,7 +259,7 @@ describe('main agent tool scope', () => {
     const register = vi.fn()
     const restrict = vi.fn()
     const plugin = vi.fn().mockResolvedValue(undefined)
-    await composeMainAgent({ tools: { register, restrict }, on: vi.fn(), plugin, effect: (callback: () => () => void) => callback() } as unknown as Context, promptConfig)
+    await composeMainAgent({ tools: { register, restrict }, systemPrompt: { suppressRuntimeContext: vi.fn() }, root: { on: vi.fn() }, on: vi.fn(), plugin, effect: (callback: () => () => void) => callback() } as unknown as Context, promptConfig)
     expect(plugin).toHaveBeenCalledWith(StandingPrompt, promptConfig)
     expect(register.mock.calls[0]?.[0].name).toBe('pass')
     expect(restrict).toHaveBeenCalledWith({ allow: ['send_text', 'send_voice', 'read_image'] })
@@ -273,7 +281,7 @@ describe('main agent tool scope', () => {
 })
 
 
-it('disposes both scoped plugins when a later tool restriction fails', async () => {
+it('disposes scoped plugins and context isolation when a later tool restriction fails', async () => {
   const scoped = compositionContext()
   const prompt = { dispose: vi.fn().mockResolvedValue(undefined) }
   const capabilities = { dispose: vi.fn().mockResolvedValue(undefined) }
@@ -282,6 +290,8 @@ it('disposes both scoped plugins when a later tool restriction fails', async () 
   await expect(composeMainAgent(scoped.ctx, promptConfig)).rejects.toThrow('missing search tool')
   expect(prompt.dispose).toHaveBeenCalledOnce()
   expect(capabilities.dispose).toHaveBeenCalledOnce()
+  expect(scoped.removeContextFilter).toHaveBeenCalledOnce()
+  expect(scoped.restoreRuntimeContext).toHaveBeenCalledOnce()
 })
 
 
@@ -294,4 +304,66 @@ it('attempts every composition cleanup even when one child fails to dispose', as
   await expect(composeMainAgent(scoped.ctx, promptConfig)).rejects.toBeInstanceOf(AggregateError)
   expect(prompt.dispose).toHaveBeenCalledOnce()
   expect(capabilities.dispose).toHaveBeenCalledOnce()
+})
+
+describe('main agent DSH context isolation', () => {
+  it('retires only visible DSH context while preserving the durable event log', () => {
+    const session = Session.create(SessionId('context-isolation'))
+    const ordinary = createUserMessage({ content: [{ type: 'text', text: '请保留 AGENTS.md 这个聊天词' }], source: { kind: 'user' } })
+    const instructions = createUserMessage({
+      content: [{ type: 'text', text: 'workspace instructions' }],
+      source: { kind: 'agent-instructions' } as never,
+    })
+    const runtime = createUserMessage({
+      content: [{ type: 'text', text: 'Current runtime context' }],
+      source: { kind: 'runtime-context' } as never,
+    })
+    for (const message of [ordinary, instructions, runtime]) session.append('user/message', message, { surfaceOp: 'append' })
+
+    expect(clearMainSessionDshContext({ session } as Agent)).toBe(2)
+    expect(clearMainSessionDshContext({ session } as Agent)).toBe(0)
+    const visible = session.surface.nodes.map(seq => session.eventAt(seq))
+    expect(visible[0]?.type === 'user/message' && visible[0].data.content).toEqual(ordinary.content)
+    expect(visible.slice(1).map(event => event?.type === 'user/message' ? event.data.content : undefined)).toEqual([[], []])
+    expect(JSON.stringify(session.snapshotEvents())).toContain('workspace instructions')
+    expect(JSON.stringify(session.snapshotEvents())).toContain('Current runtime context')
+  })
+
+  it('cleans isolation up idempotently and unwinds a failed historical replacement', () => {
+    const scoped = compositionContext()
+    const dispose = isolateMainAgentContext(scoped.ctx)
+    dispose()
+    dispose()
+    expect(scoped.removeContextFilter).toHaveBeenCalledOnce()
+    expect(scoped.restoreRuntimeContext).toHaveBeenCalledOnce()
+
+    const failed = compositionContext()
+    const agent = { session: { surface: { nodes: [1] }, eventAt: () => { throw new Error('fixture read failure') } } } as unknown as Agent
+    expect(() => isolateMainAgentContext(failed.ctx, agent)).toThrow('fixture read failure')
+    expect(failed.removeContextFilter).toHaveBeenCalledOnce()
+    expect(failed.restoreRuntimeContext).toHaveBeenCalledOnce()
+  })
+
+  it('suppresses future DSH context for the main agent only', async () => {
+    const scoped = compositionContext()
+    isolateMainAgentContext(scoped.ctx)
+    expect(scoped.suppressRuntimeContext).toHaveBeenCalledOnce()
+    expect(scoped.on.mock.calls[0]?.[0]).toBe('agent/pre-step')
+    expect(scoped.on.mock.calls[0]?.[2]).toEqual({ prepend: true })
+    const handler = scoped.on.mock.calls[0]?.[1]
+    const ordinary = createUserMessage({ content: [{ type: 'text', text: 'ordinary' }], source: { kind: 'user' } })
+    const instructions = createUserMessage({
+      content: [{ type: 'text', text: 'workspace instructions' }],
+      source: { kind: 'agent-instructions' } as never,
+    })
+    const runtime = createUserMessage({
+      content: [{ type: 'text', text: 'Current runtime context' }],
+      source: { kind: 'runtime-context' } as never,
+    })
+    const decision = { kind: 'enter', messages: [ordinary, instructions, runtime] }
+    const filtered = await handler({ agent: { id: MAIN_SESSION_ID } }, async () => decision)
+    expect(filtered.messages).toEqual([ordinary])
+    const otherDecision = await handler({ agent: { id: 'another-session' } }, async () => decision)
+    expect(otherDecision).toBe(decision)
+  })
 })
