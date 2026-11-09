@@ -11,6 +11,9 @@ importers:
       '@elysia/conscious-mind':
         specifier: file:../../../../plugins/conscious-mind
         version: file:../../../../plugins/conscious-mind(@deepseek-ai/schemastery@3.18.5)
+      '@elysia/context-inspector':
+        specifier: file:../../../../plugins/context-inspector
+        version: file:../../../../plugins/context-inspector(@deepseek-ai/schemastery@3.18.5)(@elysia/request-archive@file:../../../../plugins/request-archive(@deepseek-ai/schemastery@3.18.5))
       '@elysia/feishu-app':
         specifier: file:../../../../plugins/feishu-app
         version: file:../../../../plugins/feishu-app(@deepseek-ai/schemastery@3.18.5)(@elysia/conscious-mind@file:../../../../plugins/conscious-mind(@deepseek-ai/schemastery@3.18.5))
@@ -55,6 +58,24 @@ packages:
       '@deepseek-ai/dsh-tools': workspace:*
       '@deepseek-ai/dsh-working-directory': workspace:*
       '@deepseek-ai/schemastery': workspace:~
+
+  '@elysia/context-inspector@file:../../../../plugins/context-inspector':
+    resolution:
+      directory: ../../../../plugins/context-inspector
+      type: directory
+    peerDependencies:
+      '@deepseek-ai/cordis': workspace:~
+      '@deepseek-ai/schemastery': workspace:~
+      '@deepseek-ai/dsh-typert-registry': workspace:*
+      '@deepseek-ai/dsh-api-remote-access': workspace:*
+      '@deepseek-ai/dsh-client-connection': workspace:*
+      '@deepseek-ai/dsh-client-locale': workspace:*
+      '@deepseek-ai/dsh-client-ui-slots': workspace:*
+      '@deepseek-ai/dsh-client-ui-conversation': workspace:*
+      '@deepseek-ai/dsh-client-ui-renderer': workspace:*
+      '@elysia/request-archive': workspace:*
+      '@deepseek-ai/dsh-typert-protocol': workspace:*
+      '@deepseek-ai/dsh-api-session-controller': workspace:*
 
   '@elysia/feishu-app@file:../../../../plugins/feishu-app':
     resolution: {directory: ../../../../plugins/feishu-app, type: directory}
@@ -167,6 +188,11 @@ snapshots:
   '@elysia/conscious-mind@file:../../../../plugins/conscious-mind(@deepseek-ai/schemastery@3.18.5)':
     dependencies:
       '@deepseek-ai/schemastery': 3.18.5
+
+  ? '@elysia/context-inspector@file:../../../../plugins/context-inspector(@deepseek-ai/schemastery@3.18.5)(@elysia/request-archive@file:../../../../plugins/request-archive(@deepseek-ai/schemastery@3.18.5))'
+  : dependencies:
+      '@deepseek-ai/schemastery': 3.18.5
+      '@elysia/request-archive': file:../../../../plugins/request-archive(@deepseek-ai/schemastery@3.18.5)
 
   '@elysia/feishu-app@file:../../../../plugins/feishu-app(@deepseek-ai/schemastery@3.18.5)(@elysia/conscious-mind@file:../../../../plugins/conscious-mind(@deepseek-ai/schemastery@3.18.5))':
     dependencies:

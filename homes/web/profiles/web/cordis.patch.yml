@@ -87,3 +87,7 @@
       name: '@elysia/request-archive'
       config:
         dir: !!js process.env.ELYSIA_REQUESTS_DIR ?? process.env.DSH_HOME + '/requests'
+    - id: elysia-context-inspector
+      name: '@elysia/context-inspector'
+      config:
+        dir: !!js process.env.ELYSIA_REQUESTS_DIR ?? process.env.DSH_HOME + '/requests'

@@ -1,0 +1,6 @@
+# Read-only session input inspection; uses the same archive location as request-archive.
+- insert:
+    - id: elysia-context-inspector
+      name: '@elysia/context-inspector'
+      config:
+        dir: !!js process.env.ELYSIA_REQUESTS_DIR ?? process.env.DSH_HOME + '/requests'

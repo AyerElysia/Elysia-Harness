@@ -8,7 +8,8 @@
     "@elysia/qq-napcat": "file:../../../../plugins/qq-napcat",
     "@elysia/request-archive": "file:../../../../plugins/request-archive",
     "@linxin666/dsh-remote-web-ui": "0.4.8",
-    "dshmarket": "github:dsh-market/dsh-market"
+    "dshmarket": "github:dsh-market/dsh-market",
+    "@elysia/context-inspector": "file:../../../../plugins/context-inspector"
   },
   "dsh": {
     "profile": {
@@ -20,6 +21,7 @@
         "@elysia/feishu-app",
         "@elysia/kook-bot",
         "@elysia/request-archive",
+        "@elysia/context-inspector",
         "@linxin666/dsh-remote-web-ui",
         "@deepseek-ai/dsh-experimental-plugin-market-bundle",
         "dshmarket"
