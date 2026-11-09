@@ -34,6 +34,8 @@ export class KookGateway {
   private socket: SocketLike | undefined
   private stopped = false
   private heartbeat: ReturnType<typeof setInterval> | undefined
+  private reconnectTimer: ReturnType<typeof setTimeout> | undefined
+  private awaitingPong = false
   private readonly state: KookSocketState = { sn: 0, sessionId: '' }
   private connectedWaiters: (() => void)[] = []
   private inboundChain: Promise<void> = Promise.resolve()
@@ -72,13 +74,20 @@ export class KookGateway {
   async start(): Promise<void> {
     this.stopped = false
     if (this.selfId.length === 0) this.selfId = (await this.client.identity()).id
-    await this.connect()
+    try {
+      await this.connect()
+    } catch (error) {
+      this.scheduleReconnect()
+      throw error
+    }
   }
 
   /** Close the socket and stop reconnecting. */
   stop(): void {
     this.stopped = true
     this.clearHeartbeat()
+    if (this.reconnectTimer !== undefined) clearTimeout(this.reconnectTimer)
+    this.reconnectTimer = undefined
     this.socket?.close()
     this.socket = undefined
   }
@@ -104,7 +113,8 @@ export class KookGateway {
           this.socket = undefined
           this.clearHeartbeat()
           if (!this.stopped) {
-            setTimeout(() => { void this.connect().catch(() => {}) }, 2_000)
+            process.stderr.write('KOOK Gateway 已断开，2 秒后重连\n')
+            this.scheduleReconnect()
           }
         }
       })
@@ -143,6 +153,8 @@ export class KookGateway {
                 process.stderr.write(`KOOK 消息 ${inbound.messageId} 处理失败: ${reason}\n`)
               })
           }
+        } else if (action.type === 'pong') {
+          this.awaitingPong = false
         } else if (action.type === 'reconnect') {
           socket.close()
         }
@@ -153,7 +165,13 @@ export class KookGateway {
   private armHeartbeat(socket: SocketLike): void {
     this.clearHeartbeat()
     this.heartbeat = setInterval(() => {
+      if (this.awaitingPong) {
+        process.stderr.write('KOOK Gateway 心跳超时，主动断开并重连\n')
+        socket.close()
+        return
+      }
       try {
+        this.awaitingPong = true
         socket.send(JSON.stringify({ s: 2, sn: this.state.sn }))
       } catch {
         socket.close()
@@ -164,5 +182,18 @@ export class KookGateway {
   private clearHeartbeat(): void {
     if (this.heartbeat !== undefined) clearInterval(this.heartbeat)
     this.heartbeat = undefined
+    this.awaitingPong = false
+  }
+
+  private scheduleReconnect(): void {
+    if (this.stopped || this.reconnectTimer !== undefined) return
+    this.reconnectTimer = setTimeout(() => {
+      this.reconnectTimer = undefined
+      void this.connect().catch((error: unknown) => {
+        const reason = error instanceof Error ? error.message : String(error)
+        process.stderr.write(`KOOK Gateway 重连失败: ${reason}\n`)
+        this.scheduleReconnect()
+      })
+    }, 2_000)
   }
 }

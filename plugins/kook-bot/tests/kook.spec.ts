@@ -9,6 +9,7 @@ import { OutboundText, OutboundVoice } from '@elysia/conscious-mind/outbound'
 import { InboundPending } from '@elysia/conscious-mind/src/pending.ts'
 import { KookClient } from '../src/client.ts'
 import { parseElysiumKookConfig } from '../src/config.ts'
+import { KookGateway } from '../src/gateway.ts'
 import { handleKookFrame } from '../src/frame.ts'
 import { kookInboundEvent, kookInboundText } from '../src/inbound.ts'
 import type { KookInboundEvent } from '../src/inbound.ts'
@@ -186,8 +187,56 @@ describe('KOOK gateway frames', () => {
     expect(handleKookFrame({ s: 1, d: { code: 0, session_id: 'sess' } }, state)).toEqual({ type: 'hello', sessionId: 'sess' })
     expect(handleKookFrame({ s: 0, sn: 4, d: { content: '在吗' } }, state)).toEqual({ type: 'event', event: { content: '在吗' } })
     expect(handleKookFrame({ s: 0, sn: 4, d: { content: '旧的' } }, state)).toEqual({ type: 'ignore' })
+    expect(handleKookFrame({ s: 3 }, state)).toEqual({ type: 'pong' })
     expect(handleKookFrame({ s: 5 }, state)).toEqual({ type: 'reconnect' })
     expect(state).toEqual({ sn: 0, sessionId: '' })
+  })
+})
+
+describe('KOOK gateway heartbeat', () => {
+  function heartbeatFixture() {
+    const gateway = new KookGateway(new KookClient(settings))
+    const socket = { send: vi.fn(), close: vi.fn() }
+    const heartbeat = gateway as unknown as {
+      armHeartbeat(target: typeof socket): void
+      awaitingPong: boolean
+    }
+    return { gateway, socket, heartbeat }
+  }
+
+  it('closes a stale socket when the previous ping receives no pong', async () => {
+    vi.useFakeTimers()
+    const stderr = vi.spyOn(process.stderr, 'write').mockImplementation(() => true)
+    const { gateway, socket, heartbeat } = heartbeatFixture()
+    try {
+      heartbeat.armHeartbeat(socket)
+      await vi.advanceTimersByTimeAsync(30_000)
+      expect(socket.send).toHaveBeenCalledWith(JSON.stringify({ s: 2, sn: 0 }))
+      expect(socket.close).not.toHaveBeenCalled()
+      await vi.advanceTimersByTimeAsync(30_000)
+      expect(socket.send).toHaveBeenCalledOnce()
+      expect(socket.close).toHaveBeenCalledOnce()
+    } finally {
+      gateway.stop()
+      stderr.mockRestore()
+      vi.useRealTimers()
+    }
+  })
+
+  it('keeps the socket open when pongs continue to arrive', async () => {
+    vi.useFakeTimers()
+    const { gateway, socket, heartbeat } = heartbeatFixture()
+    try {
+      heartbeat.armHeartbeat(socket)
+      await vi.advanceTimersByTimeAsync(30_000)
+      heartbeat.awaitingPong = false
+      await vi.advanceTimersByTimeAsync(30_000)
+      expect(socket.send).toHaveBeenCalledTimes(2)
+      expect(socket.close).not.toHaveBeenCalled()
+    } finally {
+      gateway.stop()
+      vi.useRealTimers()
+    }
   })
 })
 
