@@ -40,6 +40,15 @@
     },
     {
       "path": "../../dsh/packages/core/tools"
+    },
+    {
+      "path": "../../dsh/packages/session/working-directory"
+    },
+    {
+      "path": "../../dsh/packages/fs/tool-fs"
+    },
+    {
+      "path": "../../dsh/packages/fs/tool-fs-search"
     }
   ]
 }

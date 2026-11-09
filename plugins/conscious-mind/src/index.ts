@@ -35,6 +35,8 @@ export type { SendTextTurn } from './turn.ts'
 export { definePassTool } from './pass.ts'
 export type { PassArgs, PassResult } from './pass.ts'
 export { MAIN_SESSION_CWD, MAIN_SESSION_ID, composeMainAgent, createMainSessionTurn, formatInboundBatch, formatInboundEvent } from './main-session.ts'
+export type { MainSessionConfig } from './main-session.ts'
+export { mountFileCapabilities } from './file-capabilities.ts'
 
 /** Cordis plugin name. */
 export const name = 'elysia-conscious-mind'
@@ -52,6 +54,14 @@ export interface Config {
   required?: string[]
   /** Existing Elysium BreezeTTS config, loaded lazily on the first synthesis. */
   breezeConfigPath?: string
+  /** Elysia's only recursively readable and writable workspace. */
+  workspaceDir?: string
+  /** Maintenance-only standing-prompt backup directory. */
+  backupDir?: string
+  /** Maximum UTF-8 bytes in one standing prompt. */
+  maxPromptBytes?: number
+  /** Maximum retained backups per standing prompt. */
+  backupRetention?: number
 }
 
 /** Runtime schema for the main agent's standing-prompt directory. */
@@ -60,6 +70,10 @@ export const Config: z<Config> = z.object({
   files: z.array(z.string()).required(),
   required: z.array(z.string()).default(['SOUL.md']),
   breezeConfigPath: z.string().default(ELYSIUM_BREEZE_CONFIG),
+  workspaceDir: z.string().default('/home/ayerelysia/Elysia/Data/workspace'),
+  backupDir: z.string().default('/home/ayerelysia/Elysia/Elysium/Elysia-Harness/homes/web/standing-prompt-backups'),
+  maxPromptBytes: z.number().default(65536),
+  backupRetention: z.number().default(20),
 })
 
 /**
@@ -79,6 +93,10 @@ export function apply(ctx: Context, config: Config): void {
       files: config.files,
       required: config.required ?? ['SOUL.md'],
       complete: true,
+      ...config.workspaceDir === undefined ? {} : { workspaceDir: config.workspaceDir },
+      ...config.backupDir === undefined ? {} : { backupDir: config.backupDir },
+      ...config.maxPromptBytes === undefined ? {} : { maxPromptBytes: config.maxPromptBytes },
+      ...config.backupRetention === undefined ? {} : { backupRetention: config.backupRetention },
     }))
   })
   const tools = ctx.reflect.get('tools', false) as Context['tools'] | undefined

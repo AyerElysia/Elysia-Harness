@@ -50,7 +50,10 @@ packages:
       '@deepseek-ai/dsh-scope': workspace:*
       '@deepseek-ai/dsh-session': workspace:*
       '@deepseek-ai/dsh-system-prompt': workspace:*
+      '@deepseek-ai/dsh-tool-fs': workspace:*
+      '@deepseek-ai/dsh-tool-fs-search': workspace:*
       '@deepseek-ai/dsh-tools': workspace:*
+      '@deepseek-ai/dsh-working-directory': workspace:*
       '@deepseek-ai/schemastery': workspace:~
 
   '@elysia/feishu-app@file:../../../../plugins/feishu-app':

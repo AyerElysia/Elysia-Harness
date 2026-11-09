@@ -2,7 +2,7 @@
 
 一个 agent，一条长期 session。QQ、飞书、KOOK 只负责进出。会话日志、压缩、提示词组装和工具循环用 Harness 现有的。固定提示词仍在外部目录，按已实现的前缀规则加载。
 
-当前工具只有 `send_text`、`send_voice`、`pass` 和 DSH 原生的 `read_image`。`read_image` 只读取已有本地图片；这条 session 不挂代码、文件写入与编辑、搜索那类工具。
+当前主意识工具有 `send_text`、`send_voice`、作用域 `pass`，以及 DSH 原生的 `read_image`、`read`、`write`、`edit`、`glob`、`grep`。文件与图片工具由爱莉插件统一限制在工作区和五份固定提示词白名单内；这条 session 不挂 shell、代码执行或其他未明确开放的工具。
 
 ## 第一阶段
 
@@ -428,6 +428,329 @@ type OutboundFileSender = (
 
 `TOOLS.md` 只补充「什么情境适合用语音表达」这类稳定偏好，不复制参数表，避免工具定义与前缀漂移。实现时把 `send_file`、`send_voice` 加入主意识工具白名单，并用测试直接检查注册后的工具：描述包含 Breeze 原生声音事件与 `send_file` 边界，必填键恰好为 `channel`、`conversation`、`text`，且不存在 `path`、`voice_style`、`text_language` 参数。
 
+## 第三阶段（已实施）：工作区文件与固定提示词自修改
+
+状态：**源码已实施**。既有版本在 2026-11-09 留有受控实机装配记录；本次审查又修复权限、搜索、编辑与卸载边界，并通过新的隔离回归。最新修复未重新安装到运行副本，不能用旧版实机记录冒充最新版本验收。原长期 session 与真实主体正文不在本次提交中修改。
+
+### 目标与边界
+
+这一阶段先赋予主意识两组闭合能力：
+
+1. 在爱莉自己的工作区内读、写、编辑和搜索文件，让她能维护笔记、日记与长期资料。
+2. 修改当前主意识实际加载的固定提示词，让她能逐步完善自己的系统提示词。
+
+优先复用 DSH 已有的 `read`、`write`、`edit`、`glob`、`grep` 和 `read_image`，不修改 vendored `dsh/`，不另造一套同名文件工具。路径权限与提示词护栏放在爱莉插件层的工具执行链中；具体复用哪个 DSH hook，在实现前核对源码后确定，不能先假设某个 hook 已满足要求。
+
+主意识通过 `composeMainAgent()` 独立装配，因此实现一个共享的 agent-scope 文件能力模块，供真实主意识与 Web `preset-elysia` 复用，避免两处权限和提示词护栏漂移。普通 `standard` session 不获得这些扩展权限。
+
+这一阶段不开放 shell、进程管理、任意代码执行、插件配置修改、其他 session 访问或外部网络操作；不新建、删除或改写主 session，不改变主 session ID 和历史。
+
+### 路径与权限矩阵
+
+以下路径均相对于 `/home/ayerelysia/Elysia`。`workspace/**` 指递归子路径，不包含上级目录本身以外的逃逸路径。
+
+| 路径 | 读取 | 写入 | 说明 |
+|---|---|---|---|
+| `Data/workspace/**`，排除 `.migration/**` | 允许 | 允许 | 笔记、日记、想法、叙事等工作资料 |
+| `Data/standing-prompts/` 中当前已配置的 `SOUL.md`、`USER.md`、`MEMORY.md`、`EXISTENCE.md`、`TOOLS.md` | 允许 | 允许，但受提示词护栏约束 | 只能修改已有清单中的文件 |
+| `Data/standing-prompts/` 中上述五个文件以外的内容 | 拒绝 | 拒绝 | 不允许借文件工具新增第六个提示词或修改 preset 清单 |
+| `Data/feishu-sdk/**` | 拒绝 | 拒绝 | 与工作区无关，可能含敏感配置 |
+| `Data/workspace/.migration/**` | 拒绝 | 拒绝 | 迁移原始记录，仅供维护 |
+| 提示词备份目录 | 拒绝 | 拒绝 | 备份由可信维护代码管理，模型不能读取、覆盖或删除 |
+| ElyHarn 源码和配置、凭证、日志、其他 session、SSH 文件、系统目录及其余未列出路径 | 拒绝 | 拒绝 | 默认拒绝，不因路径位于 Data 下就自动放行 |
+
+权限检查不能只依赖 DSH `fs-sandbox`：它默认限制写入，不限制读取。`read`、`write`、`edit`、`glob`、`grep` 和 `read_image` 都必须经过同一份解析后路径策略；特别地，`glob/grep` 经由 subprocess/ripgrep，不经过 `ctx.fs`，不能只检查 `write/edit`。
+
+路径检查必须：
+
+- 对输入路径和允许根做规范化与真实路径解析，拒绝符号链接及 `..` 等方式逃逸；可检测的多硬链接文件默认拒绝，避免把工作区内的硬链接当作越界读取或覆写通道。
+- 对不存在的写入目标，解析最近的已存在祖先，再检查规范化目标是否仍处于允许范围，避免通过悬挂符号链接逃逸。
+- 对五个提示词按规范化后的**单文件白名单**判断，不能简单放行整个目录。
+- 主 cwd 的 `Data` 只是路径解析与沙箱根，不代表整个目录可读。`glob/grep` 省略 `path` 时，由爱莉执行链把受控搜索 cwd 固定为 `Data/workspace`，不能递归搜索整个 `Data`；显式传入 `path` 时也执行相同的读取权限检查。
+- 搜索返回的候选路径若发生竞态或逃逸，按失败处理，不能将越界内容返回模型。
+- 拒绝时返回明确但不泄露敏感内容的权限错误，不自动改写到其他路径。
+
+**当前行为变化：**统一路径策略收紧现有 `read_image`，使它只能读取 `Data/workspace/**`（仍排除 `.migration/**`）中受支持的图片；五个提示词只能由文本工具读取，不能借 `read_image` 扩大范围。原先可读的其他本地路径不再对主意识开放。
+
+### 主 session 工作目录方案与实施边界
+
+改造前：主 session 创建时的原始 cwd 字符串是 `homes/web/conscious-mind`，部署前检查时该目录为空；`homes/web/standing-prompts` 已解析到 `Data/standing-prompts`。DSH 的写权限根来自 session 创建时的不可变 cwd，后续 `working_directory` 字段不能扩大权限。
+
+采用的方案是在维护窗口内，保留原 cwd 字符串和 session 历史，将**确认为空**的 `homes/web/conscious-mind` 迁移为指向 `/home/ayerelysia/Elysia/Data` 的符号链接，使现有 session 不需要重建即可把工作根解析到 Data。
+
+以下是该方案的实施前置条件；实际部署记录见本章末尾。执行前必须用隔离夹具验证 DSH 对权限根与目标路径的 realpath 规范化，确认写入最终落在预期的 `Data/workspace` 或五个提示词白名单内，同时 `Data` 下其他目录仍被爱莉路径策略拒绝。还要验证 session 恢复、相对路径和符号链接拒绝规则。验证失败就不做该迁移，另提方案；不使用 `danger-full-access` 绕过权限，也不通过改写 session header 扩大权限。
+
+### 固定提示词写入护栏
+
+固定提示词为 `SOUL.md`、`USER.md`、`MEMORY.md`、`EXISTENCE.md`、`TOOLS.md`。它们在每次提示词组装时重新读取，因此成功写入后从**下一次模型请求**开始生效，无需重启；但空闲时修改文件本身不会主动唤醒模型。
+
+写入护栏要求：
+
+1. 只能修改五个已配置的文件；不能通过文件工具新增提示词、修改 preset 清单、替换清单路径或借此访问其他文件。
+2. 修改后的 `SOUL.md` 去除首尾空白后必须非空。其他可选提示词为空时维持现有“空文件跳过”的语义，不擅自改成必填。
+3. 单文件大小上限可配置，当前默认 `65536` 字节；超限拒绝且原文件不变。
+4. 每次成功修改前，由可信维护代码自动备份旧版本到部署侧配置的备份目录；当前为 `homes/web/standing-prompt-backups/`，模型不可读写。当前每份提示词保留数量默认 20，可配置；未实现按时间过期的备份清理。
+5. 备份必须先可靠落盘，再提交目标文件更新；备份失败则整个修改失败，不留下“目标已改但没有备份”的状态。
+6. 继续复用 DSH 原子写入、先读后写和版本陈旧拒绝。恢复 session 后必须重新读取再修改，不能拿旧上下文中的内容直接覆盖。
+7. 提示词写入也走同一路径权限检查，不能因其受信任而绕过。护栏未通过隔离测试前，不向真实主意识开放写权限。
+8. 提示词内容的真实写入只能由主体的已注册意识/见证实例通过授权工具产生；开发 agent 仅在合成夹具验证。真实验收不拿 `SOUL.md` 做实验，其非空保护与恢复测试在隔离夹具完成。
+
+`TOOLS.md` 只记录稳定的使用偏好，例如“先搜索再读取”“修改提示词前备份由系统自动完成”“工作资料放入合适目录”，不复制参数表或权限实现细节；模型可见的准确 Schema 以工具注册定义为准。
+
+### 工具挂载范围
+
+真实主意识在现有 `send_text`、`send_voice`、`read_image` 与作用域 `pass` 之外，增加 `read`、`write`、`edit`、`glob`、`grep`；`read_image` 保留但纳入统一路径策略。以下均为 DSH 成功结果契约，权限拒绝、校验失败、I/O 失败等沿用 DSH 工具错误结果和结构化错误码，不能伪造成功输出。
+
+#### `read`：读取文本文件
+
+| 参数（顺序） | 类型 | 必填 | 默认／空值 | 校验规则 |
+|---|---|---|---|---|
+| `file_path` | string | 是 | 无默认，不可为空 | 去空白后非空；路径通过读取权限检查 |
+| `offset` | number | 否 | `1` | 正整数，从 1 开始 |
+| `limit` | number | 否 | 配置的默认值；DSH 当前默认 `2000` | 正整数，不能超过配置上限；DSH 当前默认上限 `2000` |
+
+成功输出 Schema：
+
+```json
+{
+  "type": "object",
+  "additionalProperties": false,
+  "properties": {
+    "path": { "type": "string" },
+    "offset": { "type": "integer" },
+    "lines": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "additionalProperties": false,
+        "properties": {
+          "number": { "type": "integer" },
+          "text": { "type": "string" }
+        },
+        "required": ["number", "text"]
+      }
+    },
+    "totalLines": { "type": "integer" }
+  },
+  "required": ["path", "offset", "lines", "totalLines"]
+}
+```
+
+#### `write`：新建或完整覆写文本文件
+
+| 参数（顺序） | 类型 | 必填 | 默认／空值 | 校验规则 |
+|---|---|---|---|---|
+| `file_path` | string | 是 | 无默认，不可为空 | 去空白后非空；路径通过写入权限检查 |
+| `content` | string | 是 | 无默认；普通文件允许空字符串 | 内容长度受配置限制；`SOUL.md` 去空白后必须非空 |
+| `sandbox_permissions` | string | 否 | 仅后端实施沙箱限制时出现 | 复用 DSH 枚举与升级语义，不得借它绕开爱莉路径策略 |
+| `justification` | string | 条件必填 | 请求扩大沙箱权限时必填 | 去空白后非空；不构成路径白名单豁免 |
+
+普通文件允许用空字符串清空，但五个提示词按各自非空规则处理。已存在文件必须先读后写；未读或版本陈旧时拒绝。
+
+成功输出 Schema：
+
+```json
+{
+  "type": "object",
+  "additionalProperties": false,
+  "properties": {
+    "path": { "type": "string" },
+    "operation": { "type": "string", "enum": ["create", "update"] },
+    "before": { "type": ["string", "null"] },
+    "after": { "type": "string" }
+  },
+  "required": ["path", "operation", "before", "after"]
+}
+```
+
+#### `edit`：精确替换文本
+
+| 参数（顺序） | 类型 | 必填 | 默认／空值 | 校验规则 |
+|---|---|---|---|---|
+| `file_path` | string | 是 | 无默认，不可为空 | 去空白后非空；路径通过写入权限检查 |
+| `old_string` | string | 是 | 无默认，不可为空 | 非空，且与 `new_string` 不同 |
+| `new_string` | string | 是 | 无默认；允许空字符串 | 与 `old_string` 不同；结果受文件大小和提示词护栏限制 |
+| `replace_all` | boolean | 否 | `false` | 为 `false` 时，`old_string` 必须恰好出现一次 |
+| `sandbox_permissions` | string | 否 | 仅后端实施沙箱限制时出现 | 同 `write`，不得扩大爱莉路径白名单 |
+| `justification` | string | 条件必填 | 请求扩大沙箱权限时必填 | 去空白后非空；不构成路径白名单豁免 |
+
+成功输出 Schema：
+
+```json
+{
+  "type": "object",
+  "additionalProperties": false,
+  "properties": {
+    "path": { "type": "string" },
+    "before": { "type": "string" },
+    "after": { "type": "string" }
+  },
+  "required": ["path", "before", "after"]
+}
+```
+
+#### `glob`：按模式枚举文件
+
+| 参数（顺序） | 类型 | 必填 | 默认／空值 | 校验规则 |
+|---|---|---|---|---|
+| `pattern` | string | 是 | 无默认，不可为空 | 去空白后非空；不能借模式越过路径权限 |
+| `path` | string | 否 | 省略时使用受控 session cwd | 提供时去空白后非空，并通过读取权限检查 |
+
+成功输出 Schema：
+
+```json
+{
+  "type": "object",
+  "additionalProperties": false,
+  "properties": {
+    "root": { "type": "string" },
+    "paths": { "type": "array", "items": { "type": "string" } }
+  },
+  "required": ["root", "paths"]
+}
+```
+
+#### `grep`：搜索文本内容
+
+| 参数（顺序） | 类型 | 必填 | 默认／空值 | 校验规则 |
+|---|---|---|---|---|
+| `pattern` | string | 是 | 无默认，不可为空 | 空字符串拒绝；按 DSH/ripgrep 正则语义执行 |
+| `path` | string | 否 | 省略时使用受控 session cwd | 提供时去空白后非空，并通过读取权限检查 |
+| `include` | string | 否 | 省略表示不按文件名额外过滤 | 只能是一个正向 glob；不接受逗号列表或否定模式 |
+
+成功输出 Schema：
+
+```json
+{
+  "type": "object",
+  "additionalProperties": false,
+  "properties": {
+    "matches": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "additionalProperties": false,
+        "properties": {
+          "path": { "type": "string" },
+          "lineNumber": { "type": "integer" },
+          "line": { "type": "string" }
+        },
+        "required": ["path", "lineNumber", "line"]
+      }
+    }
+  },
+  "required": ["matches"]
+}
+```
+
+#### `read_image`：读取允许范围内的图片
+
+| 参数（顺序） | 类型 | 必填 | 默认／空值 | 校验规则 |
+|---|---|---|---|---|
+| `file_path` | string | 是 | 无默认，不可为空 | 去空白后非空；通过统一读取权限检查；支持 PNG、JPEG、WebP、GIF，仍受附件限制及模型图片输入能力限制 |
+
+成功输出 Schema：
+
+```json
+{
+  "type": "object",
+  "additionalProperties": false,
+  "properties": {
+    "path": { "type": "string" },
+    "image": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "attachmentId": { "type": "string" },
+        "mediaType": {
+          "type": "string",
+          "enum": ["image/png", "image/jpeg", "image/webp", "image/gif"]
+        },
+        "bytes": { "type": "integer" },
+        "width": { "type": "integer" },
+        "height": { "type": "integer" },
+        "name": { "type": "string" },
+        "originalDimensions": {
+          "type": "object",
+          "additionalProperties": false,
+          "properties": {
+            "width": { "type": "integer" },
+            "height": { "type": "integer" }
+          },
+          "required": ["width", "height"]
+        }
+      },
+      "required": ["attachmentId", "mediaType", "bytes", "width", "height"]
+    }
+  },
+  "required": ["path", "image"]
+}
+```
+
+### 实施顺序
+
+1. 用户审批本章，尤其是权限矩阵、cwd 方案、提示词大小上限和备份策略。
+2. 用隔离夹具验证 cwd／符号链接与 DSH 沙箱行为，不触碰真实主 session 与提示词。
+3. 实现共享的 agent-scope 文件能力装配模块，复用 DSH 原工具及 Schema。
+4. 给全部文件与图片工具接入同一路径权限，包括搜索入口与符号链接检查。
+5. 接入提示词非空、大小限制、可信备份和失败不修改原文件的护栏。
+6. 按授权与验证结论处理主 cwd；工具与路径的工程变化作为他者建议提供给主体，不由开发 agent 直接同步写入其 `TOOLS.md`。
+7. 完成隔离验收后，才对真实主意识做受控 live 验收；全程不发送 QQ、KOOK 等外部渠道消息。
+
+### 验收与实施记录
+
+实现后必须在本章下方追加实际执行记录，写明日期、执行范围、变更文件、测试结果、备份位置、是否发生回滚和遗留问题，不能只写“已完成”。至少覆盖：
+
+- 普通工作区文件的新建、读取、精确编辑、批量替换、`glob`、`grep` 和图片读取。
+- 已存在文件未读取就修改时被拒绝；恢复 session 后旧版本写入被拒绝。
+- 空内容写普通文件符合约定；空 `SOUL.md` 被拒绝且原文件不变。
+- 非白名单提示词、凭证、其他 session、系统路径、`.migration`、备份目录及符号链接逃逸全部拒绝。
+- `glob/grep` 省略与显式提供 `path` 两种情况都不能越权。
+- 备份在目标修改前生成，备份失败时目标不变，备份可恢复。
+- `TOOLS.md` 修改从下一次模型请求生效，服务重启后仍保留；空闲修改不伪装成主动唤醒。
+- 普通 `standard` session 的路径权限不扩大，主 session ID 与历史不变。
+- 最后才进行受控 live 验收，优先使用测试笔记和 `TOOLS.md`，不向外部渠道发送测试消息。
+
+### 2026-11-09 实施记录
+
+#### 实际变更
+
+- 新增 `src/file-capabilities.ts`，在 Agent 作用域复用 DSH 原生文件工具，通过 `tools/pre-execute` 与 `tools/post-execute` 统一执行路径准入、提示词备份和搜索结果复核，没有修改 vendored `dsh/`。
+- `src/main-session.ts` 将文件能力作为正式子插件挂载，主意识白名单为 `send_text`、`send_voice`、`read_image`、`read`、`write`、`edit`、`glob`、`grep`，另有作用域 `pass`。`src/index.ts` 增加工作区、备份目录、大小和保留数量配置。
+- 更新 `cordis.patch.yml`、`homes/web/profiles/web/cordis.patch.yml`、`package.json`、`tsconfig.json` 及相关测试；主意识与 Web `preset-elysia` 共用同一个文件能力模块。
+- 既有部署记录登记 `Data/standing-prompts/TOOLS.md` 曾调整工作区与工具使用说明；这不是本仓库中的提交内容，也不能仅凭此工程记录证明主体执笔或采纳。其作者、授权与采纳应按原 session 工具记录及版本审计核对。本次整理未读取或改写任何真实提示词正文。
+- 原空目录已保存为 `homes/web/session-backups/conscious-mind-empty-20261109-042419`，`homes/web/conscious-mind` 现在指向 `/home/ayerelysia/Elysia/Data`。主 session header 中原始 cwd 字符串未改。
+- 修改前的 `TOOLS.md` 已保存为 `homes/web/standing-prompt-backups/manual-phase3-20261109-042419-TOOLS.md.bak`。运行时自动备份目录同为 `homes/web/standing-prompt-backups`，默认每份提示词保留 20 份，单文件上限 65536 字节。
+
+#### 验证结果
+
+- TypeScript 类型检查通过；10 个测试文件、49 项测试全部通过。覆盖 cwd 沙箱、工作区读写、五份提示词白名单、默认搜索根、符号链接和可检测硬链接逃逸、备份失败、空 `SOUL.md`、未读覆盖、陈旧版本、越权读取，以及真实 DSH `write → read → edit` 管线。
+- 受控重启后，端口 3299 正常响应；本次启动日志未出现主意识预热失败、配置解析或权限错误。
+- 持久化记录确认 session ID 仍为 `elysia-conscious-mind`，原始 cwd 仍为 `homes/web/conscious-mind`，`working-directory/change` 已新增 `/home/ayerelysia/Elysia/Data/workspace`。这证明真实主意识已执行新文件能力装配和目录切换。
+- 验收过程没有主动向 QQ、KOOK 等渠道注入或发送测试消息，没有重建主 session，没有修改旧 Elysium，也没有发生数据回滚。
+
+#### 实机部署中发现的问题
+
+源码目录和 `homes/web/profiles/web/node_modules/@elysia/conscious-mind` 是 `file:` 依赖形成的两份文件。只上传源码或执行普通 `pnpm install` 不会自动同步已有运行副本，导致前几次重启仍加载旧主会话代码。最终重新安装该运行包并逐文件核对 SHA-256 后，新实现才生效。后续修改此插件时，部署步骤必须同时核对 Web profile 实际加载的包，不能只以源码测试和进程重启作为上线证据。
+
+#### 尚未覆盖的边界
+
+本轮实机检查验证了服务、长期 session、插件装配与 cwd 持久化；文件工具的完整行为由隔离测试和真实 DSH 管线测试支撑，但没有为了验收额外驱动一次真实模型工具调用。因此不能把本记录解读为“真实模型已经在渠道对话中成功修改提示词”。固定提示词按现有组装代码在下一次模型请求重新读取；本轮未主动制造模型请求来重复验证这一语义。
+
+### 2026-11-09 KOOK 无回复回归记录
+
+- 现象：Web 进程和端口健康，主意识历史在 11 点左右仍有成功 `send_text`，但后续没有新的 pending 或模型请求。KOOK 只读历史接口能取得用户新消息，证明平台已收到消息而 ElyHarn Gateway 没有入站。
+- 根因：原 Gateway 每 30 秒发送心跳，却不检查 PONG；TCP 连接残留时可能长期保持“已连接”假象。重连错误也会被静默吞掉，现有 Web 健康检查无法发现这一层故障。
+- 修复：`plugins/kook-bot/src/gateway.ts` 现在在上一次心跳未收到 PONG 时主动关闭 socket，记录断开与重连错误，2 秒后重连，并在重连失败后继续调度。插件停止时清理重连计时器。
+- 验证：KOOK 与主意识共 11 个测试文件、68 项测试通过，新增心跳超时和持续 PONG 两类回归测试。Web 实际运行的 `@elysia/kook-bot` 包已重新安装并与源码核对 SHA-256；最终服务重启后观察超过一个完整心跳周期，没有误判断开或重连错误。
+- 恢复边界：Gateway 假连接期间漏收的平台消息不会因重启自动补投，需要新消息触发或另行设计有去重依据的历史恢复机制；不能把 TCP 连接存在或 Web 端口 401 当作渠道入站健康的充分条件。
+
+### 2026-11-09 提交前审查补记
+
+本次修复完整搜索值复核、硬链接结果、字面编辑与 CRLF 大小计算、默认搜索 cwd、失败卸载等边界，并将原生文件/搜索工具收紧到 Elysia agent scope，撤销新增的 host 全局开启。standard 和 minimal 的既有权限不扩大。
+
+最终正常配置下 10 个测试文件、57 项用例通过，五插件无输出类型检查为零诊断；新增 peer/importer 元数据已同步并通过 offline frozen-lockfile 校验。本次未安装 Web profile 的运行副本、未重启或调用真实模型。此前部署记录中的 49 项结果只属于当时的实现，不代表当前源码的新验收。细节见 docs/report/2026-11-09-file-capabilities-review.md。
+
 ## 这两阶段先不做
 
-心跳和主动开口、把新记忆写回文件、单独的路由模型、撤回、戳一戳、群管理。连发时的打字间隔仍然待定，不挡第一阶段。
+心跳和主动开口、自动将新记忆写回文件、单独的路由模型、撤回、戳一戳、群管理。连发时的打字间隔仍然待定，不挡第一阶段。

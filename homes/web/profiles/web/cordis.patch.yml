@@ -26,6 +26,23 @@
               required:
                 - SOUL.md
               complete: true
+          - id: elysia-file-capabilities
+            name: '@elysia/conscious-mind/file-capabilities'
+            config:
+              baseDir: !!js process.env.ELYSIA_PROMPTS_DIR ?? process.env.DSH_HOME +
+                '/standing-prompts'
+              files:
+                - SOUL.md
+                - USER.md
+                - MEMORY.md
+                - EXISTENCE.md
+                - TOOLS.md
+              required:
+                - SOUL.md
+              workspaceDir: /home/ayerelysia/Elysia/Data/workspace
+              backupDir: !!js process.env.DSH_HOME + '/standing-prompt-backups'
+              maxPromptBytes: 65536
+              backupRetention: 20
 
     - id: elysia-conscious-mind
       name: '@elysia/conscious-mind'

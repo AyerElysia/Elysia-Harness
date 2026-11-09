@@ -22,6 +22,7 @@ import { definePassTool } from './pass.ts'
 import { StandingPromptError } from './load.ts'
 import * as StandingPrompt from './standing-prompts.ts'
 import type { Config as StandingPromptConfig } from './standing-prompts.ts'
+import * as FileCapabilities from './file-capabilities.ts'
 
 declare module '@deepseek-ai/cordis' {
   interface Context {
@@ -73,13 +74,24 @@ interface MainAgentComposition {
 
 const mainCompositions = new WeakMap<Context, MainAgentComposition>()
 
-function fixedPromptConfig(config: StandingPromptConfig): StandingPromptConfig {
+export interface MainSessionConfig extends StandingPromptConfig {
+  workspaceDir?: string
+  backupDir?: string
+  maxPromptBytes?: number
+  backupRetention?: number
+}
+
+function fixedPromptConfig(config: MainSessionConfig): MainSessionConfig {
   if (config.baseDir.length === 0) throw new StandingPromptError('standing prompt baseDir must not be empty')
   return {
     baseDir: resolve(config.baseDir),
     files: [...config.files],
     required: [...config.required ?? ['SOUL.md']],
     complete: config.complete ?? true,
+    ...config.workspaceDir === undefined ? {} : { workspaceDir: resolve(config.workspaceDir) },
+    ...config.backupDir === undefined ? {} : { backupDir: resolve(config.backupDir) },
+    ...config.maxPromptBytes === undefined ? {} : { maxPromptBytes: config.maxPromptBytes },
+    ...config.backupRetention === undefined ? {} : { backupRetention: config.backupRetention },
   }
 }
 
@@ -87,8 +99,8 @@ function fixedPromptConfig(config: StandingPromptConfig): StandingPromptConfig {
  * Compose the main agent's scoped prompt and tools. The same fixed standing
  * composition is used on create and resume; other sessions select their own.
  */
-export function composeMainAgent(agentCtx: Context, promptConfig: StandingPromptConfig): Promise<void> {
-  let config: StandingPromptConfig
+export function composeMainAgent(agentCtx: Context, promptConfig: MainSessionConfig): Promise<void> {
+  let config: MainSessionConfig
   try {
     config = fixedPromptConfig(promptConfig)
   } catch (error) {
@@ -106,9 +118,21 @@ export function composeMainAgent(agentCtx: Context, promptConfig: StandingPrompt
   mainCompositions.set(agentCtx, composition)
   composition.ready = (async () => {
     const prompt = await agentCtx.plugin(StandingPrompt, config)
+    let capabilities: { dispose(): Promise<unknown> } | undefined
     let removePass: (() => void) | undefined
     let removeRestriction: (() => void) | undefined
     try {
+      // Use the same injected child-plugin path as Web presets. Calling the
+      // mount function directly would hide workingDirectory in a real Agent scope.
+      capabilities = await agentCtx.plugin(FileCapabilities, {
+        baseDir: config.baseDir,
+        files: config.files,
+        required: config.required ?? ['SOUL.md'],
+        workspaceDir: config.workspaceDir ?? resolve(config.baseDir, '../workspace'),
+        backupDir: config.backupDir ?? resolve(config.baseDir, '../standing-prompt-backups'),
+        ...config.maxPromptBytes === undefined ? {} : { maxPromptBytes: config.maxPromptBytes },
+        ...config.backupRetention === undefined ? {} : { backupRetention: config.backupRetention },
+      })
       removePass = agentCtx.tools.register(definePassTool())
       removeRestriction = agentCtx.tools.restrict({ allow: ['send_text', 'send_voice', 'read_image'] })
       agentCtx.effect(() => () => {
@@ -116,9 +140,16 @@ export function composeMainAgent(agentCtx: Context, promptConfig: StandingPrompt
       }, 'elysia-conscious-mind.composition()')
       composition.complete = true
     } catch (error) {
-      removeRestriction?.()
-      removePass?.()
-      await prompt.dispose()
+      const cleanup = await Promise.allSettled([
+        Promise.resolve().then(() => removeRestriction?.()),
+        Promise.resolve().then(() => removePass?.()),
+        Promise.resolve().then(() => capabilities?.dispose()),
+        Promise.resolve().then(() => prompt?.dispose()),
+      ])
+      const failures = cleanup.filter((result): result is PromiseRejectedResult => result.status === 'rejected')
+      if (failures.length > 0) {
+        throw new AggregateError([error, ...failures.map(result => result.reason)], '主意识装配失败且子插件清理失败')
+      }
       throw error
     }
   })().catch((error: unknown) => {
@@ -128,7 +159,7 @@ export function composeMainAgent(agentCtx: Context, promptConfig: StandingPrompt
   return composition.ready
 }
 
-async function resumeOrCreateMainAgent(ctx: Context, promptConfig: StandingPromptConfig): Promise<AgentHandle> {
+async function resumeOrCreateMainAgent(ctx: Context, promptConfig: MainSessionConfig): Promise<AgentHandle> {
   const borrowed = (): AgentHandle | undefined => {
     const agent = ctx.agents.get(MAIN_SESSION_ID)
     if (agent === undefined) return undefined
@@ -163,7 +194,7 @@ async function resumeOrCreateMainAgent(ctx: Context, promptConfig: StandingPromp
  * @param promptConfig - fixed standing composition for this existing main session.
  * @returns the pending-turn handler.
  */
-export function createMainSessionTurn(ctx: Context, selectedPromptConfig: StandingPromptConfig): PendingTurn {
+export function createMainSessionTurn(ctx: Context, selectedPromptConfig: MainSessionConfig): PendingTurn {
   const promptConfig = fixedPromptConfig(selectedPromptConfig)
   let mainAgent: Promise<AgentHandle> | undefined
   const ensure = (): Promise<AgentHandle> => {

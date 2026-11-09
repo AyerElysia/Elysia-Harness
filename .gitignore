@@ -43,6 +43,10 @@ homes/*/.credentials.yaml
 # symlinks them in from wherever they actually live.
 homes/*/standing-prompts
 
+# The fixed main-session cwd alias and prompt revision backups are local data.
+homes/web/conscious-mind
+homes/*/standing-prompt-backups/
+
 # ── Machine-local model configuration ───────────────────────────────────────
 # The home-level layer is a symlink to the shared model file, which names one
 # machine's providers and the credential refs they read.

@@ -1,4 +1,4 @@
-import { mkdtemp, rm } from 'node:fs/promises'
+import { mkdir, mkdtemp, rm } from 'node:fs/promises'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import { Context } from '@deepseek-ai/cordis'
@@ -12,7 +12,7 @@ import SystemPrompt from '@deepseek-ai/dsh-system-prompt'
 import * as ToolFs from '@deepseek-ai/dsh-tool-fs'
 import ToolRuntime from '@deepseek-ai/dsh-tools'
 import type { ToolDefinition } from '@deepseek-ai/dsh-tools'
-import { expect, it, onTestFinished } from 'vitest'
+import { expect, it, onTestFinished, vi } from 'vitest'
 import { composeMainAgent } from '../src/main-session.ts'
 
 function globalTool(name: string): ToolDefinition {
@@ -36,6 +36,9 @@ it('composes the real read_image registration into the main agent allow-list', a
     await rm(home, { recursive: true, force: true })
   })
   provideWorkingDirectoryFixture(ctx)
+  ctx.provide('subprocess', {} as Context['subprocess'])
+  ctx.workingDirectory.set = vi.fn().mockResolvedValue(join(home, 'workspace'))
+  await mkdir(join(home, 'workspace'))
   await ctx.plugin(SystemPrompt)
   await ctx.plugin(ToolRuntime, { mode: 'native' })
   await ctx.plugin(LocalFileSystem, { cwd: home })
@@ -49,8 +52,15 @@ it('composes the real read_image registration into the main agent allow-list', a
   await ctx.plugin(Object.assign((inner: Context) => { scope = createScope(inner, key) }, {
     inject: ['tools', 'systemPrompt'],
   }))
-  await composeMainAgent(scope.ctx, { baseDir: home, files: ['SOUL.md'], complete: true })
+  await composeMainAgent(scope.ctx, {
+    baseDir: home,
+    files: ['SOUL.md'],
+    complete: true,
+    workspaceDir: join(home, 'workspace'),
+    backupDir: join(home, 'backups'),
+  })
 
+  expect(ctx.workingDirectory.set).toHaveBeenCalledWith(key, join(home, 'workspace'))
   expect(ctx.tools.schemas().map(tool => tool.name).sort()).toEqual(['read_image', 'send_text', 'send_voice'])
-  expect(ctx.tools.schemas(key).map(tool => tool.name).sort()).toEqual(['pass', 'read_image', 'send_text', 'send_voice'])
+  expect(ctx.tools.schemas(key).map(tool => tool.name).sort()).toEqual(['edit', 'glob', 'grep', 'pass', 'read', 'read_image', 'send_text', 'send_voice', 'write'])
 })

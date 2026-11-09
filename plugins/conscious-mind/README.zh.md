@@ -44,6 +44,14 @@ Web profile 目前实际添加了一个 `elysia` preset，挂载同一子插件�
 
 主体文件正文保存在本包之外，插件只读取名单，不创作或迁移正文。当前渠道和会话现场仍来自入站事件，不写进稳定前缀。
 
+## 文件能力
+
+`@elysia/conscious-mind/file-capabilities` 只在目标 agent scope 内挂载 DSH 原生文件与搜索子插件，不在 host plane 启用文本文件或搜索工具；普通 standard、minimal 会话的原工具目录与原生文件权限不变。主 session 与固定提示词名单一同装配，Web preset 也可独立挂载同一个插件。`workspaceDir` 是允许递归读写的工作区；`baseDir` 只开放 `files` 精确列出的文件，`read_image` 仅开放工作区图片。`.migration`、备份路径、名单外提示词、符号链接逃逸和可检测硬链接均被拒绝。原始 session cwd header 不变，working-directory 服务将本 agent 的实际目录设为工作区；搜索省略 path 时按实际目录检查。
+
+修改提示词前必须在 `backupDir` 保存逐字节备份，备份失败就拒绝修改。必需提示词不能变空；`maxPromptBytes` 默认 65,536 个 UTF-8 字节，包含 DSH 最终保留的换行。编辑中的美元符号序列按字面处理。DSH 的已读观察、陈旧版本、唯一匹配与原子写入规则继续生效，因此后续原生检查拒绝操作时可能保留一份修改前备份。提示词修改成功后，按 `backupRetention`（默认 20）保留每个文件的备份；备份属于运维材料，模型不能经这些工具读取。
+
+搜索同时检查完整 canonical result 与显示用 metadata，不能借显示截断隐藏越界路径或硬链接；任一返回路径不合规时阻止整份结果。卸载文件能力 fiber 会移除其原生工具与守卫；子插件挂载失败或主意识后续装配失败也会回收已取得的插件。这里是原生文件工具外的路径策略，并非 shell 或内核隔离；外部进程并发改动仍需遵守文件所有权。工程 agent 和迁移程序不通过这项能力代写主体提示词正文。
+
 ## send_text
 
 > 状态：工具已实现。QQ、飞书、KOOK 的 `conversation` 格式由各自的渠道插件定义。段间停顿和主动外联仍待定。
@@ -64,7 +72,7 @@ Web profile 目前实际添加了一个 `elysia` preset，挂载同一子插件�
 
 Harness 提供 `agents` 服务时，插件自动把 pending 接到主意识。主意识只有一个 agent、一条固定 id 为 `elysia-conscious-mind` 的长期 session：已有 live agent 必须具备完整且配置匹配的提示词/工具装配凭据，才可复用；没有 live agent 时尝试 resume。resume 失败后若没有兼容的并发恢复实例，当前代码仍会尝试按同一 id create，尚未区分 session 不存在与其他恢复失败。不兼容的 live 实例会明确失败，不执行 followup，入站批次留在 pending。每批事件写成一个 user message，通过 `followup()` 交给 Harness 原生 agent loop，并等待 `whenIdle()`。模型、会话历史、压缩和工具调用都由 Harness 管理，不再走独立的 chat-completions fetch。
 
-create/resume 的 setup 路径通过 `composeMainAgent` 挂载作用域前缀，并暴露 `send_text`、`send_voice`、DSH 原生的 `read_image` 和本作用域注册的 `pass`。setup 成功后，在以 agent context 为键的进程内 WeakMap 中记录固定配置签名和完成状态，不记录正文；相同配置重复 setup 复用同一 promise，不同配置拒绝替换，scope 卸载时清除凭据。既有或竞态恢复的 live agent 只有凭据完整且匹配时才能借用；旧未装配实例需经正常作用域恢复，不改写 header 或私有历史。代码、文件写入与编辑、搜索等其他全局工具都被屏蔽。`read_image` 只用于主动读取已有本地图片，聊天图片走独立的附件入站链路。`pass` 必填 `reason`，只记录这一轮为什么不说话，不触碰任何渠道。她可以回复一个或多个会话，也可以不说话，运行时不强迫二选一中的任何一个。已取走的事件留在长期 session 历史中。旧的 `createSendTextTurn` 仍保留给独立实验，但不是 ElyHarn 服务安装的主意识回复轮。
+create/resume 的 setup 路径通过 `composeMainAgent` 挂载作用域前缀，并暴露 `send_text`、`send_voice`、DSH 原生的 `read`、`read_image`、`write`、`edit`、`glob`、`grep` 和本作用域注册的 `pass`。setup 成功后，在以 agent context 为键的进程内 WeakMap 中记录固定配置签名和完成状态，不记录正文；相同配置重复 setup 复用同一 promise，不同配置拒绝替换，scope 卸载时清除凭据。既有或竞态恢复的 live agent 只有凭据完整且匹配时才能借用；旧未装配实例需经正常作用域恢复，不改写 header 或私有历史。代码执行及其他全局工具继续屏蔽；文件工具使用下述作用域权限。`read_image` 只用于主动读取工作区内获准的本地图片，聊天图片走独立的附件入站链路。`pass` 必填 `reason`，只记录这一轮为什么不说话，不触碰任何渠道。她可以回复一个或多个会话，也可以不说话，运行时不强迫二选一中的任何一个。已取走的事件留在长期 session 历史中。旧的 `createSendTextTurn` 仍保留给独立实验，但不是 ElyHarn 服务安装的主意识回复轮。
 
 ## send_text 参数
 

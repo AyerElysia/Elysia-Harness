@@ -236,11 +236,12 @@ DSH 的 `packages/` 里**没有任何 memory 包**。现状可用的只有：
 
 ```ts
 await agentCtx.plugin(StandingPrompt, promptConfig)
+await agentCtx.plugin(FileCapabilities, fileConfig) // scope 内挂载原生文件/搜索工具与守卫
 agentCtx.tools.register(definePassTool())
 agentCtx.tools.restrict({ allow: ['send_text', 'send_voice', 'read_image'] })
 ```
 
-按 `composeMainAgent` 装配后的主 agent 只有 `send_text`、`send_voice`、`read_image` 和本作用域注册的 `pass`；只有装配凭据完整且配置匹配的 live agent 才可借用。`read_image` 只读取已有本地图片；没有代码、文件写入与编辑、搜索类工具。聊天图片使用独立的附件入站链路，不依赖这个工具。
+按 `composeMainAgent` 装配后的主 agent 暴露 `send_text`、`send_voice`、`read`、`read_image`、`write`、`edit`、`glob`、`grep` 和本作用域注册的 `pass`；只有装配凭据完整且配置匹配的 live agent 才可借用。文本文件与搜索工具只由文件能力子插件在目标 agent scope 注册，不在 host plane 全局开启；standard、minimal 的既有工具与权限不变。文件能力子插件只开放配置工作区（排除 `.migration`）与精确选中的提示词文件，`read_image` 仅可读取工作区图片。备份、名单外文件、符号链接逃逸与可检测硬链接被阻断；搜索检查完整 canonical result，不能只依赖截断后的显示 metadata。提示词修改前保存逐字节运维备份，检查必需文件非空与最终 UTF-8 字节上限；原生 DSH 继续负责已读观察、陈旧版本、字面编辑及原子写入。装配后期失败会回收提示词与文件守卫两个子插件，不遗留半套能力。代码执行仍未开放，聊天图片继续使用独立附件入站链路。原 session cwd header 保持不变，实际工作目录由 working-directory 服务设为工作区。
 
 `send_voice` 经 BreezeTTS 合成固定本地音色，再交给渠道语音 sender。当前 KOOK 已实现上传与原生语音发送，平台明确拒绝该类型时才退为音频文件消息；状态未知不自动重发。QQ、飞书语音仍待接入。统一 `send_file(channel, conversation, path)`、共享文件检查与 `OutboundFile` 以及渠道投递仍只有需求，不能据此宣称已有文件发送可用。
 

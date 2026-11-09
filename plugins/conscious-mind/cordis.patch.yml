@@ -3,8 +3,8 @@
 # the tool attaches when the profile also provides `tools`.
 
 # Web presets disable the base host-plane filesystem tools. The conscious mind
-# composes only DSH's read_image tool globally so tools.restrict() can expose it
-# to the one standing Session; text-file mutation remains unavailable.
+# keeps the existing global read_image baseline. Text and search tools are
+# mounted only by the agent-scoped file-capabilities plugin.
 - id: tool-fs
   disabled: false
   config:

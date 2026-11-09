@@ -1,22 +1,40 @@
+import { mkdirSync, mkdtempSync, rmSync } from 'node:fs'
+import { tmpdir } from 'node:os'
+import { join } from 'node:path'
 import type { Context } from '@deepseek-ai/cordis'
 import { AttachmentId } from '@deepseek-ai/dsh-attachment'
 import type { ToolRunContext } from '@deepseek-ai/dsh-tools'
-import { describe, expect, it, onTestFinished, vi } from 'vitest'
+import { afterAll, describe, expect, it, onTestFinished, vi } from 'vitest'
 import type { InboundEvent } from '../src/inbound.ts'
 import { MAIN_SESSION_CWD, MAIN_SESSION_ID, composeMainAgent, createMainSessionTurn, formatInboundBatch } from '../src/main-session.ts'
 import { definePassTool } from '../src/pass.ts'
 import * as StandingPrompt from '../src/standing-prompts.ts'
 
 const exec = { signal: new AbortController().signal } as ToolRunContext
-const promptConfig = { baseDir: '/tmp/elysia-test-prompts', files: ['SOUL.md'], required: ['SOUL.md'], complete: true }
+const testHome = mkdtempSync(join(tmpdir(), 'elysia-main-session-'))
+const promptBase = join(testHome, 'standing-prompts')
+const workspace = join(testHome, 'workspace')
+mkdirSync(promptBase)
+mkdirSync(workspace)
+afterAll(() => rmSync(testHome, { recursive: true, force: true }))
+const promptConfig = {
+  baseDir: promptBase,
+  files: ['SOUL.md'],
+  required: ['SOUL.md'],
+  complete: true,
+  workspaceDir: workspace,
+  backupDir: join(testHome, 'backups'),
+}
 
 function compositionContext() {
   const disposers: (() => void)[] = []
   const plugin = vi.fn().mockResolvedValue({ dispose: vi.fn().mockResolvedValue(undefined) })
   const register = vi.fn().mockReturnValue(vi.fn())
   const restrict = vi.fn().mockReturnValue(vi.fn())
+  const on = vi.fn()
   const ctx = {
     plugin,
+    on,
     tools: { register, restrict },
     effect(callback: () => () => void) { disposers.push(callback()) },
   } as unknown as Context
@@ -155,7 +173,7 @@ describe('main session turn', () => {
     const register = vi.fn()
     const restrict = vi.fn()
     const plugin = vi.fn().mockResolvedValue(undefined)
-    await setup?.({ tools: { register, restrict }, plugin, effect: (callback: () => () => void) => callback() } as unknown as Context)
+    await setup?.({ tools: { register, restrict }, on: vi.fn(), plugin, effect: (callback: () => () => void) => callback() } as unknown as Context)
     expect(plugin).toHaveBeenCalledWith(StandingPrompt, promptConfig)
     expect(register).toHaveBeenCalledOnce()
     expect(register.mock.calls[0]?.[0].name).toBe('pass')
@@ -180,7 +198,7 @@ describe('main session turn', () => {
     expect(followup).toHaveBeenCalledOnce()
     expect(agent.whenIdle).toHaveBeenCalledOnce()
     expect(create).not.toHaveBeenCalled()
-    expect(scoped.plugin).toHaveBeenCalledOnce()
+    expect(scoped.plugin).toHaveBeenCalledTimes(2)
     scoped.dispose()
   })
 
@@ -233,7 +251,7 @@ describe('main agent tool scope', () => {
     const register = vi.fn()
     const restrict = vi.fn()
     const plugin = vi.fn().mockResolvedValue(undefined)
-    await composeMainAgent({ tools: { register, restrict }, plugin, effect: (callback: () => () => void) => callback() } as unknown as Context, promptConfig)
+    await composeMainAgent({ tools: { register, restrict }, on: vi.fn(), plugin, effect: (callback: () => () => void) => callback() } as unknown as Context, promptConfig)
     expect(plugin).toHaveBeenCalledWith(StandingPrompt, promptConfig)
     expect(register.mock.calls[0]?.[0].name).toBe('pass')
     expect(restrict).toHaveBeenCalledWith({ allow: ['send_text', 'send_voice', 'read_image'] })
@@ -244,7 +262,7 @@ describe('main agent tool scope', () => {
     const second = composeMainAgent(scoped.ctx, { ...promptConfig, files: [...promptConfig.files] })
     expect(first).toBe(second)
     await first
-    expect(scoped.plugin).toHaveBeenCalledOnce()
+    expect(scoped.plugin).toHaveBeenCalledTimes(2)
     expect(scoped.register).toHaveBeenCalledOnce()
     expect(scoped.restrict).toHaveBeenCalledOnce()
     await expect(composeMainAgent(scoped.ctx, { ...promptConfig, files: ['SOUL.md', 'USER.md'] }))
@@ -252,4 +270,28 @@ describe('main agent tool scope', () => {
     scoped.dispose()
   })
 
+})
+
+
+it('disposes both scoped plugins when a later tool restriction fails', async () => {
+  const scoped = compositionContext()
+  const prompt = { dispose: vi.fn().mockResolvedValue(undefined) }
+  const capabilities = { dispose: vi.fn().mockResolvedValue(undefined) }
+  scoped.plugin.mockResolvedValueOnce(prompt).mockResolvedValueOnce(capabilities)
+  scoped.restrict.mockImplementationOnce(() => { throw new Error('missing search tool') })
+  await expect(composeMainAgent(scoped.ctx, promptConfig)).rejects.toThrow('missing search tool')
+  expect(prompt.dispose).toHaveBeenCalledOnce()
+  expect(capabilities.dispose).toHaveBeenCalledOnce()
+})
+
+
+it('attempts every composition cleanup even when one child fails to dispose', async () => {
+  const scoped = compositionContext()
+  const prompt = { dispose: vi.fn().mockResolvedValue(undefined) }
+  const capabilities = { dispose: vi.fn().mockRejectedValue(new Error('guard disposal failed')) }
+  scoped.plugin.mockResolvedValueOnce(prompt).mockResolvedValueOnce(capabilities)
+  scoped.restrict.mockImplementationOnce(() => { throw new Error('missing search tool') })
+  await expect(composeMainAgent(scoped.ctx, promptConfig)).rejects.toBeInstanceOf(AggregateError)
+  expect(prompt.dispose).toHaveBeenCalledOnce()
+  expect(capabilities.dispose).toHaveBeenCalledOnce()
 })

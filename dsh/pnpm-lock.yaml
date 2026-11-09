@@ -270,24 +270,45 @@ importers:
       '@deepseek-ai/dsh-fs-local':
         specifier: workspace:*
         version: link:../../dsh/packages/fs/fs-local
+      '@deepseek-ai/dsh-fs-observation-policy':
+        specifier: workspace:*
+        version: link:../../dsh/packages/fs/fs-observation-policy
+      '@deepseek-ai/dsh-fs-sandbox':
+        specifier: workspace:*
+        version: link:../../dsh/packages/fs/fs-sandbox
       '@deepseek-ai/dsh-llm':
         specifier: workspace:*
         version: link:../../dsh/packages/llm/llm
+      '@deepseek-ai/dsh-sandbox-policy':
+        specifier: workspace:*
+        version: link:../../dsh/packages/sandbox/sandbox-policy
       '@deepseek-ai/dsh-scope':
         specifier: workspace:*
         version: link:../../dsh/packages/core/scope
       '@deepseek-ai/dsh-session':
         specifier: workspace:*
         version: link:../../dsh/packages/core/session
+      '@deepseek-ai/dsh-session-projection':
+        specifier: workspace:*
+        version: link:../../dsh/packages/session/session-projection
       '@deepseek-ai/dsh-system-prompt':
         specifier: workspace:*
         version: link:../../dsh/packages/core/system-prompt
       '@deepseek-ai/dsh-tool-fs':
         specifier: workspace:*
         version: link:../../dsh/packages/fs/tool-fs
+      '@deepseek-ai/dsh-tool-fs-search':
+        specifier: workspace:*
+        version: link:../../dsh/packages/fs/tool-fs-search
       '@deepseek-ai/dsh-tools':
         specifier: workspace:*
         version: link:../../dsh/packages/core/tools
+      '@deepseek-ai/dsh-working-directory':
+        specifier: workspace:*
+        version: link:../../dsh/packages/session/working-directory
+      '@types/node':
+        specifier: ^22.20.1
+        version: 22.20.1
 
   ../plugins/feishu-app:
     dependencies:
