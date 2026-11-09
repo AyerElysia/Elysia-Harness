@@ -1,0 +1,21 @@
+{
+  "extends": "../../dsh/tsconfig.base.json",
+  "compilerOptions": {
+    "rootDir": "src",
+    "outDir": "lib/types"
+  },
+  "include": [
+    "src"
+  ],
+  "references": [
+    { "path": "../../dsh/vendor/cordis" },
+    { "path": "../../dsh/vendor/schemastery" },
+    { "path": "../../dsh/packages/core/agent" },
+    { "path": "../../dsh/packages/core/agent-default-model" },
+    { "path": "../../dsh/packages/attachment/attachment" },
+    { "path": "../../dsh/packages/core/tools" },
+    { "path": "../../dsh/packages/core/session" },
+    { "path": "../../dsh/packages/llm/llm" },
+    { "path": "../../dsh/packages/util/brand" }
+  ]
+}
