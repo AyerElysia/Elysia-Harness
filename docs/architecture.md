@@ -1,6 +1,6 @@
 # Elysia-Harness 架构
 
-> 状态：目标架构与现状盘点。最近一次核对：2026-10-30。
+> 状态：目标架构与现状盘点。最近一次核对：2026-11-10（Ayla 通道插件挂载）。
 > 本文描述「一条主意识 session、四个渠道汇入」的目标形态，并逐层标注当前实现状态。
 > 与代码冲突时以代码为准；发现冲突请直接改本文，不要让两种说法并存。源码已实现不等于完成真实模型、平台或重启验收。
 
@@ -8,7 +8,9 @@
 
 目标是让所有外部平台的消息汇入**同一条主意识 DSH session**，由同一个 agent 阅读、思考、决定回不回、回给谁、从哪个平台发出去。
 
-跨平台的目标是**一个主体**有四个出入口。当前只有 KOOK 接入主意识 pending；QQ、飞书与 Ayla 仍待接入。这里的单 session 指主意识，潜意识的独立心跳 session 目前仅有需求。
+跨平台的目标是**一个主体**有四个出入口。当前 KOOK 与 Ayla 已接入主意识 pending；QQ、飞书仍待接入。这里的单 session 指主意识，潜意识的独立心跳 session 目前仅有需求。
+
+Ayla 一条的取证边界：插件代码、挂载行与离线测试已完成，**尚未做真实 Ayla 后端的端到端验收**（见第 5 节）。
 
 ## 2. 为什么要单 session
 
@@ -31,7 +33,7 @@ session 是运行边界，不是主体边界；潜意识拟建独立 session，�
   QQ    → qq-napcat/index.ts   ─┐
   KOOK  → kook-bot/index.ts    ─┤
   飞书  → feishu-app/index.ts  ─┼→ ctx.inboundPending.receive(InboundEvent)
-  Ayla  → ayla-app（待建）      ─┘        │
+  Ayla  → ayla-app/index.ts    ─┘         │
                                           ▼
                              InboundPending（全局单批）
                                           │
@@ -68,7 +70,7 @@ session 是运行边界，不是主体边界；潜意识拟建独立 session，�
 | `plugins/qq-napcat` | 本仓库 | NapCat OneBot 连接、`qq` sender | 不持有 session |
 | `plugins/kook-bot` | 本仓库 | KOOK Gateway、图文附件入站、文字与语音 sender | 不持有 session |
 | `plugins/feishu-app` | 本仓库 | 飞书长连接、`feishu` sender | 不持有 session |
-| Ayla 通道插件 | 待建 | Ayla 入站/出站 | 不持有 session |
+| `plugins/ayla-app` | 本仓库 | Ayla WS 通道（插件主动拨 Ayla）、`ayla` sender、standalone 备用形态 | 不持有主意识 session；不 import 任何 `@elysia/*` |
 | `plugins/subconscious` | 只有需求文档 | 拟建独立心跳 session，读取主意识新增事件 | 尚无运行实现 |
 | 人物目录插件 | 待建 | 跨平台身份图谱 | 不替模型判断关系 |
 | `dsh/packages/schedule` | dsh | 定时规则、持久化、唤醒 | 不认识外部平台 |
@@ -83,14 +85,14 @@ session 是运行边界，不是主体边界；潜意识拟建独立 session，�
 | 入站 | `qq-napcat/src/index.ts` | ❌ 未接 pending | 只 `ctx.emit('qq/message')`；旧架构只在遗留的 `bridge.ts` 里 |
 | 入站 | `kook-bot/src/index.ts` | ✅ 已接 | 文字与图片按原顺序经附件准入后进入 `receive()`；图片失败则整条不入队 |
 | 入站 | `feishu-app/src/index.ts` | ❌ 未接 pending | 只 emit |
-| 入站 | Ayla | ❌ 不存在 | — |
+| 入站 | `ayla-app/src/index.ts` | ✅ 已实现（默认禁用） | `elyh` 形态经 `inboundPending.receive()`；`auto` 在服务缺失时降为自建 `ayla-channel`。图片走 `media_id` + 签名 URL + 附件准入。profile 行带 `disabled: !!js process.env.AYLA_BASE_URL === undefined`，**未设 `AYLA_BASE_URL` 时不挂载**；真实链路未验收 |
 | 队列 | `conscious-mind/pending.ts` | ✅ 内存队列 | 1.2 秒静默收集后跨渠道全取单批；轮次异常放回队首；尚无耐久队列 |
 | 主 session | `conscious-mind/main-session.ts` | ✅ 已带 `meta.cwd` | 固定 id，优先复用或 resume，create 时写入稳定绝对路径；见 6.1 |
 | 元信息 | `formatInboundBatch` | ✅ | 元信息文本 + 原生文字/图片块；更强结构化仍待做，见 6.2 |
 | system prompt | `StandingPromptSection` | ✅ | `complete: true`，每次组装重读文件 |
 | 记忆 | — | ⏳ 待选 | DSH 无 memory 包，见第 8 节 |
 | 人物目录 | — | 🔴 待自建 | 见 6.3 |
-| `send_text` | `send-text.ts` | ✅ | 显式指定渠道和会话；内在字段不外发 |
+| `send_text` | `send-text.ts` | ✅ | 显式指定渠道和会话；内在字段不外发。KOOK、飞书、QQ 在挂载时即登记；`ayla` 只在 elyh 形态且通道已启用时登记 |
 | `send_voice` | `send-voice.ts`、`breeze-tts.ts` | ✅ | BreezeTTS 本地音色；当前只有 KOOK 注册语音 sender |
 | `read_image` | DSH 原生工具 | ✅ 已开放 | 主动读取已有本地图片，不代替聊天附件入站 |
 | `send_file` | — | 🔴 未实现 | 不能把工具描述中的引用当作已有能力 |
@@ -130,7 +132,9 @@ session 是运行边界，不是主体边界；潜意识拟建独立 session，�
 
 文字与图片保持原顺序。KOOK 先下载图片，再经 `ctx.attachments.admitPromptContent()` 持久化，随后只把附件引用放进 pending；主意识轮次写入原生 `{ type: 'image', attachment }`，不把 Base64 写进历史，也不以 `[图片]` 代替成功准入的图片。下载或准入失败时整条消息不入队。
 
-这条图文链路目前只接到 KOOK。QQ、飞书仍只发出各自 message 事件，尚未接统一 pending 或附件准入。聊天附件不依赖 `read_image`；该工具用于主体主动读取已有本地图片。
+这条图文链路目前只接到 KOOK 与 Ayla。Ayla 的图片不给字节，帧里只有 `media_id`：插件用同一枚 JWT 调
+`POST /api/v1/media/{media_id}:sign` 取短时 URL 下载，再走同一处附件准入；失败则整条不投递且不 ack，由 Ayla 重投。
+QQ、飞书仍只发出各自 message 事件，尚未接统一 pending 或附件准入。聊天附件不依赖 `read_image`；该工具用于主体主动读取已有本地图片。
 
 元信息目前是可读文本，尚未采用 XML 等更强字段边界。后续结构化必须保留 channel、conversation、sender 与 message_id 的精确值以及图文顺序。
 
@@ -232,6 +236,11 @@ agentCtx.tools.restrict({ allow: ['send_text', 'send_voice', 'read_image'] })
 `send_voice` 经 BreezeTTS 合成固定本地音色，再交给渠道语音 sender。当前 KOOK 已实现上传与原生语音发送，平台明确拒绝该类型时才退为音频文件消息；状态未知不自动重发。QQ、飞书语音仍待接入。`send_file` 尚未实现，已有音频或任意文件发送不能据此宣称可用。
 
 新增 `list_contacts`、`schedule_*` 时必须同步改这一行 `allow` 列表。注意 `restrict` 是白名单语义——漏加就是工具不可见。
+
+`send_text` 的渠道由各渠道插件在 `outboundText` 上登记。Ayla 插件只在 `elyh` 形态登记 `ayla`；
+standalone 形态不登记，也**不**给主意识多一条途径——它自己的 `send_text` 只在该 agent 作用域可见。
+`standalone` 在 web profile 里实际不会触发（`conscious-mind` 是固定 bundle），
+它的存在是为了「任意 dsh 都能装」这条约束，不是 web 部署的备用路径。
 
 ## 10. 注意事项
 

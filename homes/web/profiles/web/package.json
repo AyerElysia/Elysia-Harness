@@ -2,6 +2,7 @@
   "name": "dsh-profile-web",
   "private": true,
   "dependencies": {
+    "@elysia/ayla-app": "file:../../../../plugins/ayla-app",
     "@elysia/conscious-mind": "file:../../../../plugins/conscious-mind",
     "@elysia/feishu-app": "file:../../../../plugins/feishu-app",
     "@elysia/kook-bot": "file:../../../../plugins/kook-bot",
@@ -16,6 +17,7 @@
         "@deepseek-ai/dsh-base",
         "@deepseek-ai/dsh-web-app",
         "@elysia/conscious-mind",
+        "@elysia/ayla-app",
         "@elysia/qq-napcat",
         "@elysia/feishu-app",
         "@elysia/kook-bot",

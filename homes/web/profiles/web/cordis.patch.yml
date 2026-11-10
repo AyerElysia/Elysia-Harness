@@ -48,3 +48,16 @@
       name: '@elysia/request-archive'
       config:
         dir: !!js process.env.ELYSIA_REQUESTS_DIR ?? process.env.DSH_HOME + '/requests'
+
+    # The Ayla channel dials the Ayla backend and opens no port of its own. It
+    # stays off until an address is configured: an unset Ayla host would make
+    # the plugin reconnect forever, and a bad address or account fails the mount.
+    - id: elysia-ayla-app
+      name: '@elysia/ayla-app'
+      disabled: !!js process.env.AYLA_BASE_URL === undefined
+      config:
+        baseUrl: !!js process.env.AYLA_BASE_URL ?? 'http://127.0.0.1:8100'
+        username: !!js process.env.AYLA_BOT_USER ?? ''
+        password: !!js process.env.AYLA_BOT_PASSWORD ?? ''
+        mode: auto
+        workspaceDir: ''

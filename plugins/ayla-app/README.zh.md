@@ -14,13 +14,41 @@ Ayla 应用里的聊天进 DSH，模型的回复回到 Ayla 的同一个会话�
 "dsh": { "profile": { "bundles": [ ..., "@elysia/ayla-app" ] } }
 ```
 
-`cordis.patch.yml` 自带一条 `insert`，设置可以全部走设置页，也可以由环境变量起手：`AYLA_BASE_URL`、`AYLA_BOT_USER`、`AYLA_BOT_PASSWORD`。
+`cordis.patch.yml` 自带一条 `insert`，字段也可以由环境变量起手：`AYLA_BASE_URL`、`AYLA_BOT_USER`、`AYLA_BOT_PASSWORD`。
+
+profile 侧的挂载行带 `disabled: !!js process.env.AYLA_BASE_URL === undefined`：**没设
+`AYLA_BASE_URL` 时整行禁用、插件根本不挂载**，与 `qq-napcat` / `feishu-app` / `kook-bot`
+的「未配置就禁用」同形。
+
+因此启用分两步，顺序不能反：
+
+1. 先给出地址，让这一行不再是 `disabled`：
+
+   ```sh
+   export AYLA_BASE_URL=http://127.0.0.1:8100   # 或别的私网/https 地址
+   ```
+
+2. `username` / `password` 可以直接用 `AYLA_BOT_USER` / `AYLA_BOT_PASSWORD`
+   环境变量给，也可以留空、等 profile 起来后在设置页填（设置页的表单由组合后的
+   条目树生成，`disabled` 行仍在其中）。改完重挂 profile 才生效。
+
+被 `disabled` 的行不挂载：登录、WS 连接、重连都不发生。这是「未配置不拖垮整个
+profile」的取舍——直接挂上会让一台没配 Ayla 的机器无限退避重连。
 
 > `file:` 依赖会在 `node_modules/@elysia/ayla-app` 留副本：只改源码而不重装不生效，部署后应逐文件比对 SHA-256。
 
 ## 设置项
 
-全部字段是 `.volatile()`：设置页出现表单行，保存后下一次读取即生效，不必重挂。
+全部字段是 `.volatile()`：设置页出现表单行，保存不会因为值变化而重挂插件。
+
+但要分清两件事：
+
+- **`.volatile()` 保证的是「改设置不会重启插件」**，不是「改完就自动重连」。
+- `apply()` 在挂载时用 `.get()` 读一次 `baseUrl` / `username` / `password` / `mode`，
+  之后没有 `loader/volatile-update` 监听。所以改完这几个字段要**重挂插件**
+  （重启 profile）才会用新账号连上；已经建立的 socket 不会因为改了设置而重连。
+
+`workspaceDir` 只在 standalone 形态挂载时读取，同样需要重挂。
 
 | 字段 | 默认 | 说明 |
 |---|---|---|
