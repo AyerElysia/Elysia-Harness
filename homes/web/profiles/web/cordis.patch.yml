@@ -60,7 +60,8 @@
   name: '@elysia/ayla-app'
   config:
     baseUrl: !!js process.env.AYLA_BASE_URL ?? 'http://127.0.0.1:8100'
-    username: !!js process.env.AYLA_BOT_USER ?? ''
+    # Written once by the settings page; the env var still seeds a fresh checkout.
+    username: elysia
     password: !!js process.env.AYLA_BOT_PASSWORD ?? ''
     mode: auto
     workspaceDir: ''
