@@ -24,6 +24,14 @@ export DSH_AGENTS_HOME="$ROOT/homes/web/agents"
 export ELYSIA_KOOK_CONFIG="${ELYSIA_KOOK_CONFIG:-$ROOT/../config/plugins/kook_adapter/config.toml}"
 export ELYSIA_KOOK_LISTEN="${ELYSIA_KOOK_LISTEN:-1}"
 
+# Ayla channel: the plugin dials this backend and opens no port of its own.
+# Unset disables the channel entirely (the profile row keys off AYLA_BASE_URL).
+export AYLA_BASE_URL="${AYLA_BASE_URL:-http://127.0.0.1:8100}"
+export AYLA_BOT_USER="${AYLA_BOT_USER:-elysia}"
+# Credentials live outside Git: a local env file read only when it exists.
+if [ -f "$ROOT/../.env.ayla" ]; then set -a; . "$ROOT/../.env.ayla"; set +a; fi
+export AYLA_BOT_PASSWORD="${AYLA_BOT_PASSWORD:-}"
+
 # The /api browser-trust fence accepts only the authority the page was served
 # from. A Cloudflare quick tunnel reaches this server under its own hostname,
 # so that hostname must be named here or every /api call from a tunneled page
