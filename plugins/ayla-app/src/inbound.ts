@@ -78,6 +78,25 @@ function imageMediaType(declared: string): ImageMediaType {
 }
 
 /**
+ * Read an image's MIME type from its magic bytes.
+ * Ayla's media table knows the type server-side, so a frame may omit it; the
+ * bytes are the authoritative answer either way.
+ * @param data - the downloaded object.
+ * @returns the media type, or undefined when the bytes are not a known image.
+ */
+function sniffImageMediaType(data: Uint8Array): ImageMediaType | undefined {
+  if (data.length >= 8
+    && data[0] === 0x89 && data[1] === 0x50 && data[2] === 0x4e && data[3] === 0x47) return 'image/png'
+  if (data.length >= 3 && data[0] === 0xff && data[1] === 0xd8 && data[2] === 0xff) return 'image/jpeg'
+  if (data.length >= 12
+    && data[0] === 0x52 && data[1] === 0x49 && data[2] === 0x46 && data[3] === 0x46
+    && data[8] === 0x57 && data[9] === 0x45 && data[10] === 0x42 && data[11] === 0x50) return 'image/webp'
+  if (data.length >= 6
+    && data[0] === 0x47 && data[1] === 0x49 && data[2] === 0x46 && data[3] === 0x38) return 'image/gif'
+  return undefined
+}
+
+/**
  * Sign, download, and admit one image.
  * @param mediaId - Ayla media id from the frame.
  * @param declared - media type Ayla declared for that object.
@@ -86,10 +105,9 @@ function imageMediaType(declared: string): ImageMediaType {
  */
 async function admitImage(
   mediaId: string,
-  declared: string,
+  declared: string | undefined,
   deps: AylaInboundDeps,
 ): Promise<AttachmentAdmissionPart> {
-  const mediaType = imageMediaType(declared)
   const url = await deps.signMedia(mediaId)
   if (url.length === 0) throw new AylaInboundRejected(`媒体 ${mediaId} 未返回下载地址`)
   const response = await deps.fetchMedia(url)
@@ -102,6 +120,14 @@ async function admitImage(
   // before it is held in memory as base64.
   if (data.byteLength > deps.attachments.imageLimits.maxImageBytes) {
     throw new AylaInboundRejected(`媒体 ${mediaId} 超过单图字节上限`)
+  }
+  // Declared type wins when Ayla sent one; otherwise the bytes decide, so a
+  // frame that omits media_type still admits a real image instead of failing.
+  const mediaType = declared === undefined
+    ? sniffImageMediaType(data)
+    : imageMediaType(declared)
+  if (mediaType === undefined) {
+    throw new AylaInboundRejected(`媒体 ${mediaId} 不是可识别的图片格式`)
   }
   return { type: 'image', mediaType, data: Buffer.from(data).toString('base64') }
 }

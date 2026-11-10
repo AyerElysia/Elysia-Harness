@@ -166,13 +166,23 @@ describe('Ayla plugin wiring: misconfiguration', () => {
   })
 })
 
+/** Every .ts/.tsx file under src, including the browser half in src/client. */
+async function sourceFiles(dir: string, prefix = ''): Promise<string[]> {
+  const out: string[] = []
+  for (const entry of await readdir(dir, { withFileTypes: true })) {
+    const rel = prefix.length === 0 ? entry.name : prefix + '/' + entry.name
+    if (entry.isDirectory()) out.push(...await sourceFiles(join(dir, entry.name), rel))
+    else if (/\.tsx?$/u.test(entry.name)) out.push(rel)
+  }
+  return out
+}
+
 describe('Ayla plugin dependencies', () => {
   it('imports no @elysia package anywhere in src', async () => {
-    const entries = await readdir(join(packageRoot, 'src'))
     const offenders: string[] = []
-    for (const entry of entries) {
-      const text = await readFile(join(packageRoot, 'src', entry), 'utf8')
-      if (/from '@elysia\//u.test(text)) offenders.push(entry)
+    for (const rel of await sourceFiles(join(packageRoot, 'src'))) {
+      const text = await readFile(join(packageRoot, 'src', rel), 'utf8')
+      if (/from '@elysia\//u.test(text)) offenders.push(rel)
     }
     expect(offenders).toEqual([])
   })
@@ -192,12 +202,51 @@ describe('Ayla plugin dependencies', () => {
   })
 
   it('uses the Node global WebSocket instead of importing ws', async () => {
-    const entries = await readdir(join(packageRoot, 'src'))
     const offenders: string[] = []
-    for (const entry of entries) {
-      const text = await readFile(join(packageRoot, 'src', entry), 'utf8')
-      if (/from 'ws'|require\('ws'\)/u.test(text)) offenders.push(entry)
+    for (const rel of await sourceFiles(join(packageRoot, 'src'))) {
+      const text = await readFile(join(packageRoot, 'src', rel), 'utf8')
+      if (/from 'ws'|require\('ws'\)/u.test(text)) offenders.push(rel)
     }
     expect(offenders).toEqual([])
   })
+
+describe('Ayla plugin wiring: not yet configured', () => {
+  // The settings page can only edit fields of an entry that is loaded, so the
+  // plugin must mount even with an empty account. It must not open a socket:
+  // a reconnect loop against a backend that will refuse every 4403 would only
+  // fill the log and never succeed.
+  it('mounts without credentials, logs once, and opens no socket', () => {
+    const opened: string[] = []
+    class RecordingSocket extends SilentSocket {
+      constructor(url: string) {
+        super()
+        opened.push(String(url))
+      }
+    }
+    vi.stubGlobal('WebSocket', RecordingSocket)
+    const harnessed = harness({
+      pending: { receive: () => {} },
+      outboundText: { register: () => () => {} },
+    })
+    apply(harnessed.ctx, fakeConfig({ username: '', password: '' }) as never)
+    expect(opened).toEqual([])
+    expect(harnessed.effects).toBe(0)
+    expect(harnessed.logs.join('\n')).toContain('Ayla 通道未启用')
+  })
+
+  it('treats whitespace-only credentials as unset', () => {
+    const opened: string[] = []
+    class RecordingSocket extends SilentSocket {
+      constructor(url: string) {
+        super()
+        opened.push(String(url))
+      }
+    }
+    vi.stubGlobal('WebSocket', RecordingSocket)
+    const harnessed = harness({ pending: { receive: () => {} } })
+    apply(harnessed.ctx, fakeConfig({ username: '   ', password: '   ' }) as never)
+    expect(opened).toEqual([])
+    expect(harnessed.logs.join('\n')).toContain('Ayla 通道未启用')
+  })
+})
 })

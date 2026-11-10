@@ -203,18 +203,34 @@ export function rememberDelivered(seen: Set<string>, key: string): void {
  * @param config - live settings section.
  */
 export function apply(ctx: Context, config: Config): void {
+  const logger = ctx.logger('ayla-app')
   const baseUrl = assertBaseUrl(config.baseUrl.get())
   const mode = config.mode.get()
+  const username = config.username.get().trim()
+  const password = config.password.get()
+
+  // The plugin stays mounted whether or not it has an account, because the
+  // settings page can only edit fields of an entry that is actually loaded.
+  // Without credentials it logs one line and opens no socket: mounting a
+  // permanently failing reconnect loop would spam the log and never work.
+  if (username.length === 0 || password.length === 0) {
+    logger.info(
+      'Ayla 通道未启用：设置页缺少账号或密码（baseUrl='
+      + baseUrl.origin
+      + '）。填好后重载 profile 生效。',
+    )
+    return
+  }
+
   const pending = ctx.get('inboundPending') as InboundPendingPort | undefined
   const outboundText = ctx.get('outboundText') as OutboundTextPort | undefined
   const form = resolveForm(mode, pending !== undefined, outboundText !== undefined)
-  const logger = ctx.logger('ayla-app')
   logger.info('Ayla 通道形态: ' + form + ' (mode=' + mode + ', ' + baseUrl.origin + ')')
 
   const auth = new AylaAuth({
     baseUrl,
-    username: config.username.get(),
-    password: config.password.get(),
+    username,
+    password,
     store: new RefreshTokenStore(defaultRefreshFile()),
   })
 
