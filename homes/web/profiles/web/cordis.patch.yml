@@ -119,11 +119,18 @@
       config:
         autoTunnel: false
         publicBaseUrl: "https://climb-writing-bidder-here.trycloudflare.com"
+# The Ayla channel dials the Ayla backend and opens no port of its own.
+# This row sits at the top level on purpose: the configuration editor addresses
+# only top-level entries, so a row nested inside an `insert:` block would never
+# persist a settings-page edit. The plugin mounts unconditionally so the
+# settings page can render its fields; it opens no socket until username and
+# password are both set. Env values only seed the defaults on first load.
 - id: elysia-ayla-app
-  name: "@elysia/ayla-app"
+  name: '@elysia/ayla-app'
   config:
     baseUrl: !!js process.env.AYLA_BASE_URL ?? 'http://127.0.0.1:8100'
+    # Written once by the settings page; the env var still seeds a fresh checkout.
     username: elysia
     password: !!js process.env.AYLA_BOT_PASSWORD ?? ''
     mode: auto
-    workspaceDir: ""
+    workspaceDir: ''

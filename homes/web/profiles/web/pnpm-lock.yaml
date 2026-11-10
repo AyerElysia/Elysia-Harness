@@ -13,25 +13,25 @@ importers:
         version: file:../../../../plugins/ayla-app
       '@elysia/conscious-mind':
         specifier: file:../../../../plugins/conscious-mind
-        version: file:../../../../plugins/conscious-mind(@deepseek-ai/schemastery@3.18.5)
+        version: file:../../../../plugins/conscious-mind
       '@elysia/context-inspector':
         specifier: file:../../../../plugins/context-inspector
-        version: file:../../../../plugins/context-inspector(@deepseek-ai/schemastery@3.18.5)(@elysia/request-archive@file:../../../../plugins/request-archive(@deepseek-ai/schemastery@3.18.5))
+        version: file:../../../../plugins/context-inspector(@elysia/request-archive@file:../../../../plugins/request-archive)
       '@elysia/dsh-livestream':
         specifier: file:../../../../plugins/dsh-livestream
-        version: file:../../../../plugins/dsh-livestream(@deepseek-ai/schemastery@3.18.5)(@elysia/conscious-mind@file:../../../../plugins/conscious-mind(@deepseek-ai/schemastery@3.18.5))
+        version: file:../../../../plugins/dsh-livestream(@elysia/conscious-mind@file:../../../../plugins/conscious-mind)
       '@elysia/feishu-app':
         specifier: file:../../../../plugins/feishu-app
-        version: file:../../../../plugins/feishu-app(@deepseek-ai/schemastery@3.18.5)(@elysia/conscious-mind@file:../../../../plugins/conscious-mind(@deepseek-ai/schemastery@3.18.5))
+        version: file:../../../../plugins/feishu-app(@elysia/conscious-mind@file:../../../../plugins/conscious-mind)
       '@elysia/kook-bot':
         specifier: file:../../../../plugins/kook-bot
-        version: file:../../../../plugins/kook-bot(@deepseek-ai/schemastery@3.18.5)(@elysia/conscious-mind@file:../../../../plugins/conscious-mind(@deepseek-ai/schemastery@3.18.5))
+        version: file:../../../../plugins/kook-bot(@elysia/conscious-mind@file:../../../../plugins/conscious-mind)
       '@elysia/qq-napcat':
         specifier: file:../../../../plugins/qq-napcat
-        version: file:../../../../plugins/qq-napcat(@deepseek-ai/schemastery@3.18.5)(@elysia/conscious-mind@file:../../../../plugins/conscious-mind(@deepseek-ai/schemastery@3.18.5))
+        version: file:../../../../plugins/qq-napcat(@elysia/conscious-mind@file:../../../../plugins/conscious-mind)
       '@elysia/request-archive':
         specifier: file:../../../../plugins/request-archive
-        version: file:../../../../plugins/request-archive(@deepseek-ai/schemastery@3.18.5)
+        version: file:../../../../plugins/request-archive
       '@linxin666/dsh-remote-web-ui':
         specifier: 0.4.8
         version: 0.4.8
@@ -247,52 +247,43 @@ snapshots:
 
   '@elysia/ayla-app@file:../../../../plugins/ayla-app': {}
 
-  '@elysia/conscious-mind@file:../../../../plugins/conscious-mind(@deepseek-ai/schemastery@3.18.5)':
-    dependencies:
-      '@deepseek-ai/schemastery': 3.18.5
+  '@elysia/conscious-mind@file:../../../../plugins/conscious-mind': {}
 
-  '@elysia/context-inspector@file:../../../../plugins/context-inspector(@deepseek-ai/schemastery@3.18.5)(@elysia/request-archive@file:../../../../plugins/request-archive(@deepseek-ai/schemastery@3.18.5))':
+  '@elysia/context-inspector@file:../../../../plugins/context-inspector(@elysia/request-archive@file:../../../../plugins/request-archive)':
     dependencies:
-      '@deepseek-ai/schemastery': 3.18.5
-      '@elysia/request-archive': file:../../../../plugins/request-archive(@deepseek-ai/schemastery@3.18.5)
+      '@elysia/request-archive': file:../../../../plugins/request-archive
       '@huggingface/tokenizers': 0.2.0
       zod: 4.4.3
 
-  '@elysia/dsh-livestream@file:../../../../plugins/dsh-livestream(@deepseek-ai/schemastery@3.18.5)(@elysia/conscious-mind@file:../../../../plugins/conscious-mind(@deepseek-ai/schemastery@3.18.5))':
+  '@elysia/dsh-livestream@file:../../../../plugins/dsh-livestream(@elysia/conscious-mind@file:../../../../plugins/conscious-mind)':
     dependencies:
-      '@deepseek-ai/schemastery': 3.18.5
-      '@elysia/conscious-mind': file:../../../../plugins/conscious-mind(@deepseek-ai/schemastery@3.18.5)
+      '@elysia/conscious-mind': file:../../../../plugins/conscious-mind
       ws: 8.21.3
     transitivePeerDependencies:
       - bufferutil
       - utf-8-validate
 
-  '@elysia/feishu-app@file:../../../../plugins/feishu-app(@deepseek-ai/schemastery@3.18.5)(@elysia/conscious-mind@file:../../../../plugins/conscious-mind(@deepseek-ai/schemastery@3.18.5))':
+  '@elysia/feishu-app@file:../../../../plugins/feishu-app(@elysia/conscious-mind@file:../../../../plugins/conscious-mind)':
     dependencies:
-      '@deepseek-ai/schemastery': 3.18.5
-      '@elysia/conscious-mind': file:../../../../plugins/conscious-mind(@deepseek-ai/schemastery@3.18.5)
+      '@elysia/conscious-mind': file:../../../../plugins/conscious-mind
 
-  '@elysia/kook-bot@file:../../../../plugins/kook-bot(@deepseek-ai/schemastery@3.18.5)(@elysia/conscious-mind@file:../../../../plugins/conscious-mind(@deepseek-ai/schemastery@3.18.5))':
+  '@elysia/kook-bot@file:../../../../plugins/kook-bot(@elysia/conscious-mind@file:../../../../plugins/conscious-mind)':
     dependencies:
-      '@deepseek-ai/schemastery': 3.18.5
-      '@elysia/conscious-mind': file:../../../../plugins/conscious-mind(@deepseek-ai/schemastery@3.18.5)
+      '@elysia/conscious-mind': file:../../../../plugins/conscious-mind
       ws: 8.21.3
     transitivePeerDependencies:
       - bufferutil
       - utf-8-validate
 
-  '@elysia/qq-napcat@file:../../../../plugins/qq-napcat(@deepseek-ai/schemastery@3.18.5)(@elysia/conscious-mind@file:../../../../plugins/conscious-mind(@deepseek-ai/schemastery@3.18.5))':
+  '@elysia/qq-napcat@file:../../../../plugins/qq-napcat(@elysia/conscious-mind@file:../../../../plugins/conscious-mind)':
     dependencies:
-      '@deepseek-ai/schemastery': 3.18.5
-      '@elysia/conscious-mind': file:../../../../plugins/conscious-mind(@deepseek-ai/schemastery@3.18.5)
+      '@elysia/conscious-mind': file:../../../../plugins/conscious-mind
       ws: 8.21.3
     transitivePeerDependencies:
       - bufferutil
       - utf-8-validate
 
-  '@elysia/request-archive@file:../../../../plugins/request-archive(@deepseek-ai/schemastery@3.18.5)':
-    dependencies:
-      '@deepseek-ai/schemastery': 3.18.5
+  '@elysia/request-archive@file:../../../../plugins/request-archive': {}
 
   '@huggingface/tokenizers@0.2.0': {}
 

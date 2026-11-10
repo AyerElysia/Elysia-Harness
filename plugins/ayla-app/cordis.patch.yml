@@ -1,0 +1,13 @@
+# The Ayla channel. The plugin dials Ayla; it opens no port of its own.
+# apply() logs the resolved form, then logs in, keeps the bridge socket alive,
+# and installs the form's delivery path (conscious-mind queue or its own
+# 'ayla-channel' session).
+- insert:
+    - id: elysia-ayla-app
+      name: '@elysia/ayla-app'
+      config:
+        baseUrl: !!js process.env.AYLA_BASE_URL ?? 'http://127.0.0.1:8100'
+        username: !!js process.env.AYLA_BOT_USER ?? ''
+        password: !!js process.env.AYLA_BOT_PASSWORD ?? ''
+        mode: auto
+        workspaceDir: ''
