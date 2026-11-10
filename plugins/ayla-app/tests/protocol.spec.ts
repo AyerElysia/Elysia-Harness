@@ -97,9 +97,12 @@ describe('Ayla inbound frames', () => {
     }
   })
 
-  it('rejects an image part without a media id or media type', () => {
+  it('requires a media id but accepts an image part without a declared type', () => {
     expect(parseFrame(frame({}, { parts: [{ type: 'image', media_type: 'image/png' }] }))).toBeUndefined()
-    expect(parseFrame(frame({}, { parts: [{ type: 'image', media_id: 'a1' }] }))).toBeUndefined()
+    // Ayla omits media_type: its media row already stores the MIME type and the
+    // plugin sniffs the downloaded bytes, so the id alone is a complete part.
+    const parsed = parseFrame(frame({}, { parts: [{ type: 'image', media_id: 'a1' }] }))
+    expect(parsed?.message.parts).toEqual([{ type: 'image', media_id: 'a1' }])
   })
 })
 

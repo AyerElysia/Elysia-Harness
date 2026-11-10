@@ -13,11 +13,17 @@
     },
     "./src/*": "./src/*",
     "./package.json": "./package.json",
-    "./cordis.patch.yml": "./cordis.patch.yml"
+    "./cordis.patch.yml": "./cordis.patch.yml",
+    "./client": {
+      "types": "./src/client/index.tsx",
+      "default": "./lib/client.js"
+    }
   },
   "files": [
     "src/**/*.ts",
-    "cordis.patch.yml"
+    "cordis.patch.yml",
+    "src/**/*.tsx",
+    "lib/client.js"
   ],
   "license": "MIT",
   "dependencies": {},
@@ -42,11 +48,25 @@
     "@deepseek-ai/dsh-llm": "workspace:*",
     "@deepseek-ai/dsh-scope": "workspace:*",
     "@deepseek-ai/dsh-session": "workspace:*",
-    "@deepseek-ai/dsh-tools": "workspace:*"
+    "@deepseek-ai/dsh-tools": "workspace:*",
+    "esbuild": "0.28.2",
+    "react": "18.3.1",
+    "@deepseek-ai/dsh-client-locale": "workspace:*",
+    "@deepseek-ai/dsh-client-ui-settings": "workspace:*"
   },
   "dsh": {
     "bundle": {
       "patch": "./cordis.patch.yml"
+    },
+    "client": {
+      "platform": "web",
+      "inject": [
+        "@deepseek-ai/dsh-client-locale",
+        "@deepseek-ai/dsh-client-ui-settings"
+      ]
     }
+  },
+  "scripts": {
+    "build": "node build.mjs"
   }
 }

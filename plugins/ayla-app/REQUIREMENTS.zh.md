@@ -237,6 +237,23 @@ Ayla → DSH 的回执与错误帧：
 
 其余（重连退避、限额、心跳周期、提示词）**不进设置页**，走 `cordis.patch.yml` 配置或代码常量。
 
+#### 挂载策略（初版写错，已更正）
+
+**profile 行不得写 `disabled`。** DSH 设置页只能编辑**已加载条目**的字段；
+若用 `disabled: process.env.AYLA_BASE_URL === undefined` 控制挂载，未配环境变量时
+整条不挂载，用户在设置页里根本看不到这个插件，也就永远无法从界面启用它。
+
+正确做法（照 `dsh-web-deepseek-api` 的既有形态）：
+
+1. **无条件挂载**，`config` 里的 `!!js process.env.AYLA_* ?? 默认值` 只作为**首次加载的默认值**；
+2. **插件自身判断凭据**：`username` 或 `password` 去空白后为空 → 记一行
+   `Ayla 通道未启用：设置页缺少账号或密码`，**不建 socket、不注册工具**，然后正常返回；
+3. 用户填好字段后重载 profile 即生效（`.volatile()` 改的是下层的 Cordis patch，
+   插件在 `apply()` 时读取一次，因此**必须重载**，不会热生效）。
+
+测试锁：`tests/plugin.spec.ts` 的「not yet configured」两条断言
+—— 空凭据 / 纯空白凭据都只记日志、零 socket、零 effect。
+
 ### 8.4 standalone 形态
 
 - 自建固定 session id `ayla-channel`，`cwd` 取自 `workspaceDir`（绝对路径；为空用 `process.cwd()`）。

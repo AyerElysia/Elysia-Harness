@@ -26,7 +26,12 @@ export type AylaConversationType = 'private' | 'group'
 /** One part of an inbound message, in the order Ayla sent it. */
 export type AylaInboundPart =
   | { readonly type: 'text'; readonly text: string }
-  | { readonly type: 'image'; readonly media_id: string; readonly media_type: string }
+  | {
+    readonly type: 'image'
+    readonly media_id: string
+    /** Optional: Ayla's media table already records the type, so a frame may omit it. */
+    readonly media_type?: string
+  }
 
 /** An inbound message as Ayla serializes it. Images carry no bytes, only a media id. */
 export interface InboundMessagePayload {
@@ -155,8 +160,14 @@ function parsePart(value: unknown): AylaInboundPart | undefined {
     return typeof value.text === 'string' ? { type: 'text', text: value.text } : undefined
   }
   if (value.type === 'image') {
-    if (!isNonEmptyString(value.media_id) || !isNonEmptyString(value.media_type)) return undefined
-    return { type: 'image', media_id: value.media_id, media_type: value.media_type }
+    // Ayla omits media_type: its media row already stores the object's MIME type,
+    // and the plugin sniffs the downloaded bytes anyway. Requiring it here dropped
+    // every image frame before onInbound ever ran.
+    if (!isNonEmptyString(value.media_id)) return undefined
+    const declared = isNonEmptyString(value.media_type) ? value.media_type : undefined
+    return declared === undefined
+      ? { type: 'image', media_id: value.media_id }
+      : { type: 'image', media_id: value.media_id, media_type: declared }
   }
   // voice, file, video, emoji, mixed, share: the plugin cannot present them, so
   // the whole message is rejected rather than narrowed to the parts it can show.
