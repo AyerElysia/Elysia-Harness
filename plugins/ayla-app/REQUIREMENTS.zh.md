@@ -130,9 +130,25 @@ Ayla 前端 ──WS──► Ayla 后端(chat) ──落库 + broadcast_message
 
 **图片不给字节，给 `media_id`**：DSH 用同一枚 JWT 调 `POST /api/v1/media/{media_id}:sign` 取短时 GET URL 再下载，然后走 `ctx.attachments.admitPromptContent()` 准入。这样 WS 帧保持小、不阻塞心跳，且复用 Ayla 已有的媒体鉴权（`media/views.py`:252）。
 
-未知 `parts[].type`（voice/file/video/emoji/mixed/share）：**整条消息不可投递**，Ayla 侧标记 `failed` 并记录原因；DSH 不得丢弃未知部分后只投文字——那等于伪造她收全了。
+未知 `parts[].type` 的处置，**已按实现分档**（原稿把 `mention`/`mixed` 与 voice/file 并列，实现时判定需要细分）：
+
+| type | 处置 | 理由 |
+|---|---|---|
+| `text` | 原样投递 | — |
+| `image` | `media_id` → 签名 URL → 下载 → 准入 | — |
+| `mention` | **展开成 `@昵称` 文本**，不整条拒绝 | 丢掉它等于让她看不见自己被点名 |
+| `mixed` | **按 `segments` 逐段投影**（text/image/mention） | 有真实可投递的段，逐段投影比整条拒绝更保真 |
+| `voice` / `file` / `video` / `emoji` / `share` | **整条消息不可投递**，Ayla 侧标 `failed` 并记原因 | 本期不支持，且丢弃后只投文字等于伪造她收全了 |
+
+实现见 `Ayla/backend/apps/elysia_bridge/services.py` 的 `SUPPORTED_PART_TYPES` 与
+`build_inbound_parts`。改判据只需动这一处。
 
 ### 7.2 出站帧（DSH → Ayla）
+
+> **本节已按实现回填。** 初版只定义了 `error`，漏了成功回执 `sent` —— 没有它
+> 每次 `send_text` 都会超时并误报「投递状态未知」。实现见
+> `Ayla/backend/apps/elysia_bridge/consumers.py` 与
+> `plugins/ayla-app/src/protocol.ts`，两侧已对齐。
 
 ```json
 { "v": 1, "type": "reply", "client_message_id": "ayla-channel:875:1:0",
@@ -149,13 +165,33 @@ Ayla 前端 ──WS──► Ayla 后端(chat) ──落库 + broadcast_message
 | `reply` | 发一条文本消息。`conversation_type` 必须与真实类型一致，否则 Ayla 回 `error`（防止把私聊回复发进群） |
 | `ack` | 确认已处理到 `seq`（含），Ayla 据此推进 outbox 游标；未 ack 的会重投 |
 
-Ayla → DSH 的错误帧：
+Ayla → DSH 的回执与错误帧：
+
+```json
+{ "v": 1, "type": "sent", "client_message_id": "…", "message_id": "90211", "seq": 813 }
+```
 
 ```json
 { "v": 1, "type": "error", "client_message_id": "…", "code": "conversation_not_found", "detail": "…" }
 ```
 
-DSH 收到 `error` 后把该次 `send_text` 记为失败（带 `stoppedAt`），不重试。
+| 帧 | 语义 |
+|---|---|
+| `sent` | `reply` 已落库。DSH 据此回填 `send_text` 的 `messageId`。`seq` 可选（Ayla 建帧时若尚无 seq 可只回 `message_id`） |
+| `error` | `reply` 被拒。DSH 把该次 `send_text` 记为失败（带 `stoppedAt`），**不重试** |
+
+**error code 词表**（实现口径，DSH 按 code 分支时以此为准；未列出的 code 一律按失败处理）：
+
+| code | 触发条件 |
+|---|---|
+| `conversation_not_found` | 会话不存在 |
+| `conversation_not_a_member` | 爱莉不是该会话成员 |
+| `conversation_type_mismatch` | 声明类型与真实类型不一致（**不落库**） |
+| `content_too_large` | 正文超 32 KiB（UTF-8 字节） |
+| `bad_frame` / `unknown_type` / `unsupported_version` | 帧结构非法 |
+
+**close code**：`4401` 未认证（沿用 accounts 约定）、`4403` 非爱莉账号、
+`4409` 被新连接顶替、`4413` 超帧上限。
 
 ### 7.3 心跳与重连
 
@@ -224,6 +260,11 @@ DSH 收到 `error` 后把该次 `send_text` 记为失败（带 `stoppedAt`），
 - 入站 outbox 与消息落库同事务写入，字段至少：`message`、`status`（pending/delivered/failed/dead）、`attempts`、`next_attempt_at`、`last_error`、`created_at`。
 - WS 断开期间消息堆积，重连后按 `seq` 升序补投；收到 `ack` 才置 `delivered`。
 - 同一会话严格串行；跨会话可并发。
+- **取号实现**：专用序号行 `AylaChannelSequence` + `SELECT ... FOR UPDATE`。
+  文档初版写的「`SELECT ... FOR UPDATE` 取 max+1」经 4 连接压测在 MySQL 8
+  REPEATABLE READ 下**不可用**（表尾是不存在的 gap，多个事务可同时持有该 gap
+  的 X 锁，实测三种写法均为 `Deadlock 1213` 或 `Duplicate entry 1062`）。
+  改用专用序号行后 16 并发全通过，序号连续，最大等锁 0.042s。
 - 超过重投上限 → `dead`，保留现场，人工处置，不静默丢弃。
 - 出站 `reply` 的幂等：Ayla 用 `client_message_id` 派生幂等键（`"ayla-" + sha256(id).slice(0,24)`，≤64 字符，符合 `Message.idempotency_key` 的 `max_length=64`）。
 
@@ -330,12 +371,19 @@ DSH 收到 `error` 后把该次 `send_text` 记为失败（带 `stoppedAt`），
 
 正确口径：**`Ayla/backend/{apps,config,tests}/` 下的 `*.py` 零命中**。
 
-### 13.6 保留
+### 13.6 保留（已按实际执行回填）
 
 - `ElysiaProfile`（`user`/`enabled`/`display_name`/`created_at`）
-- `models.generate_elysia_stream_id`（**B4 依赖，不得删**）
-- `services.py` 的异常类骨架（1–81）与尾部（1247–1278）
+- `services.py` 的异常类骨架 `BridgeError` / `ProfileNotConfigured` 与 `broadcast_elysia_profile_updated`（共 63 行）
 - `views.py` 的 profile 管理端点（语义改为探测通道连通性）
+
+> **`models.generate_elysia_stream_id` 已删除**，与本节初版写的「B4 依赖，不得删」不符。
+> 原因：初版的约束前提是 `serializers.py:17` 存在模块级 import；D-2 把那个 import
+> 一并移除后，全仓消费者归零，留着就是死代码。删除时算法内联进迁移 0004 的
+> `_derive_stream_id`，回滚仍可确定性重建。见 §14-R10 的更正。
+>
+> 实测验证：删除后 `manage.py check` 通过、URLconf 正常加载、
+> `serializers.py` 不再引用该符号。
 
 > 主动授权：**遇到旧时代遗留的废弃代码直接删除**，不为其写兼容层或迁移路径。但删除必须遵守 13.3 的连带修改清单——**先改 import 点，再删被 import 的文件**，每步之后跑一次 `manage.py check`。
 
@@ -352,7 +400,7 @@ DSH 收到 `error` 后把该次 `send_text` 记为失败（带 `stoppedAt`），
 | R7 | 出站不重试 | 与 `send_text` 契约一致，避免重复发送 | 网络抖动会丢该段；由她看到失败自行决定是否重发 |
 | R8 | 删除旧桥接全部代码 | 协议已不存在，保留只会误导 | 语音/直播需在下一期从头设计 |
 | R9 | 按审计结果而非初版清单执行删除 | 初版 5 处事实错误，3 处会导致后端无法启动或全站 500 | 删除顺序被约束为「先改 import 点、再删文件」，每步 `manage.py check` |
-| R10 | `generate_elysia_stream_id` 保留不删 | `serializers.py:17` 模块级 import，删了 URLconf 挂 | 该函数成为遗留孤儿，但代价远小于全站 500 |
+| R10 | ~~`generate_elysia_stream_id` 保留不删~~ → **已更正为删除** | 初版理由（`serializers.py:17` 模块级 import）在 D-2 移除该 import 后不再成立；全仓消费者归零 | 算法内联进迁移 0004 供回滚；实测 check 通过、URLconf 正常 |
 
 ## 15. 实现后需回填
 

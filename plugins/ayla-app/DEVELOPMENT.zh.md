@@ -288,10 +288,29 @@ function assertBaseUrl(raw: string): URL { ... }
 
 校验规则：`http:` 仅允许 `127.0.0.1`、`::1`、`localhost`、`10/8`、`172.16/12`、`192.168/16`；`https:` 任意。
 
-### 验收
+### 验收（已按实际可跑的命令回填）
 
-- `pnpm exec tsc --noEmit -p plugins/ayla-app` 零 diagnostics。
-- `pnpm exec vitest run --config dsh/vitest.elysia.config.ts ../plugins/ayla-app/tests` 通过。
+```bash
+cd Elysia-Harness
+dsh/node_modules/.bin/tsc --noEmit -p plugins/ayla-app/tsconfig.json --typeRoots ./dsh/node_modules/@types
+```
+零 diagnostics。**`--typeRoots` 是必须的**：`@types/node` 只装在
+`dsh/node_modules/@types`，pnpm 不向 `plugins/*` 提升，而 `tsconfig.base.json`
+的 `types: ["node"]` 按插件目录解析 → 不带它会报 TS2688。这是仓库既有环境
+缺口（既有插件 `request-archive` 同样报），不是本插件引入。
+
+```bash
+cd Elysia-Harness/dsh
+node_modules/.bin/vitest run --config vitest.elysia.config.ts ../plugins/ayla-app/tests
+```
+
+**Config 写法更正**：初版给的 `export const Config: z<Config> = z.object({...})`
+在 `exactOptionalPropertyTypes: true` 下报 TS2375。正确写法是不带类型注解的
+`export const Config = z.object({...})`。
+
+**类型 import 更正**：初版建议「用 `import type {} from '@deepseek-ai/dsh-…'`
+拿服务类型」。实际会把 dsh 源码拉进 program，在 `rootDir: src` 上报
+TS6059/TS6307。正确做法是用 `ctx.get('name') !== undefined` 做存在性判断。
 
 ## 7. D-6 形态判定与两条实现
 
@@ -376,11 +395,14 @@ const admitted = await ctx.attachments.admitPromptContent(parts)
 
 ## 9. D-8 挂载与配置
 
-`homes/web/profiles/web/cordis.patch.yml` 的 `insert` 段追加：
+> **已实现。** 下面是落地后的实际内容，不是计划稿。
+
+`homes/web/profiles/web/cordis.patch.yml` 的 `insert` 段，排在 `elysia-request-archive` 之后：
 
 ```yaml
     - id: elysia-ayla-app
       name: '@elysia/ayla-app'
+      disabled: !!js process.env.AYLA_BASE_URL === undefined
       config:
         baseUrl: !!js process.env.AYLA_BASE_URL ?? 'http://127.0.0.1:8100'
         username: !!js process.env.AYLA_BOT_USER ?? ''
@@ -389,9 +411,65 @@ const admitted = await ctx.attachments.admitPromptContent(parts)
         workspaceDir: ''
 ```
 
-同时把新包加进 `homes/web/profiles/web/package.json` 的 `dependencies`（`file:../../../../plugins/ayla-app`）与 `dsh.profile.bundles`。
+`disabled` 是本轮补上的：初版漏了它。没有这一行，未配置 Ayla 的机器会把插件也挂上，
+插件随即以空账号密码去连 `http://127.0.0.1:8100` 并无限退避重连；其余三个渠道都用
+同一个「未配置就禁用」开关，Ayla 不能例外。
 
-> **部署坑（已踩过）**：`file:` 依赖会在 `node_modules/@elysia/ayla-app` 留一份副本，只改源码不重装不生效。部署后必须逐文件比对 SHA-256。
+同时把新包加进 `homes/web/profiles/web/package.json` 的 `dependencies`
+（`file:../../../../plugins/ayla-app`）与 `dsh.profile.bundles`（紧跟
+`@elysia/conscious-mind`）。
+
+### 安装与副本校验（已执行）
+
+```sh
+cd homes/web/profiles/web
+pnpm install --offline   # 首次：需要联网解析 registry 元数据时去掉 --offline
+# 之后 lockfile 未变时可用：pnpm install --offline --frozen-lockfile --trust-lockfile
+```
+
+> **部署坑（已踩过）**：`file:` 依赖会在 `node_modules/@elysia/ayla-app` 留一份副本，
+> 只改源码不重装不生效。部署后必须逐文件比对 SHA-256：
+>
+> ```sh
+> SRC=$(pwd)/plugins/ayla-app
+> DST=$(pwd)/homes/web/profiles/web/node_modules/@elysia/ayla-app
+> (cd "$DST" && find . -type f | sort | while read -r f; do
+>   [ "$(sha256sum "$f" | cut -d' ' -f1)" = "$(sha256sum "$SRC/$f" | cut -d' ' -f1)" ] \
+>     && echo "SAME $f" || echo "DIFF $f"
+> done)
+> ```
+
+副本只含 `package.json`、`cordis.patch.yml`、`README.zh.md` 与 `src/*.ts`
+（`package.json` 的 `files` 白名单），`tests/`、`tsconfig.json`、`*.md` 设计文档
+不进副本，所以比对时只需比副本里实际存在的文件。
+
+### 验证（本轮实际执行）
+
+```sh
+# 组合结果：两条 elysia-ayla-app 行（bundle 层一条、profile 层一条，都是既有布局）
+cd dsh && DSH_HOME="<repo>/homes/web" node --import tsx/esm apps/cli/src/bin.ts \
+  --profile web --dump-config | grep -A 10 'id: elysia-ayla-app'
+
+# 插件测试
+cd dsh && node_modules/.bin/vitest run --config vitest.elysia.config.ts ../plugins/ayla-app/tests
+```
+
+`--dump-config` 能跑通说明 YAML 被 profile 正常解析、bundle 能解析到包目录。
+**它不证明插件挂载成功**：真正的挂载验证是 D-9 的真实链路。
+
+> **重复行（既有布局，非本轮引入）**：`cordis.patch.yml` 里那一段 `insert`
+> 与五个插件各自的 bundle 行重复（`conscious-mind`、`qq-napcat`、`feishu-app`、
+> `kook-bot`、`request-archive` 都已在 `dsh.profile.bundles` 里各有一条，bundle 的
+> `cordis.patch.yml` 又各自 `insert` 一条）。`--dump-config` 因此对每个 id 打印两条。
+>
+> 挂载层面不是两份：Loader 的 root group 以 id 为键（`EntryGroup.update` 用
+> `Object.fromEntries` 收 `data`），同一批组成里同 id 只挂最后一个——即 profile 层
+> 那条。所以这既有的重复**恰好**是本轮 `disabled` 能生效的原因：bundle 层那条没有
+> `disabled`，profile 层那条把它整体替换掉。`process.env.AYLA_BASE_URL === undefined`
+> 若写在 bundle 层，会被 profile 层无 `disabled` 的行覆盖而失效。
+>
+> 本轮没有顺手收敛成单条：那是独立的结构改动，且同样影响其余五个插件的行为，
+> 需要单独验收。
 
 ## 10. D-9 验收与文档回填
 
