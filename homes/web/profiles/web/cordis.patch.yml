@@ -87,7 +87,43 @@
       name: '@elysia/request-archive'
       config:
         dir: !!js process.env.ELYSIA_REQUESTS_DIR ?? process.env.DSH_HOME + '/requests'
+    # Full upstream livestream body/console; local Breeze and external Livehime publisher.
+    # Ayla channel: DSH dials the Ayla backend; opens no port of its own.
+    - id: elysia-dsh-livestream
+      name: '@elysia/dsh-livestream'
+      config:
+        baseDir: !!js process.env.ELYSIA_PROMPTS_DIR ?? process.env.DSH_HOME +
+          '/standing-prompts'
+        files:
+          - SOUL.md
+          - USER.md
+          - MEMORY.md
+          - EXISTENCE.md
+          - TOOLS.md
+          - LIVE.md
+        stagePort: !!js Number(process.env.ELYSIA_STAGE_PORT ?? 3300)
+        publisher: livehime
+        allowedWriteActions: []
     - id: elysia-context-inspector
       name: '@elysia/context-inspector'
       config:
         dir: !!js process.env.ELYSIA_REQUESTS_DIR ?? process.env.DSH_HOME + '/requests'
+- id: ui-settings-general
+  name: "@deepseek-ai/dsh-client-ui-settings-general"
+  config:
+    welcomeNoticeVersion: 2026-09-28.1
+
+- insert:
+    - id: remote-web-ui
+      name: "@linxin666/dsh-remote-web-ui"
+      config:
+        autoTunnel: false
+        publicBaseUrl: "https://climb-writing-bidder-here.trycloudflare.com"
+- id: elysia-ayla-app
+  name: "@elysia/ayla-app"
+  config:
+    baseUrl: !!js process.env.AYLA_BASE_URL ?? 'http://127.0.0.1:8100'
+    username: elysia
+    password: !!js process.env.AYLA_BOT_PASSWORD ?? ''
+    mode: auto
+    workspaceDir: ""

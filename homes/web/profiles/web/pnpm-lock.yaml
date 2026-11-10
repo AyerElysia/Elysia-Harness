@@ -8,12 +8,18 @@ importers:
 
   .:
     dependencies:
+      '@elysia/ayla-app':
+        specifier: file:../../../../plugins/ayla-app
+        version: file:../../../../plugins/ayla-app
       '@elysia/conscious-mind':
         specifier: file:../../../../plugins/conscious-mind
         version: file:../../../../plugins/conscious-mind(@deepseek-ai/schemastery@3.18.5)
       '@elysia/context-inspector':
         specifier: file:../../../../plugins/context-inspector
         version: file:../../../../plugins/context-inspector(@deepseek-ai/schemastery@3.18.5)(@elysia/request-archive@file:../../../../plugins/request-archive(@deepseek-ai/schemastery@3.18.5))
+      '@elysia/dsh-livestream':
+        specifier: file:../../../../plugins/dsh-livestream
+        version: file:../../../../plugins/dsh-livestream(@deepseek-ai/schemastery@3.18.5)(@elysia/conscious-mind@file:../../../../plugins/conscious-mind(@deepseek-ai/schemastery@3.18.5))
       '@elysia/feishu-app':
         specifier: file:../../../../plugins/feishu-app
         version: file:../../../../plugins/feishu-app(@deepseek-ai/schemastery@3.18.5)(@elysia/conscious-mind@file:../../../../plugins/conscious-mind(@deepseek-ai/schemastery@3.18.5))
@@ -41,6 +47,18 @@ packages:
   '@deepseek-ai/schemastery@3.18.5':
     resolution: {integrity: sha512-Mnobvqf9rHsZYv4g5edj5ddxS1oF1kIdSlz0DunUgnY3LWG5F26MqvH3YOOsSaodCgyzJ16OMN9O99/s5Crtdw==}
 
+  '@elysia/ayla-app@file:../../../../plugins/ayla-app':
+    resolution: {directory: ../../../../plugins/ayla-app, type: directory}
+    peerDependencies:
+      '@deepseek-ai/cordis': workspace:~
+      '@deepseek-ai/dsh-agent': workspace:*
+      '@deepseek-ai/dsh-attachment': workspace:*
+      '@deepseek-ai/dsh-brand': workspace:*
+      '@deepseek-ai/dsh-llm': workspace:*
+      '@deepseek-ai/dsh-session': workspace:*
+      '@deepseek-ai/dsh-tools': workspace:*
+      '@deepseek-ai/schemastery': workspace:~
+
   '@elysia/conscious-mind@file:../../../../plugins/conscious-mind':
     resolution: {directory: ../../../../plugins/conscious-mind, type: directory}
     peerDependencies:
@@ -49,6 +67,10 @@ packages:
       '@deepseek-ai/dsh-agent-default-model': workspace:*
       '@deepseek-ai/dsh-attachment': workspace:*
       '@deepseek-ai/dsh-brand': workspace:*
+      '@deepseek-ai/dsh-command-compact': workspace:*
+      '@deepseek-ai/dsh-commands': workspace:*
+      '@deepseek-ai/dsh-compaction': workspace:*
+      '@deepseek-ai/dsh-compaction-basic': workspace:*
       '@deepseek-ai/dsh-llm': workspace:*
       '@deepseek-ai/dsh-scope': workspace:*
       '@deepseek-ai/dsh-session': workspace:*
@@ -60,22 +82,54 @@ packages:
       '@deepseek-ai/schemastery': workspace:~
 
   '@elysia/context-inspector@file:../../../../plugins/context-inspector':
-    resolution:
-      directory: ../../../../plugins/context-inspector
-      type: directory
+    resolution: {directory: ../../../../plugins/context-inspector, type: directory}
     peerDependencies:
       '@deepseek-ai/cordis': workspace:~
-      '@deepseek-ai/schemastery': workspace:~
-      '@deepseek-ai/dsh-typert-registry': workspace:*
       '@deepseek-ai/dsh-api-remote-access': workspace:*
+      '@deepseek-ai/dsh-api-session-controller': workspace:*
       '@deepseek-ai/dsh-client-connection': workspace:*
       '@deepseek-ai/dsh-client-locale': workspace:*
-      '@deepseek-ai/dsh-client-ui-slots': workspace:*
       '@deepseek-ai/dsh-client-ui-conversation': workspace:*
+      '@deepseek-ai/dsh-client-ui-primitives': workspace:*
       '@deepseek-ai/dsh-client-ui-renderer': workspace:*
-      '@elysia/request-archive': workspace:*
+      '@deepseek-ai/dsh-client-ui-session': workspace:*
+      '@deepseek-ai/dsh-client-ui-slots': workspace:*
+      '@deepseek-ai/dsh-compaction': workspace:*
+      '@deepseek-ai/dsh-compaction-image-offload': workspace:*
+      '@deepseek-ai/dsh-llm': workspace:*
+      '@deepseek-ai/dsh-session': workspace:*
+      '@deepseek-ai/dsh-session-projection': workspace:*
       '@deepseek-ai/dsh-typert-protocol': workspace:*
+      '@deepseek-ai/dsh-typert-registry': workspace:*
+      '@deepseek-ai/schemastery': workspace:~
+      '@elysia/request-archive': workspace:*
+
+  '@elysia/dsh-livestream@file:../../../../plugins/dsh-livestream':
+    resolution: {directory: ../../../../plugins/dsh-livestream, type: directory}
+    peerDependencies:
+      '@deepseek-ai/cordis': workspace:~
+      '@deepseek-ai/dsh-agent': workspace:*
+      '@deepseek-ai/dsh-agent-default-model': workspace:*
+      '@deepseek-ai/dsh-api-gateway': workspace:*
+      '@deepseek-ai/dsh-api-remote-access': workspace:*
       '@deepseek-ai/dsh-api-session-controller': workspace:*
+      '@deepseek-ai/dsh-api-workspace-controller': workspace:*
+      '@deepseek-ai/dsh-brand': workspace:*
+      '@deepseek-ai/dsh-client-connection': workspace:*
+      '@deepseek-ai/dsh-client-ui-layout': workspace:*
+      '@deepseek-ai/dsh-client-ui-sidebar': workspace:*
+      '@deepseek-ai/dsh-client-ui-workspace': workspace:*
+      '@deepseek-ai/dsh-credentials': workspace:*
+      '@deepseek-ai/dsh-llm': workspace:*
+      '@deepseek-ai/dsh-scope': workspace:*
+      '@deepseek-ai/dsh-session': workspace:*
+      '@deepseek-ai/dsh-session-persistence': workspace:*
+      '@deepseek-ai/dsh-system-prompt': workspace:*
+      '@deepseek-ai/dsh-tools': workspace:*
+      '@deepseek-ai/dsh-typert-protocol': workspace:*
+      '@deepseek-ai/dsh-typert-registry': workspace:*
+      '@deepseek-ai/schemastery': workspace:~
+      '@elysia/conscious-mind': workspace:*
 
   '@elysia/feishu-app@file:../../../../plugins/feishu-app':
     resolution: {directory: ../../../../plugins/feishu-app, type: directory}
@@ -107,6 +161,9 @@ packages:
       '@deepseek-ai/cordis': workspace:~
       '@deepseek-ai/dsh-llm': workspace:*
       '@deepseek-ai/schemastery': workspace:~
+
+  '@huggingface/tokenizers@0.2.0':
+    resolution: {integrity: sha512-LidMHe1FpcSYH4vcSjXooda34pC0M8m1gmDOv7SQi6Iv+ib1zX7J3sHBCC9/3FPCkn2k1b55FneVqMRxrr99pg==}
 
   '@linxin666/dsh-remote-web-ui@0.4.8':
     resolution: {integrity: sha512-MqmTb0IL1wGvUYdKFN4v5blj7F839hPMzl1BhUeYKp8xBFK3XT1s7YC4Ks1h/G0N6sIuRSeYq/UpAuDwtPVyKg==}
@@ -173,6 +230,9 @@ packages:
     engines: {node: '>= 14.6'}
     hasBin: true
 
+  zod@4.4.3:
+    resolution: {integrity: sha512-ytENFjIJFl2UwYglde2jchW2Hwm4GJFLDiSXWdTrJQBIN9Fcyp7n4DhxJEiWNAJMV1/BqWfW/kkg71UDcHJyTQ==}
+
   zod@4.6.7:
     resolution: {integrity: sha512-g8W2D2kU6a8untc053fX1uVBKzM7yqAxW/3zwk83+6RyF2+SKOuV+c0wBDhUwzV1PaGapmZH+rmcUzPf+3CGwg==}
 
@@ -185,14 +245,27 @@ snapshots:
       '@deepseek-ai/cosmokit': 1.8.6
       '@standard-schema/spec': 1.1.0
 
+  '@elysia/ayla-app@file:../../../../plugins/ayla-app': {}
+
   '@elysia/conscious-mind@file:../../../../plugins/conscious-mind(@deepseek-ai/schemastery@3.18.5)':
     dependencies:
       '@deepseek-ai/schemastery': 3.18.5
 
-  ? '@elysia/context-inspector@file:../../../../plugins/context-inspector(@deepseek-ai/schemastery@3.18.5)(@elysia/request-archive@file:../../../../plugins/request-archive(@deepseek-ai/schemastery@3.18.5))'
-  : dependencies:
+  '@elysia/context-inspector@file:../../../../plugins/context-inspector(@deepseek-ai/schemastery@3.18.5)(@elysia/request-archive@file:../../../../plugins/request-archive(@deepseek-ai/schemastery@3.18.5))':
+    dependencies:
       '@deepseek-ai/schemastery': 3.18.5
       '@elysia/request-archive': file:../../../../plugins/request-archive(@deepseek-ai/schemastery@3.18.5)
+      '@huggingface/tokenizers': 0.2.0
+      zod: 4.4.3
+
+  '@elysia/dsh-livestream@file:../../../../plugins/dsh-livestream(@deepseek-ai/schemastery@3.18.5)(@elysia/conscious-mind@file:../../../../plugins/conscious-mind(@deepseek-ai/schemastery@3.18.5))':
+    dependencies:
+      '@deepseek-ai/schemastery': 3.18.5
+      '@elysia/conscious-mind': file:../../../../plugins/conscious-mind(@deepseek-ai/schemastery@3.18.5)
+      ws: 8.21.3
+    transitivePeerDependencies:
+      - bufferutil
+      - utf-8-validate
 
   '@elysia/feishu-app@file:../../../../plugins/feishu-app(@deepseek-ai/schemastery@3.18.5)(@elysia/conscious-mind@file:../../../../plugins/conscious-mind(@deepseek-ai/schemastery@3.18.5))':
     dependencies:
@@ -220,6 +293,8 @@ snapshots:
   '@elysia/request-archive@file:../../../../plugins/request-archive(@deepseek-ai/schemastery@3.18.5)':
     dependencies:
       '@deepseek-ai/schemastery': 3.18.5
+
+  '@huggingface/tokenizers@0.2.0': {}
 
   '@linxin666/dsh-remote-web-ui@0.4.8':
     dependencies:
@@ -254,5 +329,7 @@ snapshots:
   ws@8.21.3: {}
 
   yaml@2.9.1: {}
+
+  zod@4.4.3: {}
 
   zod@4.6.7: {}

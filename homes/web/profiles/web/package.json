@@ -7,9 +7,11 @@
     "@elysia/kook-bot": "file:../../../../plugins/kook-bot",
     "@elysia/qq-napcat": "file:../../../../plugins/qq-napcat",
     "@elysia/request-archive": "file:../../../../plugins/request-archive",
+    "@elysia/ayla-app": "file:../../../../plugins/ayla-app",
     "@linxin666/dsh-remote-web-ui": "0.4.8",
     "dshmarket": "github:dsh-market/dsh-market",
-    "@elysia/context-inspector": "file:../../../../plugins/context-inspector"
+    "@elysia/context-inspector": "file:../../../../plugins/context-inspector",
+    "@elysia/dsh-livestream": "file:../../../../plugins/dsh-livestream"
   },
   "dsh": {
     "profile": {
@@ -21,6 +23,8 @@
         "@elysia/feishu-app",
         "@elysia/kook-bot",
         "@elysia/request-archive",
+        "@elysia/ayla-app",
+        "@elysia/dsh-livestream",
         "@elysia/context-inspector",
         "@linxin666/dsh-remote-web-ui",
         "@deepseek-ai/dsh-experimental-plugin-market-bundle",
