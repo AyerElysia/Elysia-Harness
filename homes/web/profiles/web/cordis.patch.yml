@@ -134,3 +134,7 @@
     password: !!js process.env.AYLA_BOT_PASSWORD ?? ''
     mode: auto
     workspaceDir: ''
+- id: ui-chat
+  name: "@deepseek-ai/dsh-client-ui-chat"
+  config:
+    transcriptView: verbose
