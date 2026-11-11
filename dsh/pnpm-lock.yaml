@@ -241,10 +241,6 @@ importers:
         version: 4.4.3
 
   ../plugins/ayla-app:
-    dependencies:
-      '@deepseek-ai/schemastery':
-        specifier: link:../../dsh/vendor/schemastery
-        version: link:../../dsh/vendor/schemastery
     devDependencies:
       '@deepseek-ai/cordis':
         specifier: workspace:~
@@ -261,6 +257,12 @@ importers:
       '@deepseek-ai/dsh-brand':
         specifier: workspace:*
         version: link:../../dsh/packages/util/brand
+      '@deepseek-ai/dsh-client-locale':
+        specifier: workspace:*
+        version: link:../../dsh/packages/client/locale
+      '@deepseek-ai/dsh-client-ui-settings':
+        specifier: workspace:*
+        version: link:../../dsh/packages/client/ui-settings
       '@deepseek-ai/dsh-llm':
         specifier: workspace:*
         version: link:../../dsh/packages/llm/llm
@@ -276,6 +278,15 @@ importers:
       '@deepseek-ai/dsh-tools':
         specifier: workspace:*
         version: link:../../dsh/packages/core/tools
+      '@deepseek-ai/schemastery':
+        specifier: link:../../dsh/vendor/schemastery
+        version: link:../../dsh/vendor/schemastery
+      esbuild:
+        specifier: 0.28.2
+        version: 0.28.2
+      react:
+        specifier: 18.3.1
+        version: 18.3.1
 
   ../plugins/conscious-mind:
     devDependencies:
@@ -589,23 +600,19 @@ importers:
         version: 4.1.11(@opentelemetry/api@1.9.1)(@types/node@22.20.1)(@vitest/coverage-v8@4.1.11)(happy-dom@20.11.6)(jsdom@29.1.1(@noble/hashes@2.4.0))(vite@8.2.2(@types/node@22.20.1)(esbuild@0.28.2)(jiti@2.7.0)(tsx@4.23.13)(yaml@2.9.0))
 
   ../plugins/feishu-app:
-    dependencies:
-      '@deepseek-ai/schemastery':
-        specifier: link:../../dsh/vendor/schemastery
-        version: link:../../dsh/vendor/schemastery
     devDependencies:
       '@deepseek-ai/cordis':
         specifier: workspace:~
         version: link:../../dsh/vendor/cordis
+      '@deepseek-ai/schemastery':
+        specifier: link:../../dsh/vendor/schemastery
+        version: link:../../dsh/vendor/schemastery
       '@elysia/conscious-mind':
         specifier: workspace:*
         version: link:../conscious-mind
 
   ../plugins/kook-bot:
     dependencies:
-      '@deepseek-ai/schemastery':
-        specifier: link:../../dsh/vendor/schemastery
-        version: link:../../dsh/vendor/schemastery
       ws:
         specifier: 8.21.3
         version: 8.21.3
@@ -616,52 +623,12 @@ importers:
       '@deepseek-ai/dsh-attachment':
         specifier: workspace:*
         version: link:../../dsh/packages/attachment/attachment
-      '@elysia/conscious-mind':
-        specifier: workspace:*
-        version: link:../conscious-mind
-
-  ../plugins/livestream:
-    dependencies:
       '@deepseek-ai/schemastery':
         specifier: link:../../dsh/vendor/schemastery
         version: link:../../dsh/vendor/schemastery
-      ws:
-        specifier: 8.21.3
-        version: 8.21.3
-    devDependencies:
-      '@deepseek-ai/cordis':
-        specifier: workspace:~
-        version: link:../../dsh/vendor/cordis
-      '@deepseek-ai/dsh-agent':
-        specifier: workspace:*
-        version: link:../../dsh/packages/core/agent
-      '@deepseek-ai/dsh-agent-default-model':
-        specifier: workspace:*
-        version: link:../../dsh/packages/core/agent-default-model
-      '@deepseek-ai/dsh-brand':
-        specifier: workspace:*
-        version: link:../../dsh/packages/util/brand
-      '@deepseek-ai/dsh-llm':
-        specifier: workspace:*
-        version: link:../../dsh/packages/llm/llm
-      '@deepseek-ai/dsh-session':
-        specifier: workspace:*
-        version: link:../../dsh/packages/core/session
-      '@deepseek-ai/dsh-system-prompt':
-        specifier: workspace:*
-        version: link:../../dsh/packages/core/system-prompt
-      '@deepseek-ai/dsh-tools':
-        specifier: workspace:*
-        version: link:../../dsh/packages/core/tools
       '@elysia/conscious-mind':
         specifier: workspace:*
         version: link:../conscious-mind
-      '@types/node':
-        specifier: ^22.20.1
-        version: 22.20.1
-      '@types/ws':
-        specifier: ^8.18.1
-        version: 8.18.1
 
   ../plugins/proactive-system:
     devDependencies:
@@ -677,9 +644,6 @@ importers:
 
   ../plugins/qq-napcat:
     dependencies:
-      '@deepseek-ai/schemastery':
-        specifier: link:../../dsh/vendor/schemastery
-        version: link:../../dsh/vendor/schemastery
       ws:
         specifier: 8.21.3
         version: 8.21.3
@@ -693,15 +657,14 @@ importers:
       '@deepseek-ai/dsh-tools':
         specifier: workspace:*
         version: link:../../dsh/packages/core/tools
+      '@deepseek-ai/schemastery':
+        specifier: link:../../dsh/vendor/schemastery
+        version: link:../../dsh/vendor/schemastery
       '@elysia/conscious-mind':
         specifier: workspace:*
         version: link:../conscious-mind
 
   ../plugins/request-archive:
-    dependencies:
-      '@deepseek-ai/schemastery':
-        specifier: link:../../dsh/vendor/schemastery
-        version: link:../../dsh/vendor/schemastery
     devDependencies:
       '@deepseek-ai/cordis':
         specifier: workspace:~
@@ -709,6 +672,9 @@ importers:
       '@deepseek-ai/dsh-llm':
         specifier: workspace:*
         version: link:../../dsh/packages/llm/llm
+      '@deepseek-ai/schemastery':
+        specifier: link:../../dsh/vendor/schemastery
+        version: link:../../dsh/vendor/schemastery
 
   ../plugins/subconscious:
     devDependencies:

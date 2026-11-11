@@ -88,7 +88,6 @@
       config:
         dir: !!js process.env.ELYSIA_REQUESTS_DIR ?? process.env.DSH_HOME + '/requests'
     # Full upstream livestream body/console; local Breeze and external Livehime publisher.
-    # Ayla channel: DSH dials the Ayla backend; opens no port of its own.
     - id: elysia-dsh-livestream
       name: '@elysia/dsh-livestream'
       config:

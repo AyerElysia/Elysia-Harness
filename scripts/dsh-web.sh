@@ -24,16 +24,15 @@ export DSH_AGENTS_HOME="$ROOT/homes/web/agents"
 export ELYSIA_KOOK_CONFIG="${ELYSIA_KOOK_CONFIG:-$ROOT/../config/plugins/kook_adapter/config.toml}"
 export ELYSIA_KOOK_LISTEN="${ELYSIA_KOOK_LISTEN:-1}"
 
-# Livestream surface. The room number is pinned so a normal restart keeps the
-# danmaku connection; set ELYSIA_LIVE_ROOM= (empty) for one run to stand the
-# surface down without editing the profile. The stage binds loopback only —
-# scripts/stage-tunnel.sh is the one place that widens reach.
+# Livestream environment defaults. The upstream plugin keeps room and response
+# state in its local settings. The stage stays on loopback; the desktop connects
+# through a local SSH forward.
 export ELYSIA_LIVE_ROOM="${ELYSIA_LIVE_ROOM:-31581575}"
 export ELYSIA_STAGE_PORT="${ELYSIA_STAGE_PORT:-3300}"
 export ELYSIA_STAGE_HOST="${ELYSIA_STAGE_HOST:-127.0.0.1}"
 
 # Ayla channel: the plugin dials this backend and opens no port of its own.
-# Unset disables the channel entirely (the profile row keys off AYLA_BASE_URL).
+# The mounted channel stays idle until its configured credentials are complete.
 export AYLA_BASE_URL="${AYLA_BASE_URL:-http://127.0.0.1:8100}"
 export AYLA_BOT_USER="${AYLA_BOT_USER:-elysia}"
 # Credentials live outside Git: a local env file read only when it exists.
@@ -45,8 +44,7 @@ export AYLA_BOT_PASSWORD="${AYLA_BOT_PASSWORD:-}"
 # so that hostname must be named here or every /api call from a tunneled page
 # is refused (the plugin market shows "不受信任的地址" / untrusted origin).
 #
-# DSH_REMOTE_PUBLIC_URL wins when set; the tunnel host below is the fallback
-# because the guard restarts this script without the operator environment.
+# DSH_REMOTE_PUBLIC_URL overrides the existing public origin for this deployment.
 PUBLIC_URL="${DSH_REMOTE_PUBLIC_URL:-https://climb-writing-bidder-here.trycloudflare.com}"
 TRUSTED_ARGS=()
 if [[ -n "$PUBLIC_URL" ]]; then
