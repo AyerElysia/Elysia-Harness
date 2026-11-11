@@ -301,6 +301,60 @@ describe('Ayla connection lifecycle', () => {
     await vi.advanceTimersByTimeAsync(RECONNECT_MAX_MS * 3)
     expect(harnessed.sockets).toHaveLength(1)
   })
+
+  it('keeps dialing when a socket fails without ever emitting close', async () => {
+    // Observed against a restarted backend: the dial failed, onerror fired, and
+    // close never followed. The client parked forever with no socket and no
+    // timer, so the process looked alive while nothing was connected.
+    vi.useFakeTimers()
+    const harnessed = harness({ random: () => 1 })
+    harnessed.client.start()
+    await vi.advanceTimersByTimeAsync(0)
+    const first = harnessed.sockets[0]!
+    first.onerror?.({})
+    await vi.advanceTimersByTimeAsync(RECONNECT_INITIAL_MS + 1)
+    expect(harnessed.sockets.length).toBeGreaterThan(1)
+    expect(harnessed.client.currentState).toBe('connecting')
+  })
+
+  it('ignores a retired socket error after its replacement has connected', async () => {
+    vi.useFakeTimers()
+    const harnessed = harness({ random: () => 1 })
+    harnessed.client.start()
+    await vi.advanceTimersByTimeAsync(0)
+    const first = harnessed.sockets[0]!
+    first.onerror?.({})
+    await vi.advanceTimersByTimeAsync(RECONNECT_INITIAL_MS)
+    const replacement = harnessed.sockets[1]!
+    replacement.open()
+    expect(vi.getTimerCount()).toBe(1) // Only the replacement heartbeat.
+
+    first.onerror?.({})
+    first.drop(1006)
+    await vi.advanceTimersByTimeAsync(RECONNECT_INITIAL_MS * 2)
+
+    expect(harnessed.sockets).toHaveLength(2)
+    expect(harnessed.client.currentState).toBe('connected')
+    expect(harnessed.client.connected).toBe(true)
+    expect(replacement.closed).toBeUndefined()
+    expect(vi.getTimerCount()).toBe(1)
+    replacement.deliver({ v: 1, type: 'ping' })
+    expect(replacement.frames().map(frame => frame.type)).toContain('pong')
+  })
+
+  it('reconnects after a failure even when the failing socket also reports close', async () => {
+    // Both events can arrive for one failure; the client must retire the socket
+    // once and still schedule exactly one next attempt.
+    vi.useFakeTimers()
+    const harnessed = harness({ random: () => 1 })
+    harnessed.client.start()
+    await vi.advanceTimersByTimeAsync(0)
+    const first = harnessed.sockets[0]!
+    first.onerror?.({})
+    first.drop(1006)
+    await vi.advanceTimersByTimeAsync(RECONNECT_INITIAL_MS + 1)
+    expect(harnessed.sockets).toHaveLength(2)
+  })
 })
 
 describe('Ayla inbound acknowledgement', () => {
