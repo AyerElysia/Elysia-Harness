@@ -1,0 +1,4 @@
+# Placeholder only: mounting this entry currently has no runtime behavior.
+- insert:
+    - id: elysia-proactive-system
+      name: '@elysia/proactive-system'
