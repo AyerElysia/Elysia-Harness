@@ -135,6 +135,31 @@ export const LOGIN_PATH = '/api/v1/auth/login/'
 /** Refresh path on the Ayla backend. */
 export const REFRESH_PATH = '/api/v1/auth/refresh/'
 
+/** Treat a token as expired this long before its real `exp`, to absorb clock skew. */
+const EXPIRY_SKEW_MS = 30_000
+
+/**
+ * Read a JWT's `exp` claim without verifying it.
+ *
+ * The signature is the server's business; this is only used to decide when to
+ * rotate proactively. A malformed or missing claim yields undefined, which
+ * callers treat as "unknown lifetime", never as "expired".
+ * @param token - the bearer token.
+ * @returns expiry in epoch ms, or undefined when it cannot be read.
+ */
+export function readTokenExpiry(token: string): number | undefined {
+  const parts = token.split('.')
+  if (parts.length !== 3) return undefined
+  try {
+    const payload = JSON.parse(Buffer.from(parts[1]!, 'base64url').toString('utf8')) as {
+      exp?: unknown
+    }
+    return typeof payload.exp === 'number' ? payload.exp * 1000 : undefined
+  } catch {
+    return undefined
+  }
+}
+
 /**
  * Resolve one endpoint against the configured base URL, keeping any path
  * prefix the operator put on it.
@@ -178,6 +203,8 @@ function readTokenPair(body: unknown, path: string): AylaTokens {
 export class AylaAuth {
   private access: string | undefined
   private refresh: string | undefined
+  /** Epoch ms after which {@link access} must not be used; undefined = unknown. */
+  private accessExpiresAt: number | undefined
   private refreshing: Promise<string> | undefined
   private readonly baseUrl: URL
   private readonly fetchImpl: AylaFetch
@@ -197,8 +224,28 @@ export class AylaAuth {
    * @returns the access token.
    */
   async accessToken(): Promise<string> {
-    if (this.access !== undefined) return this.access
+    if (this.access !== undefined) {
+      // A cached token that has already expired is worse than no token: every
+      // caller retries with it and gets refused, without ever reaching the
+      // refresh path. Rotate proactively instead.
+      if (!this.accessExpired()) return this.access
+      return await this.refreshOnce()
+    }
     return await this.restore()
+  }
+
+  /**
+   * Whether the cached access token is at or past its expiry.
+   *
+   * A token whose lifetime cannot be read is treated as valid: guessing expiry
+   * from a decode failure would rotate on every call, and the server still
+   * judges it. Only a token we positively know is expired is refused here.
+   * @returns true when the token must not be reused.
+   */
+  private accessExpired(): boolean {
+    if (this.accessExpiresAt === undefined) return false
+    // Small skew so a token does not expire between this check and the request.
+    return Date.now() >= this.accessExpiresAt - EXPIRY_SKEW_MS
   }
 
   /**
@@ -278,6 +325,7 @@ export class AylaAuth {
     // keeps the current one, which must stay persisted unchanged.
     const next = typeof rotated === 'string' && rotated.length > 0 ? rotated : this.refresh
     this.access = access
+    this.accessExpiresAt = readTokenExpiry(access)
     if (next !== this.refresh) {
       this.refresh = next
       await this.options.store.write(next)
@@ -287,6 +335,7 @@ export class AylaAuth {
 
   private async remember(tokens: AylaTokens): Promise<void> {
     this.access = tokens.access
+    this.accessExpiresAt = readTokenExpiry(tokens.access)
     this.refresh = tokens.refresh
     await this.options.store.write(tokens.refresh)
   }

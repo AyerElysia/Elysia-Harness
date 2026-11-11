@@ -4,6 +4,7 @@ import { join } from 'node:path'
 import { afterEach, describe, expect, it } from 'vitest'
 import {
   AylaAuth, AylaAuthError, LOGIN_PATH, REFRESH_PATH, RefreshTokenStore, defaultRefreshFile, endpointUrl,
+  readTokenExpiry,
 } from '../src/auth.ts'
 import type { AylaFetch, AylaHttpResponse } from '../src/auth.ts'
 
@@ -152,6 +153,52 @@ describe('Ayla refresh', () => {
     await expect(auth(fetchImpl, storeImpl).accessToken()).resolves.toBe('a9')
     expect(calls).toHaveLength(2)
     expect(JSON.parse(await readFile(storeImpl.file, 'utf8'))).toEqual({ refresh: 'r9' })
+  })
+})
+
+describe('Ayla access token expiry', () => {
+  /** Build an unsigned JWT-shaped token with the given exp (epoch seconds). */
+  function jwtWithExp(expSeconds: number): string {
+    const payload = Buffer.from(JSON.stringify({ exp: expSeconds }), 'utf8').toString('base64url')
+    return 'header.' + payload + '.signature'
+  }
+
+  it('reads exp from a JWT, and returns undefined when it cannot', () => {
+    expect(readTokenExpiry(jwtWithExp(1_800_000_000))).toBe(1_800_000_000_000)
+    // Not a JWT: unknown lifetime, never "expired" — guessing would rotate on
+    // every single call.
+    expect(readTokenExpiry('a1')).toBeUndefined()
+    expect(readTokenExpiry('a.b')).toBeUndefined()
+  })
+
+  it('rotates instead of returning a token that already expired', async () => {
+    // A cached-but-expired token must never be handed out: every caller would
+    // retry with it and be refused, and the socket would loop forever on 4401.
+    const past = Math.floor(Date.now() / 1000) - 3600
+    const future = Math.floor(Date.now() / 1000) + 3600
+    const { fetch: fetchImpl, calls } = scripted([
+      { path: LOGIN_PATH, status: 200, body: { access: jwtWithExp(past), refresh: 'r1' } },
+      { path: REFRESH_PATH, status: 200, body: { access: jwtWithExp(future) } },
+    ])
+    const authImpl = auth(fetchImpl, await store())
+    await authImpl.login()
+    expect(authImpl.currentAccess).toBe(jwtWithExp(past))
+
+    await expect(authImpl.accessToken()).resolves.toBe(jwtWithExp(future))
+    expect(calls.map(call => call.path ?? call.url.slice(call.url.indexOf('/api')))).toEqual([
+      LOGIN_PATH, REFRESH_PATH,
+    ])
+  })
+
+  it('reuses a token that is still valid', async () => {
+    const future = Math.floor(Date.now() / 1000) + 3600
+    const { fetch: fetchImpl } = scripted([
+      { path: LOGIN_PATH, status: 200, body: { access: jwtWithExp(future), refresh: 'r1' } },
+    ])
+    const authImpl = auth(fetchImpl, await store())
+    await authImpl.login()
+    // No refresh rule is scripted: a second request would throw.
+    await expect(authImpl.accessToken()).resolves.toBe(jwtWithExp(future))
   })
 })
 
