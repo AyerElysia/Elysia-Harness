@@ -301,6 +301,35 @@ describe('Ayla connection lifecycle', () => {
     await vi.advanceTimersByTimeAsync(RECONNECT_MAX_MS * 3)
     expect(harnessed.sockets).toHaveLength(1)
   })
+
+  it('keeps dialing when a socket fails without ever emitting close', async () => {
+    // Observed against a restarted backend: the dial failed, onerror fired, and
+    // close never followed. The client parked forever with no socket and no
+    // timer, so the process looked alive while nothing was connected.
+    vi.useFakeTimers()
+    const harnessed = harness({ random: () => 1 })
+    harnessed.client.start()
+    await vi.advanceTimersByTimeAsync(0)
+    const first = harnessed.sockets[0]!
+    first.onerror?.({})
+    await vi.advanceTimersByTimeAsync(RECONNECT_INITIAL_MS + 1)
+    expect(harnessed.sockets.length).toBeGreaterThan(1)
+    expect(harnessed.client.currentState).toBe('connecting')
+  })
+
+  it('reconnects after a failure even when the failing socket also reports close', async () => {
+    // Both events can arrive for one failure; the client must retire the socket
+    // once and still schedule exactly one next attempt.
+    vi.useFakeTimers()
+    const harnessed = harness({ random: () => 1 })
+    harnessed.client.start()
+    await vi.advanceTimersByTimeAsync(0)
+    const first = harnessed.sockets[0]!
+    first.onerror?.({})
+    first.drop(1006)
+    await vi.advanceTimersByTimeAsync(RECONNECT_INITIAL_MS + 1)
+    expect(harnessed.sockets).toHaveLength(2)
+  })
 })
 
 describe('Ayla inbound acknowledgement', () => {

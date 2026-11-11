@@ -268,16 +268,62 @@ export class AylaClient {
       this.receive(event.data)
     }
     socket.onerror = () => {
-      // The close event carries the outcome; an error alone settles nothing.
+      // A WebSocket that fails while dialing (peer restarting, port closed, DNS
+      // hiccup) may report the failure here and never emit close. Relying on
+      // close alone left the client parked forever with no timer and no socket:
+      // the process stayed up, and every reconnect attempt ended exactly here.
+      //
+      // Closing explicitly funnels the normal case through onclose, which owns
+      // the reconnect schedule. close() on a socket that never opened does not
+      // reliably emit close in every runtime, so a timer covers that gap.
+      if (this.socket === socket) {
+        // Take ownership of the failure before closing: close() may emit
+        // onclose synchronously, and that handler must see this socket stale.
+        this.failConnection(socket)
+        this.settleAll(new OutboundDeliveryUnknown('Ayla 连接失败'))
+        this.setState('disconnected', 'socket error')
+      }
+      this.closeQuietly(socket)
+      this.scheduleReconnect()
     }
     socket.onclose = event => {
       if (this.socket !== socket) return
-      this.socket = undefined
-      this.clearHeartbeat()
       this.settleAll(new OutboundDeliveryUnknown('Ayla 连接已断开'))
+      this.failConnection(socket)
       void this.handleClose(event?.code)
     }
     this.socket = socket
+  }
+
+  /**
+   * Detach a failed socket once, regardless of which event noticed first.
+   *
+   * onerror and onclose can both fire for one failure, and a dial that never
+   * opens may only ever report error. Clearing this.socket here is the single
+   * place that decides "this connection is finished", so a later event for the
+   * same socket sees it already gone and does nothing.
+   * @param socket - the socket being retired.
+   */
+  private failConnection(socket: AylaSocket): void {
+    if (this.socket !== socket) return
+    this.socket = undefined
+    this.clearHeartbeat()
+  }
+
+  /**
+   * Close a socket that already failed, without letting its own error abort us.
+   *
+   * A socket that never opened rejects close() in some runtimes; the close is
+   * still what unblocks the client, so a throw here is swallowed on purpose.
+   * @param socket - the socket whose failure we are handling.
+   */
+  private closeQuietly(socket: AylaSocket): void {
+    try {
+      socket.close(4000, 'error')
+    } catch {
+      // A socket that cannot even close already cannot deliver; onclose may
+      // still fire, and handleClose is idempotent through the guard above.
+    }
   }
 
   /** Resolve the socket URL, refreshing once if the token is refused. */
