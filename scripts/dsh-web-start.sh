@@ -5,7 +5,7 @@
 set -uo pipefail
 
 ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
-LOG_DIR="${ELYSIA_LOG_DIR:-$ROOT/homes/web/logs}"
+LOG_DIR="${ELYSIA_LOG_DIR:-/home/ayerelysia/Elysia/DataInfra/logs}"
 LOG=${ELYSIA_WEB_LOG:-$LOG_DIR/elyharn-web.log}
 mkdir -p "$LOG_DIR"
 

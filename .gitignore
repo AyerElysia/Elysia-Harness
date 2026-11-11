@@ -108,3 +108,25 @@ handoff/
 # Local market indexes and retained session backups are runtime state.
 homes/*/profiles/*/.dsh-market/
 homes/*/session-backups/
+
+# Upstream livestream operational settings include a private stage capability.
+homes/*/dsh-livestream/
+
+# Local Ayla login and refresh state.
+homes/*/ayla-app/
+
+# Accidental compiler emit beside vendored agent-loop TypeScript sources.
+dsh/packages/core/agent-loop/src/agent.js*
+dsh/packages/core/agent-loop/src/agent.d.ts*
+dsh/packages/core/agent-loop/src/assistant-stream.js*
+dsh/packages/core/agent-loop/src/assistant-stream.d.ts*
+dsh/packages/core/agent-loop/src/constants.js*
+dsh/packages/core/agent-loop/src/constants.d.ts*
+dsh/packages/core/agent-loop/src/inbox.js*
+dsh/packages/core/agent-loop/src/inbox.d.ts*
+dsh/packages/core/agent-loop/src/index.js*
+dsh/packages/core/agent-loop/src/index.d.ts*
+dsh/packages/core/agent-loop/src/runtime-context.js*
+dsh/packages/core/agent-loop/src/runtime-context.d.ts*
+dsh/packages/core/agent-loop/src/tool-calls.js*
+dsh/packages/core/agent-loop/src/tool-calls.d.ts*
