@@ -1,0 +1,19 @@
+{
+  "format": 1,
+  "id": "elysia",
+  "name": "爱莉希雅",
+  "names": [
+    "爱莉希雅",
+    "爱莉"
+  ],
+  "renderer": "image",
+  "license": "MIT (engineering placeholder)",
+  "image": {
+    "size": [
+      720,
+      1080
+    ],
+    "idle": "placeholder.svg",
+    "moods": {}
+  }
+}

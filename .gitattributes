@@ -1,2 +1,4 @@
 # Preserve the pinned upstream license bytes and their recorded checksums.
 plugins/context-inspector/tokenizers/deepseek-v4.1-flash/LICENSE -text whitespace=cr-at-eol
+# Retain the original OFL notice, including its upstream line whitespace.
+plugins/dsh-livestream/assets/templates/default/fonts/ZCOOLKuaiLe-OFL.txt -text whitespace=-blank-at-eol

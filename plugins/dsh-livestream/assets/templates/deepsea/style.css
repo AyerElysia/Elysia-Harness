@@ -1,0 +1,150 @@
+/*
+ * 「深海」：夜晚的暗色模板。深蓝的海底，上方透下来几道光，水面的光纹在晃，海雪慢慢往下落，气泡往上飘。
+ * 想自己改：把这个目录复制到 DSH_HOME/dsh-livestream/templates/<新名字>/，改 template.json 的 id、name，再改这里。
+ * 能画的地方：.ls-backdrop（挂件下面）和 .ls-overlay（挂件上面）各自的 .ls-layer-1/2/3 和 ::before / ::after。
+ */
+
+.ls-template-deepsea .ls-backdrop {
+  background:
+    radial-gradient(1200px 700px at 72% -10%, rgba(120, 200, 255, 0.3), transparent 60%),
+    radial-gradient(900px 600px at 10% 110%, rgba(150, 110, 255, 0.24), transparent 60%),
+    linear-gradient(180deg, #0c2650 0%, #071a38 45%, #030b1c 100%);
+}
+
+/* 海底的微光 */
+.ls-template-deepsea .ls-backdrop::before {
+  content: '';
+  position: absolute;
+  left: -10%; right: -10%; bottom: -30%; height: 60%;
+  background:
+    radial-gradient(50% 50% at 70% 50%, rgba(70, 190, 255, 0.22), transparent 70%),
+    radial-gradient(40% 50% at 25% 60%, rgba(160, 120, 255, 0.18), transparent 70%);
+  filter: blur(20px);
+  animation: deep-glow 12s ease-in-out infinite alternate;
+}
+@keyframes deep-glow { to { transform: translateX(4%); opacity: 0.75; } }
+
+/* 透下来的光：一把扇形的光束，慢慢摆 */
+.ls-template-deepsea .ls-backdrop .ls-layer-1 {
+  inset: -12% auto auto 34%; width: 70%; height: 115%;
+  background: conic-gradient(from 150deg at 55% 0%,
+    transparent 0deg, rgba(160, 220, 255, 0.1) 8deg, transparent 13deg,
+    rgba(170, 225, 255, 0.16) 20deg, rgba(200, 235, 255, 0.26) 26deg, rgba(170, 225, 255, 0.15) 32deg, transparent 38deg,
+    rgba(160, 220, 255, 0.11) 45deg, transparent 51deg,
+    rgba(160, 220, 255, 0.09) 58deg, transparent 64deg);
+  filter: blur(10px);
+  mix-blend-mode: screen;
+  transform-origin: 55% 0;
+  -webkit-mask-image: linear-gradient(180deg, #000 30%, transparent 92%);
+  mask-image: linear-gradient(180deg, #000 30%, transparent 92%);
+  animation: deep-rays 13s ease-in-out infinite alternate;
+}
+@keyframes deep-rays { from { transform: rotate(-5deg); opacity: 0.75; } to { transform: rotate(5deg); opacity: 1; } }
+
+/* 水面的光纹：上方几团很虚的光，慢慢漂 */
+.ls-template-deepsea .ls-backdrop .ls-layer-2 {
+  bottom: 50%;
+  background:
+    radial-gradient(closest-side, rgba(170, 230, 255, 0.2), transparent) 0 0 / 520px 180px,
+    radial-gradient(closest-side, rgba(170, 230, 255, 0.14), transparent) 260px 70px / 380px 150px,
+    radial-gradient(closest-side, rgba(190, 210, 255, 0.12), transparent) 120px 20px / 700px 230px;
+  filter: blur(16px);
+  mix-blend-mode: screen;
+  -webkit-mask-image: linear-gradient(180deg, #000, transparent);
+  mask-image: linear-gradient(180deg, #000, transparent);
+  animation: deep-caustics 30s ease-in-out infinite alternate;
+}
+@keyframes deep-caustics { to { background-position: 520px 60px, -120px 130px, 820px -30px; } }
+
+/* 海雪：很小的光点慢慢落。点用 box-shadow 随手撒（不成格子），每个点上下各一份，落满一屏正好接上 */
+.ls-template-deepsea .ls-backdrop .ls-layer-3::before,
+.ls-template-deepsea .ls-backdrop .ls-layer-3::after {
+  content: '';
+  position: absolute; left: 0; top: 0; width: 3px; height: 3px; border-radius: 50%;
+  animation: deep-snow 70s linear infinite;
+}
+.ls-template-deepsea .ls-backdrop .ls-layer-3::before {
+  box-shadow:
+    663px 308px rgba(210,235,255,.4), 663px -772px rgba(210,235,255,.4), 1333px 98px rgba(210,235,255,.55), 1333px -982px rgba(210,235,255,.55),
+    1681px 192px rgba(210,235,255,.4), 1681px -888px rgba(210,235,255,.4), 1193px 118px rgba(210,235,255,.3), 1193px -962px rgba(210,235,255,.3),
+    439px 76px rgba(210,235,255,.55), 439px -1004px rgba(210,235,255,.55), 888px 856px rgba(210,235,255,.55), 888px -224px rgba(210,235,255,.55),
+    492px 185px rgba(210,235,255,.3), 492px -895px rgba(210,235,255,.3), 869px 121px rgba(210,235,255,.3), 869px -959px rgba(210,235,255,.3),
+    253px 457px rgba(210,235,255,.3), 253px -623px rgba(210,235,255,.3), 1284px 126px rgba(210,235,255,.3), 1284px -954px rgba(210,235,255,.3),
+    1199px 812px rgba(210,235,255,.55), 1199px -268px rgba(210,235,255,.55), 452px 95px rgba(210,235,255,.3), 452px -985px rgba(210,235,255,.3),
+    1758px 272px rgba(210,235,255,.4), 1758px -808px rgba(210,235,255,.4), 858px 295px rgba(210,235,255,.3), 858px -785px rgba(210,235,255,.3),
+    241px 631px rgba(210,235,255,.3), 241px -449px rgba(210,235,255,.3), 1671px 370px rgba(210,235,255,.55), 1671px -710px rgba(210,235,255,.55),
+    1191px 384px rgba(210,235,255,.4), 1191px -696px rgba(210,235,255,.4), 199px 128px rgba(210,235,255,.3), 199px -952px rgba(210,235,255,.3),
+    122px 421px rgba(210,235,255,.4), 122px -659px rgba(210,235,255,.4), 1393px 875px rgba(210,235,255,.4), 1393px -205px rgba(210,235,255,.4),
+    953px 928px rgba(210,235,255,.4), 953px -152px rgba(210,235,255,.4), 613px 508px rgba(210,235,255,.55), 613px -572px rgba(210,235,255,.55),
+    1431px 499px rgba(210,235,255,.55), 1431px -581px rgba(210,235,255,.55), 1176px 614px rgba(210,235,255,.3), 1176px -466px rgba(210,235,255,.3),
+    1013px 703px rgba(210,235,255,.3), 1013px -377px rgba(210,235,255,.3), 919px 589px rgba(210,235,255,.3), 919px -491px rgba(210,235,255,.3);
+}
+.ls-template-deepsea .ls-backdrop .ls-layer-3::after {
+  width: 2px; height: 2px;
+  animation-duration: 110s;
+  box-shadow:
+    149px 241px rgba(210,235,255,.22), 149px -839px rgba(210,235,255,.22), 856px 337px rgba(210,235,255,.3), 856px -743px rgba(210,235,255,.3),
+    311px 1001px rgba(210,235,255,.3), 311px -79px rgba(210,235,255,.3), 80px 158px rgba(210,235,255,.22), 80px -922px rgba(210,235,255,.22),
+    1173px 642px rgba(210,235,255,.3), 1173px -438px rgba(210,235,255,.3), 1423px 717px rgba(210,235,255,.22), 1423px -363px rgba(210,235,255,.22),
+    1017px 934px rgba(210,235,255,.4), 1017px -146px rgba(210,235,255,.4), 1720px 191px rgba(210,235,255,.3), 1720px -889px rgba(210,235,255,.3),
+    970px 133px rgba(210,235,255,.4), 970px -947px rgba(210,235,255,.4), 1497px 634px rgba(210,235,255,.22), 1497px -446px rgba(210,235,255,.22),
+    1183px 912px rgba(210,235,255,.3), 1183px -168px rgba(210,235,255,.3), 1467px 790px rgba(210,235,255,.22), 1467px -290px rgba(210,235,255,.22),
+    710px 46px rgba(210,235,255,.3), 710px -1034px rgba(210,235,255,.3), 727px 344px rgba(210,235,255,.22), 727px -736px rgba(210,235,255,.22),
+    239px 1011px rgba(210,235,255,.4), 239px -69px rgba(210,235,255,.4), 446px 588px rgba(210,235,255,.4), 446px -492px rgba(210,235,255,.4),
+    1512px 507px rgba(210,235,255,.3), 1512px -573px rgba(210,235,255,.3), 800px 1016px rgba(210,235,255,.4), 800px -64px rgba(210,235,255,.4),
+    340px 919px rgba(210,235,255,.3), 340px -161px rgba(210,235,255,.3), 1125px 569px rgba(210,235,255,.4), 1125px -511px rgba(210,235,255,.4),
+    1677px 881px rgba(210,235,255,.22), 1677px -199px rgba(210,235,255,.22), 570px 850px rgba(210,235,255,.3), 570px -230px rgba(210,235,255,.3),
+    1398px 779px rgba(210,235,255,.4), 1398px -301px rgba(210,235,255,.4), 309px 169px rgba(210,235,255,.4), 309px -911px rgba(210,235,255,.4),
+    309px 475px rgba(210,235,255,.22), 309px -605px rgba(210,235,255,.22), 477px 24px rgba(210,235,255,.3), 477px -1056px rgba(210,235,255,.3),
+    1702px 373px rgba(210,235,255,.3), 1702px -707px rgba(210,235,255,.3), 577px 8px rgba(210,235,255,.4), 577px -1072px rgba(210,235,255,.4),
+    858px 756px rgba(210,235,255,.22), 858px -324px rgba(210,235,255,.22), 1159px 652px rgba(210,235,255,.4), 1159px -428px rgba(210,235,255,.4);
+}
+@keyframes deep-snow { from { transform: translate(0, 0); } to { transform: translate(80px, 1080px); } }
+
+/* 气泡：几串不同大小、不同速度的气泡往上飘 */
+.ls-template-deepsea .ls-backdrop::after {
+  content: '';
+  position: absolute;
+  inset: 0;
+  background-image:
+    radial-gradient(circle closest-side, rgba(200, 235, 255, 0.06) 55%, rgba(190, 230, 255, 0.5) 82%, rgba(255, 255, 255, 0.75) 90%, transparent),
+    radial-gradient(circle closest-side, rgba(200, 235, 255, 0.06) 55%, rgba(190, 230, 255, 0.45) 82%, rgba(255, 255, 255, 0.7) 90%, transparent),
+    radial-gradient(circle closest-side, rgba(200, 235, 255, 0.06) 55%, rgba(190, 230, 255, 0.45) 82%, rgba(255, 255, 255, 0.7) 90%, transparent),
+    radial-gradient(circle closest-side, rgba(200, 235, 255, 0.06) 55%, rgba(190, 230, 255, 0.4) 82%, rgba(255, 255, 255, 0.6) 90%, transparent);
+  background-size: 30px 30px, 16px 16px, 22px 22px, 12px 12px;
+  background-repeat: no-repeat;
+  -webkit-mask-image: linear-gradient(0deg, transparent, #000 25%, #000 70%, transparent);
+  mask-image: linear-gradient(0deg, transparent, #000 25%, #000 70%, transparent);
+  animation: deep-bubbles 16s linear infinite;
+  opacity: 0.8;
+}
+@keyframes deep-bubbles {
+  0% { background-position: 1180px 1140px, 1220px 1300px, 760px 1240px, 900px 1180px; }
+  100% { background-position: 1230px -80px, 1190px -40px, 800px -120px, 870px -60px; }
+}
+
+/* 前景：暗角，和几颗离镜头很近、虚掉的大气泡 */
+.ls-template-deepsea .ls-overlay .ls-layer-1 {
+  box-shadow: inset 0 0 240px 40px rgba(0, 4, 14, 0.75);
+}
+.ls-template-deepsea .ls-overlay .ls-layer-2 {
+  background:
+    radial-gradient(circle closest-side, rgba(200, 235, 255, 0.05) 50%, rgba(200, 235, 255, 0.16) 88%, transparent) no-repeat,
+    radial-gradient(circle closest-side, rgba(200, 235, 255, 0.04) 50%, rgba(200, 235, 255, 0.13) 88%, transparent) no-repeat;
+  background-size: 120px 120px, 80px 80px;
+  filter: blur(5px);
+  animation: deep-bokeh 28s linear infinite;
+}
+@keyframes deep-bokeh {
+  0% { background-position: 1250px 1150px, 260px 1300px; }
+  100% { background-position: 1150px -200px, 330px -150px; }
+}
+
+/* 角色：周身一层蓝色的光 */
+.ls-template-deepsea .ls-clips { filter: drop-shadow(0 0 26px rgba(80, 160, 255, 0.4)); }
+
+/* 字幕盖在角色前面一点 */
+.ls-template-deepsea .ls-slot-subtitle { z-index: 5; }
+.ls-template-deepsea .ls-slot-reply { z-index: 4; }
+.ls-template-deepsea .ls-slot-alerts { z-index: 6; }
+.ls-template-deepsea .ls-ai-label { float: right; }

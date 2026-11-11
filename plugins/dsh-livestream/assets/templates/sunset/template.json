@@ -1,0 +1,128 @@
+{
+  "format": 1,
+  "id": "sunset",
+  "name": "晚霞",
+  "canvas": [
+    1920,
+    1080
+  ],
+  "theme": {
+    "--ls-accent": "#ff8a65",
+    "--ls-accent-2": "#ff7eb6",
+    "--ls-bubble": "#fff3ef",
+    "--ls-shadow": "0 14px 34px -14px rgba(140, 50, 90, 0.45)",
+    "--ls-welcome-y": "270px"
+  },
+  "widgets": [
+    {
+      "type": "status",
+      "x": 48,
+      "y": 40
+    },
+    {
+      "type": "ai-label",
+      "x": 1480,
+      "y": 44,
+      "w": 392
+    },
+    {
+      "type": "alerts",
+      "x": 620,
+      "y": 40,
+      "w": 680,
+      "options": {
+        "max": 3
+      }
+    },
+    {
+      "type": "board",
+      "x": 1320,
+      "y": 120,
+      "w": 560,
+      "h": 280
+    },
+    {
+      "type": "chat",
+      "x": 1320,
+      "y": 416,
+      "w": 560,
+      "h": 344,
+      "options": {
+        "rows": 6
+      }
+    },
+    {
+      "type": "reply",
+      "x": 660,
+      "y": 380,
+      "w": 600,
+      "h": 380,
+      "options": {
+        "max": 3
+      }
+    },
+    {
+      "type": "character",
+      "x": 70,
+      "y": 120,
+      "w": 540
+    },
+    {
+      "type": "subtitle",
+      "x": 440,
+      "y": 780,
+      "w": 1060,
+      "h": 270,
+      "options": {
+        "quote": false
+      }
+    },
+    {
+      "type": "effects",
+      "x": 0,
+      "y": 0,
+      "w": 1920,
+      "h": 1080
+    },
+    {
+      "type": "scene",
+      "x": 0,
+      "y": 0,
+      "w": 1920,
+      "h": 1080
+    }
+  ],
+  "layouts": {
+    "video": [
+      {
+        "type": "video",
+        "x": 40,
+        "y": 96,
+        "w": 1220,
+        "h": 686
+      },
+      {
+        "type": "character",
+        "x": 1090,
+        "y": 690,
+        "scale": 0.4
+      },
+      {
+        "type": "subtitle",
+        "x": 40,
+        "y": 840,
+        "w": 1020,
+        "h": 220
+      },
+      {
+        "type": "alerts",
+        "x": 580,
+        "y": 130
+      },
+      {
+        "type": "reply",
+        "hidden": true
+      }
+    ]
+  }
+}

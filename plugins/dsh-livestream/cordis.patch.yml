@@ -1,0 +1,18 @@
+# Upstream dsh-livestream, adapted to ElyHarn's registered Elysia instance.
+# The subject's existing standing files are read in the agent scope; no
+# upstream character persona or new random session preset is installed.
+- insert:
+    - id: elysia-dsh-livestream
+      name: '@elysia/dsh-livestream'
+      config:
+        baseDir: !!js process.env.ELYSIA_PROMPTS_DIR ?? process.env.DSH_HOME + '/standing-prompts'
+        files:
+          - SOUL.md
+          - USER.md
+          - MEMORY.md
+          - EXISTENCE.md
+          - TOOLS.md
+          - LIVE.md
+        stagePort: !!js Number(process.env.ELYSIA_STAGE_PORT ?? 3300)
+        publisher: livehime
+        allowedWriteActions: []

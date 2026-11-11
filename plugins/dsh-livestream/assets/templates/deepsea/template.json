@@ -1,0 +1,137 @@
+{
+  "format": 1,
+  "id": "deepsea",
+  "name": "深海",
+  "canvas": [
+    1920,
+    1080
+  ],
+  "theme": {
+    "--ls-accent": "#86dcff",
+    "--ls-accent-2": "#b79bff",
+    "--ls-text": "#eaf3ff",
+    "--ls-dim": "rgba(220, 232, 255, 0.66)",
+    "--ls-unlit": "rgba(214, 228, 255, 0.34)",
+    "--ls-ink": "#061528",
+    "--ls-panel": "linear-gradient(160deg, rgba(255, 255, 255, 0.12), rgba(255, 255, 255, 0.04))",
+    "--ls-panel-strong": "linear-gradient(180deg, rgba(16, 32, 66, 0.86), rgba(6, 14, 34, 0.92))",
+    "--ls-panel-border": "rgba(255, 255, 255, 0.18)",
+    "--ls-rim": "rgba(160, 210, 255, 0.35)",
+    "--ls-bubble": "rgba(255, 255, 255, 0.08)",
+    "--ls-shadow": "0 24px 60px -24px rgba(0, 0, 0, 0.75)",
+    "--ls-blur": "22px",
+    "--ls-welcome-y": "270px"
+  },
+  "widgets": [
+    {
+      "type": "status",
+      "x": 48,
+      "y": 40
+    },
+    {
+      "type": "ai-label",
+      "x": 1480,
+      "y": 44,
+      "w": 392
+    },
+    {
+      "type": "alerts",
+      "x": 620,
+      "y": 40,
+      "w": 680,
+      "options": {
+        "max": 3
+      }
+    },
+    {
+      "type": "board",
+      "x": 40,
+      "y": 116,
+      "w": 560,
+      "h": 280
+    },
+    {
+      "type": "chat",
+      "x": 40,
+      "y": 412,
+      "w": 560,
+      "h": 354,
+      "options": {
+        "rows": 6
+      }
+    },
+    {
+      "type": "reply",
+      "x": 660,
+      "y": 380,
+      "w": 600,
+      "h": 380,
+      "options": {
+        "max": 3
+      }
+    },
+    {
+      "type": "character",
+      "x": 1300,
+      "y": 132,
+      "w": 540
+    },
+    {
+      "type": "subtitle",
+      "x": 380,
+      "y": 790,
+      "w": 1080,
+      "h": 262,
+      "options": {
+        "quote": false
+      }
+    },
+    {
+      "type": "effects",
+      "x": 0,
+      "y": 0,
+      "w": 1920,
+      "h": 1080
+    },
+    {
+      "type": "scene",
+      "x": 0,
+      "y": 0,
+      "w": 1920,
+      "h": 1080
+    }
+  ],
+  "layouts": {
+    "video": [
+      {
+        "type": "video",
+        "x": 640,
+        "y": 96,
+        "w": 1220,
+        "h": 686
+      },
+      {
+        "type": "character",
+        "x": 1680,
+        "y": 690,
+        "scale": 0.4
+      },
+      {
+        "type": "subtitle",
+        "x": 640,
+        "y": 840,
+        "w": 1020,
+        "h": 220
+      },
+      {
+        "type": "alerts",
+        "x": 1180,
+        "y": 130
+      },
+      {
+        "type": "reply",
+        "hidden": true
+      }
+    ]
+  }
+}

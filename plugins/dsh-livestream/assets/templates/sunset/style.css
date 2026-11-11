@@ -1,0 +1,101 @@
+/*
+ * 「晚霞」：换主题的例子。和「深海」用同一套挂件，只改了 template.json（布局左右对调、暖色主题变量）和这个文件（背景）。
+ * 傍晚的天：紫到粉到橙的渐变，太阳在地平线上发光，几层云慢慢飘，天上开始出星星。
+ */
+
+.ls-template-sunset .ls-backdrop {
+  background:
+    radial-gradient(900px 420px at 64% 92%, rgba(255, 196, 120, 0.55), transparent 70%),
+    linear-gradient(180deg, #1c1236 0%, #3d1f5c 30%, #8a3a78 58%, #e0687a 80%, #ffad7a 100%);
+}
+
+/* 太阳：地平线上一团暖光，慢慢呼吸 */
+.ls-template-sunset .ls-backdrop::before {
+  content: '';
+  position: absolute;
+  left: 64%; top: 86%; width: 320px; height: 320px; margin: -160px 0 0 -160px; border-radius: 50%;
+  background: radial-gradient(circle closest-side, #fff4dc 0 34%, rgba(255, 210, 150, 0.85) 46%, rgba(255, 160, 120, 0.3) 70%, transparent);
+  box-shadow: 0 0 160px 60px rgba(255, 170, 120, 0.35);
+  animation: sunset-sun 8s ease-in-out infinite alternate;
+}
+@keyframes sunset-sun { to { transform: scale(1.05); filter: brightness(1.08); } }
+
+/* 地平线下的一层薄雾 */
+.ls-template-sunset .ls-backdrop::after {
+  content: '';
+  position: absolute;
+  left: 0; right: 0; bottom: 0; height: 22%;
+  background: linear-gradient(180deg, rgba(255, 170, 140, 0), rgba(120, 50, 100, 0.55) 60%, rgba(60, 24, 70, 0.8));
+}
+
+/* 远处的云：长条的柔光，慢慢往右飘 */
+.ls-template-sunset .ls-backdrop .ls-layer-1 {
+  background:
+    radial-gradient(closest-side, rgba(255, 190, 200, 0.35), transparent) 0 0 / 700px 90px no-repeat,
+    radial-gradient(closest-side, rgba(255, 170, 190, 0.3), transparent) 0 0 / 520px 70px no-repeat,
+    radial-gradient(closest-side, rgba(255, 200, 180, 0.28), transparent) 0 0 / 900px 110px no-repeat;
+  filter: blur(6px);
+  animation: sunset-clouds-far 90s linear infinite;
+}
+@keyframes sunset-clouds-far {
+  from { background-position: -700px 560px, 300px 470px, 900px 650px; }
+  to { background-position: 1920px 540px, 2400px 480px, 3000px 630px; }
+}
+
+/* 近处的云：更亮、更快 */
+.ls-template-sunset .ls-backdrop .ls-layer-2 {
+  background:
+    radial-gradient(closest-side, rgba(255, 220, 210, 0.42), transparent) 0 0 / 820px 120px no-repeat,
+    radial-gradient(closest-side, rgba(255, 200, 220, 0.36), transparent) 0 0 / 600px 100px no-repeat;
+  filter: blur(10px);
+  mix-blend-mode: screen;
+  animation: sunset-clouds-near 60s linear infinite;
+}
+@keyframes sunset-clouds-near {
+  from { background-position: -820px 760px, 700px 820px; }
+  to { background-position: 1920px 740px, 2900px 830px; }
+}
+
+/* 星星：天的上半部分，一闪一闪 */
+.ls-template-sunset .ls-backdrop .ls-layer-3 {
+  bottom: 50%;
+  -webkit-mask-image: linear-gradient(180deg, #000, transparent);
+  mask-image: linear-gradient(180deg, #000, transparent);
+}
+.ls-template-sunset .ls-backdrop .ls-layer-3::before,
+.ls-template-sunset .ls-backdrop .ls-layer-3::after {
+  content: '';
+  position: absolute; left: 0; top: 0; width: 2px; height: 2px; border-radius: 50%;
+  background: transparent;
+  animation: sunset-twinkle 4s ease-in-out infinite alternate;
+}
+.ls-template-sunset .ls-backdrop .ls-layer-3::before {
+  box-shadow: 212px 64px #fff, 488px 142px #ffe, 731px 38px #fff, 1012px 120px #fff, 1288px 52px #ffe, 1530px 168px #fff, 1774px 88px #fff,
+    356px 258px #ffd, 902px 236px #fff, 1408px 284px #ffe, 1702px 312px #fff, 96px 196px #fff;
+}
+.ls-template-sunset .ls-backdrop .ls-layer-3::after {
+  box-shadow: 140px 120px #fff, 620px 210px #ffe, 860px 92px #fff, 1160px 202px #fff, 1376px 136px #ffe, 1622px 40px #fff, 1866px 230px #fff,
+    430px 30px #ffd, 1060px 300px #fff, 1890px 140px #ffe;
+  animation-delay: -2s;
+  animation-duration: 3s;
+}
+@keyframes sunset-twinkle { from { opacity: 0.25; } to { opacity: 0.95; } }
+
+/* 前景：四角压暗，上方一道斜着的漏光 */
+.ls-template-sunset .ls-overlay .ls-layer-1 {
+  box-shadow: inset 0 0 220px 30px rgba(30, 8, 40, 0.6);
+}
+.ls-template-sunset .ls-overlay .ls-layer-2 {
+  background: linear-gradient(115deg, transparent 30%, rgba(255, 210, 170, 0.08) 42%, rgba(255, 230, 200, 0.12) 46%, transparent 58%);
+  mix-blend-mode: screen;
+  animation: sunset-leak 12s ease-in-out infinite alternate;
+}
+@keyframes sunset-leak { from { opacity: 0.5; transform: translateX(-3%); } to { opacity: 1; transform: translateX(3%); } }
+
+/* 角色：暖色的边光 */
+.ls-template-sunset .ls-clips { filter: drop-shadow(0 0 24px rgba(255, 150, 160, 0.45)); }
+
+.ls-template-sunset .ls-slot-subtitle { z-index: 5; --ls-tail-x: 8%; }
+.ls-template-sunset .ls-slot-reply { z-index: 4; }
+.ls-template-sunset .ls-slot-alerts { z-index: 6; }
+.ls-template-sunset .ls-ai-label { float: right; }

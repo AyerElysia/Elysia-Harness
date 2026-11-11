@@ -1,0 +1,84 @@
+/*
+ * 「海边小屋」：dsh-livestream 自带的默认模板。大肥鱼住的海边小屋，午后的阳光，明亮、轻快。
+ * 背景是一张画（room.jpg），上面加一层阳光、几个慢慢飘的泡泡和四角很淡的暗角，让前面的面板压得住。
+ * 想自己改：把这个目录复制到 DSH_HOME/dsh-livestream/templates/<新名字>/，改 template.json 的 id、name，再改这里。
+ * 能画的地方：.ls-backdrop（挂件下面）和 .ls-overlay（挂件上面）各自的 .ls-layer-1/2/3 和 ::before / ::after。
+ * 进场、礼物、上舰时放什么特效：template.json 里写 effects，例如
+ *   "effects": { "gift.huge": ["banner", { "name": "confetti", "count": 80 }], "enter.guard": ["welcome"], "follow": [] }
+ * 内置 confetti（彩带）、hearts（爱心）、banner（大横幅）、welcome（欢迎横条）、glow（四周亮一圈）；
+ * 写个不认识的名字，比如 "stars"，舞台就画一个 .ls-fx-stars（里面 16 个 <i>），在这里写它的动画就是一个新特效。
+ * 事件名和完整说明见插件源码 src/stage/triggers.ts、src/stage/effects.tsx。
+ */
+
+/* 字体：站酷快乐体（fonts/，SIL OFL 1.1，见 fonts/ZCOOLKuaiLe-OFL.txt），圆滚滚的，字幕、名牌、标题用 */
+@font-face {
+  font-family: "ZCOOL KuaiLe";
+  src: url("fonts/ZCOOLKuaiLe.woff2") format("woff2");
+  font-display: block;
+}
+.ls-canvas.ls-template-default { --ls-font-cute: "ZCOOL KuaiLe", var(--ls-font); }
+
+.ls-template-default .ls-backdrop {
+  background: #f6efe4 url("room.jpg") center / cover no-repeat;
+}
+
+/* 背景稍微虚一点、亮一点：人物和面板在前，房间在后 */
+.ls-template-default .ls-backdrop::before {
+  content: '';
+  position: absolute;
+  inset: 0;
+  backdrop-filter: blur(1.5px) brightness(1.03);
+}
+
+/* 窗户透进来的阳光：几道斜光，慢慢晃 */
+.ls-template-default .ls-backdrop .ls-layer-1 {
+  inset: -10% -10% 0 20%;
+  background:
+    linear-gradient(115deg, transparent 30%, rgba(255, 246, 220, 0.32) 38%, transparent 46%),
+    linear-gradient(115deg, transparent 48%, rgba(255, 246, 220, 0.22) 54%, transparent 60%),
+    linear-gradient(115deg, transparent 62%, rgba(255, 246, 220, 0.18) 66%, transparent 71%);
+  mix-blend-mode: screen;
+  filter: blur(8px);
+  animation: room-sun 12s ease-in-out infinite alternate;
+}
+@keyframes room-sun { from { opacity: 0.6; transform: translateX(-2%); } to { opacity: 1; transform: translateX(2%); } }
+
+/* 泡泡：从下往上慢慢飘 */
+.ls-template-default .ls-backdrop .ls-layer-2::before,
+.ls-template-default .ls-backdrop .ls-layer-2::after {
+  content: '';
+  position: absolute; left: 0; top: 0; width: 26px; height: 26px; border-radius: 50%;
+  background: radial-gradient(circle at 32% 30%, rgba(255, 255, 255, 0.95) 0 14%, rgba(255, 255, 255, 0.2) 18% 62%, rgba(190, 225, 255, 0.7) 78%, rgba(255, 255, 255, 0.9) 86%, transparent 90%);
+  animation: room-bubble 16s linear infinite;
+}
+.ls-template-default .ls-backdrop .ls-layer-2::before { left: 600px; }
+.ls-template-default .ls-backdrop .ls-layer-2::after { left: 1330px; width: 18px; height: 18px; animation-duration: 21s; animation-delay: -9s; }
+@keyframes room-bubble {
+  0% { transform: translate(0, 1120px); opacity: 0; }
+  10% { opacity: 1; }
+  50% { transform: translate(40px, 560px); }
+  90% { opacity: 1; }
+  100% { transform: translate(-20px, -60px); opacity: 0; }
+}
+.ls-template-default .ls-backdrop .ls-layer-3::before {
+  content: '';
+  position: absolute; left: 1250px; top: 0; width: 34px; height: 34px; border-radius: 50%;
+  background: radial-gradient(circle at 32% 30%, rgba(255, 255, 255, 0.95) 0 14%, rgba(255, 255, 255, 0.2) 18% 62%, rgba(255, 200, 225, 0.7) 78%, rgba(255, 255, 255, 0.9) 86%, transparent 90%);
+  animation: room-bubble 24s linear -4s infinite;
+}
+
+/* 前景：四角很淡的暗角 */
+.ls-template-default .ls-overlay .ls-layer-1 {
+  box-shadow: inset 0 0 200px 20px rgba(120, 90, 60, 0.18);
+}
+
+/* 字幕盖在角色腿前面；尾巴朝上指向她 */
+.ls-template-default .ls-slot-subtitle { z-index: 5; --ls-tail-x: 50%; }
+.ls-template-default .ls-slot-alerts { z-index: 6; }
+.ls-template-default .ls-slot-terminal { z-index: 4; }
+/* 放视频时终端挪到视频下面、和字幕同一个位置：她不说话时露出终端（在想、在放什么、用了多少 token），说话时字幕盖在上面。
+   那里放不下敲电脑的小人（会戳到视频上），藏起来 */
+.ls-template-default.ls-mode-video .ls-term-art { display: none; }
+.ls-template-default.ls-mode-video .ls-slot-terminal { transition: opacity 0.25s; }
+.ls-template-default.ls-mode-video:has(.ls-slot-subtitle .ls-subtitle:not(.ls-empty)) .ls-slot-terminal { opacity: 0; }
+.ls-template-default .ls-ai-label { float: right; }
