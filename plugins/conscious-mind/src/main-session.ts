@@ -13,6 +13,9 @@ import { resolve } from 'node:path'
 import { brandString } from '@deepseek-ai/dsh-brand'
 import type { Agent, AgentHandle } from '@deepseek-ai/dsh-agent'
 import type {} from '@deepseek-ai/dsh-agent-default-model'
+import type {} from '@deepseek-ai/dsh-commands'
+import BasicCompactionEngine from '@deepseek-ai/dsh-compaction-basic'
+import * as CommandCompact from '@deepseek-ai/dsh-command-compact'
 import { createUserMessage, type ContentBlock } from '@deepseek-ai/dsh-llm'
 import type { SessionId, UserMessage } from '@deepseek-ai/dsh-session'
 import type {} from '@deepseek-ai/dsh-tools'
@@ -172,6 +175,8 @@ export function composeMainAgent(agentCtx: Context, promptConfig: MainSessionCon
   composition.ready = (async () => {
     const prompt = await agentCtx.plugin(StandingPrompt, config)
     let capabilities: { dispose(): Promise<unknown> } | undefined
+    let compaction: { dispose(): Promise<unknown> } | undefined
+    let compactCommand: { dispose(): Promise<unknown> } | undefined
     let removeIsolation: (() => void) | undefined
     let removePass: (() => void) | undefined
     let removeRestriction: (() => void) | undefined
@@ -188,6 +193,10 @@ export function composeMainAgent(agentCtx: Context, promptConfig: MainSessionCon
         ...config.maxPromptBytes === undefined ? {} : { maxPromptBytes: config.maxPromptBytes },
         ...config.backupRetention === undefined ? {} : { backupRetention: config.backupRetention },
       })
+      // Reuse DSH's durable compaction transaction and human command. Manual
+      // only: adding this entry point must not change automatic turn behavior.
+      compaction = await agentCtx.plugin(BasicCompactionEngine, { auto: false })
+      compactCommand = await agentCtx.plugin(CommandCompact)
       removePass = agentCtx.tools.register(definePassTool())
       removeRestriction = agentCtx.tools.restrict({ allow: ['send_text', 'send_voice', 'read_image'] })
       agentCtx.effect(() => () => {
@@ -199,6 +208,8 @@ export function composeMainAgent(agentCtx: Context, promptConfig: MainSessionCon
         Promise.resolve().then(() => removeRestriction?.()),
         Promise.resolve().then(() => removePass?.()),
         Promise.resolve().then(() => removeIsolation?.()),
+        Promise.resolve().then(() => compactCommand?.dispose()),
+        Promise.resolve().then(() => compaction?.dispose()),
         Promise.resolve().then(() => capabilities?.dispose()),
         Promise.resolve().then(() => prompt?.dispose()),
       ])

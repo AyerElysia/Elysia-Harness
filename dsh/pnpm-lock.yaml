@@ -278,10 +278,6 @@ importers:
         version: link:../../dsh/packages/core/tools
 
   ../plugins/conscious-mind:
-    dependencies:
-      '@deepseek-ai/schemastery':
-        specifier: link:../../dsh/vendor/schemastery
-        version: link:../../dsh/vendor/schemastery
     devDependencies:
       '@deepseek-ai/cordis':
         specifier: workspace:~
@@ -358,6 +354,9 @@ importers:
       '@deepseek-ai/dsh-working-directory':
         specifier: workspace:*
         version: link:../../dsh/packages/session/working-directory
+      '@deepseek-ai/schemastery':
+        specifier: link:../../dsh/vendor/schemastery
+        version: link:../../dsh/vendor/schemastery
       '@types/node':
         specifier: ^22.20.1
         version: 22.20.1

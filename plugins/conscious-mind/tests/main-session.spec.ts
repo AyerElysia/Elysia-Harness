@@ -206,7 +206,7 @@ describe('main session turn', () => {
     expect(followup).toHaveBeenCalledOnce()
     expect(agent.whenIdle).toHaveBeenCalledOnce()
     expect(create).not.toHaveBeenCalled()
-    expect(scoped.plugin).toHaveBeenCalledTimes(2)
+    expect(scoped.plugin).toHaveBeenCalledTimes(4)
     scoped.dispose()
   })
 
@@ -270,7 +270,7 @@ describe('main agent tool scope', () => {
     const second = composeMainAgent(scoped.ctx, { ...promptConfig, files: [...promptConfig.files] })
     expect(first).toBe(second)
     await first
-    expect(scoped.plugin).toHaveBeenCalledTimes(2)
+    expect(scoped.plugin).toHaveBeenCalledTimes(4)
     expect(scoped.register).toHaveBeenCalledOnce()
     expect(scoped.restrict).toHaveBeenCalledOnce()
     await expect(composeMainAgent(scoped.ctx, { ...promptConfig, files: ['SOUL.md', 'USER.md'] }))

@@ -30,6 +30,18 @@
       "path": "../../dsh/packages/llm/llm"
     },
     {
+      "path": "../../dsh/packages/interaction/commands"
+    },
+    {
+      "path": "../../dsh/packages/compaction/compaction"
+    },
+    {
+      "path": "../../dsh/packages/compaction/compaction-basic"
+    },
+    {
+      "path": "../../dsh/packages/compaction/command-compact"
+    },
+    {
       "path": "../../dsh/packages/core/scope"
     },
     {

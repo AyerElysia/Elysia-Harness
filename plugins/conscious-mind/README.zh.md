@@ -80,6 +80,12 @@ create/resume 的 setup 路径通过 `composeMainAgent` 挂载作用域前缀，
 
 过滤器由当前 agent scope 持有；装配失败会立即撤销过滤器与运行环境抑制，scope 卸载也会清理。此隔离不改变原 session id/cwd，也不直接改写历史或主体文件。
 
+### 主动压缩上下文
+
+在 Web 的主意识会话输入框发送 `/compact`（不带参数），即可调用 DSH 原生的手动压缩命令。主意识作用域直接挂载 `@deepseek-ai/dsh-compaction-basic` 和 `@deepseek-ai/dsh-command-compact`，不是另写摘要逻辑，也不是给模型增加工具。后端配置为 `auto: false`，因此这里只提供人工入口，不新增自动压力压缩或上下文溢出重试行为。
+
+命令要求 agent 处于 idle；正在回复时应等本轮结束后再执行。压缩使用当前会话的模型生成摘要，以 `compact-checkpoint` 替换本次选中的可见历史范围，原始事件仍保留在耐久日志中。没有可压缩历史时返回 `No compactable history yet.`，不会构造空摘要。主意识的 DSH 上下文过滤器只排除 `agent-instructions` 和 `runtime-context`，不会过滤压缩检查点。
+
 ## send_text 参数
 
 | 参数 | 类型 | 必填 | 含义 |
