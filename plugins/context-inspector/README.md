@@ -24,6 +24,26 @@ This captures the framework input before provider conversion and attachment
 resolution. It is neither the provider's final HTTP body nor an unsent next-turn
 preview, and an archive does not prove remote delivery or completion.
 
+The composer also exposes additive current-context estimates and a separate
+latest positive API usage report. Matching configured DeepSeek V4.1 routes use
+the pinned offline reference tokenizer; unknown routes and oversized text use
+explicit weighted estimates. Attachments or extension blocks are marked
+incomplete rather than claiming exact occupancy. Cached input is included in
+the API input total; output is excluded, and compaction usage is labelled.
+No counting request or private context is sent to another provider.
+
+Metrics use a removable native projection, numeric/hash-only checkpoints and
+a scope-owned bounded tokenizer cache. Configure metrics.enabled to disable
+the meter, metrics.tokenizerEnabled to use weighted estimates, and modelIds /
+providerIds to control reference-tokenizer matching. The narrowly scoped CSS
+adapter hides the native composer meter only while this slot is available;
+it does not replace InputBar or modify native DSH. Refresh the browser after
+deployment to clear a previously open native portal.
+
+See [operations](../../docs/operations/context-inspection.md) and
+[tokenizer provenance](tokenizers/PROVENANCE.md) for configuration, API semantics,
+pinned assets, licenses and reference validation.
+
 ## Reproducing the focused checks
 
 From the plugin directory on Spark, using the existing workspace installation:
@@ -53,7 +73,7 @@ const filename = root + '/tsconfig.json'
 const loaded = ts.readConfigFile(filename, ts.sys.readFile)
 const parsed = ts.parseJsonConfigFileContent(loaded.config, ts.sys, root, undefined, filename)
 const rootNames = parsed.fileNames.filter(file =>
-  file.includes('/src/client/') || file.endsWith('/src/types.ts'))
+  file.includes('/src/client/') || file.endsWith('/src/types.ts') || file.endsWith('/src/metrics-types.ts'))
 const options = {
   ...parsed.options, paths: {}, noEmit: true, incremental: false, composite: false,
 }

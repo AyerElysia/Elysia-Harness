@@ -1,0 +1,2 @@
+# Preserve the pinned upstream license bytes and their recorded checksums.
+plugins/context-inspector/tokenizers/deepseek-v4.1-flash/LICENSE -text whitespace=cr-at-eol

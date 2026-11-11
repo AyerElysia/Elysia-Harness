@@ -1,0 +1,44 @@
+{
+  "fetchedAt": "2026-11-09T10:41:56.7671943Z",
+  "source": {
+    "revision": "314113f8a7dadb388215396ba5fbee2c610a04d6",
+    "license": "MIT",
+    "repository": "deepseek-ai/DeepSeek-V4.1-Flash",
+    "api": "https://huggingface.co/api/models/deepseek-ai/DeepSeek-V4.1-Flash"
+  },
+  "schemaVersion": 1,
+  "tokenizerPackage": {
+    "license": "Apache-2.0",
+    "dependencies": {},
+    "name": "@huggingface/tokenizers",
+    "version": "0.2.0",
+    "registryMetadata": "https://registry.npmjs.org/@huggingface%2Ftokenizers/0.2.0",
+    "tarball": "https://registry.npmjs.org/@huggingface/tokenizers/-/tokenizers-0.2.0.tgz",
+    "integrity": "sha512-LidMHe1FpcSYH4vcSjXooda34pC0M8m1gmDOv7SQi6Iv+ib1zX7J3sHBCC9/3FPCkn2k1b55FneVqMRxrr99pg==",
+    "sha1": "3913cd936b6e5cbc24e20d0c81dc3ec0f97b8eb0",
+    "sha256": "2800014c83b8186b2e4210c20672f1fb65a12cef85d7e95e0f2003e022611b4a"
+  },
+  "assets": [
+    {
+      "sha256": "c90dfa01249db1be4245780a052ede752e1361c612ac6d08e2bdada7d599476b",
+      "file": "tokenizer.json",
+      "gitBlobSha1": "6a15814dd25c934028034531da744c689f87ff21",
+      "bytes": 6367257,
+      "url": "https://huggingface.co/deepseek-ai/DeepSeek-V4.1-Flash/resolve/314113f8a7dadb388215396ba5fbee2c610a04d6/tokenizer.json"
+    },
+    {
+      "sha256": "6ac8c8dc065ed118161d02dd532749ae3f52c243deac27872134fae2f50d8547",
+      "file": "tokenizer_config.json",
+      "gitBlobSha1": "f3dad388a2bbfd6a8605bd02754acd86d9ca5112",
+      "bytes": 801,
+      "url": "https://huggingface.co/deepseek-ai/DeepSeek-V4.1-Flash/resolve/314113f8a7dadb388215396ba5fbee2c610a04d6/tokenizer_config.json"
+    },
+    {
+      "sha256": "f2c6c602815669d292889e5be8c802f2ed950653b77999b1584e8e6aed25d040",
+      "file": "LICENSE",
+      "gitBlobSha1": "d62e3bef9f054f21b7fc616365850fbf879a99ff",
+      "bytes": 1084,
+      "url": "https://huggingface.co/deepseek-ai/DeepSeek-V4.1-Flash/resolve/314113f8a7dadb388215396ba5fbee2c610a04d6/LICENSE"
+    }
+  ]
+}

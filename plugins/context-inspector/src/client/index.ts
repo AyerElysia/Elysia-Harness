@@ -6,6 +6,7 @@ import type {} from '@deepseek-ai/dsh-client-locale/client'
 import type {} from '@deepseek-ai/dsh-client-ui-conversation/client'
 import type {} from '@deepseek-ai/dsh-client-ui-renderer/client'
 import { ContextInspectorView, type ContextInspectorInjected } from './ContextInspectorView.tsx'
+import { ContextMetricsMeter } from './ContextMetricsMeter.tsx'
 import { en, NS, zh } from './locales.ts'
 
 export const inject = ['slots', 'locale', 'connection']
@@ -26,4 +27,10 @@ export function apply(ctx: Context): void {
       inspectorRpc: rpc,
     }),
   }, ContextInspectorView))
+  ctx.slots.inject('conversation.composer.dock', () => ctx.slots.register({
+    name: 'conversation.composer.dock',
+    id: 'elysia-context-metrics',
+    order: 20,
+    locale: NS,
+  }, ContextMetricsMeter))
 }

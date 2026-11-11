@@ -25,7 +25,9 @@
     "src/**/*.tsx",
     "lib/client*.js",
     "cordis.patch.yml",
-    "lib/client*.js.map"
+    "lib/client*.js.map",
+    "tokenizers/**/*",
+    "src/**/*.css"
   ],
   "scripts": {
     "test": "vitest run",
@@ -44,7 +46,14 @@
     "@deepseek-ai/dsh-client-ui-renderer": "workspace:*",
     "@elysia/request-archive": "workspace:*",
     "@deepseek-ai/dsh-typert-protocol": "workspace:*",
-    "@deepseek-ai/dsh-api-session-controller": "workspace:*"
+    "@deepseek-ai/dsh-api-session-controller": "workspace:*",
+    "@deepseek-ai/dsh-session": "workspace:*",
+    "@deepseek-ai/dsh-session-projection": "workspace:*",
+    "@deepseek-ai/dsh-llm": "workspace:*",
+    "@deepseek-ai/dsh-client-ui-session": "workspace:*",
+    "@deepseek-ai/dsh-client-ui-primitives": "workspace:*",
+    "@deepseek-ai/dsh-compaction": "workspace:*",
+    "@deepseek-ai/dsh-compaction-image-offload": "workspace:*"
   },
   "devDependencies": {
     "@deepseek-ai/cordis": "workspace:~",
@@ -71,7 +80,14 @@
     "tsdown": "^0.22.2",
     "@types/react": "~18.3.1",
     "@types/react-dom": "~18.3.0",
-    "@types/node": "^22.20.1"
+    "@types/node": "^22.20.1",
+    "@deepseek-ai/dsh-session-projection": "workspace:*",
+    "@deepseek-ai/dsh-llm": "workspace:*",
+    "@deepseek-ai/dsh-client-ui-session": "workspace:*",
+    "@deepseek-ai/dsh-client-ui-primitives": "workspace:*",
+    "@deepseek-ai/dsh-compaction": "workspace:*",
+    "@deepseek-ai/dsh-attachment": "workspace:*",
+    "@deepseek-ai/dsh-compaction-image-offload": "workspace:*"
   },
   "dsh": {
     "client": {
@@ -81,11 +97,17 @@
         "@deepseek-ai/dsh-client-locale",
         "@deepseek-ai/dsh-client-ui-conversation",
         "@deepseek-ai/dsh-client-ui-renderer",
-        "@deepseek-ai/dsh-client-connection"
+        "@deepseek-ai/dsh-client-connection",
+        "@deepseek-ai/dsh-client-ui-session",
+        "@deepseek-ai/dsh-client-ui-primitives"
       ]
     },
     "bundle": {
       "patch": "./cordis.patch.yml"
     }
+  },
+  "dependencies": {
+    "@huggingface/tokenizers": "0.2.0",
+    "zod": "4.4.3"
   }
 }

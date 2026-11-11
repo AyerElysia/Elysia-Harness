@@ -5,8 +5,9 @@ import { Context } from '@deepseek-ai/cordis'
 import TypertRegistry from '@deepseek-ai/dsh-typert-registry'
 import RemoteAccessService, { type RemoteAccessBinding } from '@deepseek-ai/dsh-api-remote-access'
 import Gateway from '@deepseek-ai/dsh-api-gateway'
+import SessionProjections from '@deepseek-ai/dsh-session-projection'
 import { Peer } from '@deepseek-ai/dsh-client-connection'
-import type { SessionId } from '@deepseek-ai/dsh-session'
+import { Session, SessionId } from '@deepseek-ai/dsh-session'
 import { RequestArchiveIndex } from '@elysia/request-archive/index-store'
 import { afterEach, describe, expect, it } from 'vitest'
 import * as Inspector from '../src/index.ts'
@@ -26,9 +27,10 @@ async function setup() {
   await ctx.plugin(TypertRegistry)
   await ctx.plugin(RemoteAccessService)
   await ctx.plugin(Gateway)
+  await ctx.plugin(SessionProjections)
   ctx.typert.resources.register('session', { field: 'sessionId' })
   ctx.provide('sessionController', {})
-  const mounted = await ctx.plugin(Inspector, { dir })
+  const mounted = await ctx.plugin(Inspector, { dir, metrics: { tokenizerEnabled: false } })
   const raw = JSON.stringify({
     id: 'remote-fixture', recordedAt: '2026-11-09T00:00:00.000Z', loop: true,
     request: { sessionId: 'allowed', provider: 'fixture', model: 'fixture', messages: [], tools: [] },
@@ -51,7 +53,7 @@ async function setup() {
   const call = (peer: Peer, method: string, request: object) => ctx.typertGateway.invoke({
     peer, namespace: 'contextInspector', method, args: { request },
   })
-  return { ctx, mounted, guest, owner, grant, call }
+  return { ctx, mounted, guest, owner, grant, call, dir }
 }
 
 describe('contextInspector native Remote access', () => {
@@ -69,10 +71,17 @@ describe('contextInspector native Remote access', () => {
     await expect(call(guest, 'latest', {})).rejects.toMatchObject({ code: 'remote-access/denied' })
   })
   it('unmounts only the inspector and disposes its reader/cache', async () => {
-    const { ctx, mounted, owner, call } = await setup()
+    const { ctx, mounted, owner, call, dir } = await setup()
     await call(owner, 'latest', { sessionId: 'allowed' })
     const reader = ctx.contextInspector.reader
+    const session = Session.create(SessionId('inspector-lifecycle'))
+    expect(ctx.sessionProjections.snapshot(session).values.elysiaContextMetrics).toBeDefined()
     await mounted.dispose()
     await expect(reader.latest('allowed', new AbortController().signal)).rejects.toMatchObject({ code: 'disposed' })
+    expect(ctx.sessionProjections.snapshot(session).values.elysiaContextMetrics).toBeUndefined()
+    const remounted = await ctx.plugin(Inspector, { dir, metrics: { tokenizerEnabled: false } })
+    expect(ctx.sessionProjections.snapshot(session).values.elysiaContextMetrics).toBeDefined()
+    await remounted.dispose()
+    expect(ctx.sessionProjections.snapshot(session).values.elysiaContextMetrics).toBeUndefined()
   })
 })

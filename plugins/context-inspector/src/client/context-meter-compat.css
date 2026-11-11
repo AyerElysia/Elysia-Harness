@@ -1,0 +1,6 @@
+/* Compatibility with the pinned native InputBar only. Its old meter has no
+   dedicated slot. Our official dock contribution owns this marker; removing
+   it restores the native meter without mutating a slot, projection or DOM. */
+[data-composer-dock]:has([data-elysia-context-meter]) > span:last-child:has(> button > svg[viewBox="0 0 14 14"] > circle) {
+  display: none;
+}

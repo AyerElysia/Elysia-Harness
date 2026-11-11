@@ -1,0 +1,156 @@
+{
+  "validationVersion": 1,
+  "node": "v22.20.0",
+  "package": "@huggingface/tokenizers",
+  "packageVersion": "0.2.0",
+  "assetsRevision": "314113f8a7dadb388215396ba5fbee2c610a04d6",
+  "api": "new Tokenizer(tokenizerJson, tokenizerConfig).encode(text, { add_special_tokens: false }).ids.length",
+  "jsonPadding": null,
+  "jsonTruncation": null,
+  "timings": {
+    "readAndParseMs": 66.371489,
+    "constructMs": 157.609282,
+    "shortWarmTotalMs": 4.225566999999955,
+    "shortWarmCalls": 400,
+    "shortWarmMeanMs": 0.010563917499999888
+  },
+  "fixtures": [
+    {
+      "name": "empty",
+      "text": "",
+      "utf8Bytes": 0,
+      "ids": [],
+      "count": 0,
+      "attentionMaskLength": 0,
+      "firstEncodeMs": 0.11627400000003263,
+      "roundTrip": true
+    },
+    {
+      "name": "chinese",
+      "text": "你好，世界！",
+      "utf8Bytes": 18,
+      "ids": [
+        30594,
+        303,
+        3427,
+        1175
+      ],
+      "count": 4,
+      "attentionMaskLength": 4,
+      "firstEncodeMs": 2.747112999999956,
+      "roundTrip": true
+    },
+    {
+      "name": "english",
+      "text": "Hello, world!",
+      "utf8Bytes": 13,
+      "ids": [
+        19923,
+        14,
+        2058,
+        3
+      ],
+      "count": 4,
+      "attentionMaskLength": 4,
+      "firstEncodeMs": 0.49143100000003415,
+      "roundTrip": true
+    },
+    {
+      "name": "json",
+      "text": "{\"count\":3,\"enabled\":true,\"message\":\"你好\"}",
+      "utf8Bytes": 45,
+      "ids": [
+        24313,
+        10499,
+        3362,
+        21,
+        3184,
+        267,
+        9895,
+        3362,
+        11476,
+        3184,
+        20400,
+        16562,
+        30594,
+        62773
+      ],
+      "count": 14,
+      "attentionMaskLength": 14,
+      "firstEncodeMs": 0.24384400000002415,
+      "roundTrip": true
+    },
+    {
+      "name": "emoji",
+      "text": "🙂🌍👨‍👩‍👧‍👦",
+      "utf8Bytes": 33,
+      "ids": [
+        80300,
+        227,
+        21716,
+        238,
+        25730,
+        104,
+        46088,
+        25730,
+        105,
+        46088,
+        25730,
+        103,
+        46088,
+        25730,
+        102
+      ],
+      "count": 15,
+      "attentionMaskLength": 15,
+      "firstEncodeMs": 0.06427300000001424,
+      "roundTrip": true
+    }
+  ],
+  "longerFixture": {
+    "repeatedPublicText": "公开分词验证 English JSON 123 🙂\n",
+    "repeats": 1024,
+    "utf8Bytes": 41984,
+    "count": 9216,
+    "encodeMs": 12.722059999999999,
+    "roundTrip": true
+  },
+  "limitations": [
+    "Local text BPE count only; no chat-template/image counting.",
+    "No provider/model request was sent.",
+    "decode([]) throws; empty encode still returns zero tokens.",
+    "JS and native implementations can differ on unsupported regular-expression behavior."
+  ],
+  "nativeParity": {
+    "implementation": "huggingface/tokenizers",
+    "version": "0.22.2",
+    "fixtures": [
+      {
+        "name": "empty",
+        "matchesIds": true,
+        "tokens": 0
+      },
+      {
+        "name": "chinese",
+        "matchesIds": true,
+        "tokens": 4
+      },
+      {
+        "name": "english",
+        "matchesIds": true,
+        "tokens": 4
+      },
+      {
+        "name": "json",
+        "matchesIds": true,
+        "tokens": 14
+      },
+      {
+        "name": "emoji",
+        "matchesIds": true,
+        "tokens": 15
+      }
+    ],
+    "longerFixtureTokenCountMatches": true
+  }
+}
