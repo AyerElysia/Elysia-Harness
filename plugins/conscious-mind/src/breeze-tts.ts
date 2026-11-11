@@ -119,7 +119,141 @@ export function pcm16MonoToWav(pcm: Uint8Array, sampleRate: number): Uint8Array 
   return wav
 }
 
-/** One lazy-loaded client; synthesis never mutates the trusted voice settings. */
+/** Complete shared-service output; clause/word timing is not supplied by Breeze. */
+export interface BreezeSpeech extends SynthesizedVoice {
+  sampleRate: number
+  durationMs: number
+}
+
+export interface BreezeRequestOptions {
+  expression?: string | undefined
+  signal?: AbortSignal | undefined
+  fetchImpl?: typeof fetch | undefined
+  /** Opaque engineering caller label, without user/session/text data. */
+  client?: string | undefined
+  /** Optional shorter end-to-end budget, including server queue and PCM read. */
+  requestTimeoutMs?: number | undefined
+}
+
+/** Settle a pending fetch on cancellation even if a test/custom carrier ignores it. */
+async function waitForFetch(pending: Promise<Response>, signal: AbortSignal): Promise<Response> {
+  let abort = () => {}
+  const cancelled = new Promise<never>((_resolve, reject) => {
+    abort = () => reject(signal.reason)
+    signal.addEventListener('abort', abort, { once: true })
+    if (signal.aborted) abort()
+  })
+  try {
+    return await Promise.race([pending.then(response => {
+      if (signal.aborted) { void response.body?.cancel().catch(() => {}); signal.throwIfAborted() }
+      return response
+    }), cancelled])
+  } finally {
+    signal.removeEventListener('abort', abort)
+  }
+}
+
+/** Consume a whole PCM stream; cancellation or stream failure never returns a partial WAV. */
+async function readPcm(response: Response, signal: AbortSignal): Promise<Uint8Array> {
+  if (response.body === null) throw new Error('BreezeTTS 返回了空音频')
+  const reader = response.body.getReader()
+  const abort = () => { void reader.cancel(signal.reason).catch(() => {}) }
+  const chunks: Uint8Array[] = []
+  let bytes = 0
+  let complete = false
+  signal.addEventListener('abort', abort, { once: true })
+  try {
+    signal.throwIfAborted()
+    for (;;) {
+      const { done, value } = await reader.read()
+      signal.throwIfAborted()
+      if (done) break
+      chunks.push(value)
+      bytes += value.byteLength
+    }
+    const pcm = new Uint8Array(bytes)
+    let offset = 0
+    for (const chunk of chunks) { pcm.set(chunk, offset); offset += chunk.byteLength }
+    complete = true
+    return pcm
+  } finally {
+    signal.removeEventListener('abort', abort)
+    if (!complete) void reader.cancel().catch(() => {})
+    reader.releaseLock()
+  }
+}
+
+/**
+ * Submit exactly once to the shared Breeze service. The server owns the global
+ * FIFO and unique inference worker; an HTTP error is not permission to replay
+ * a possibly admitted POST. One deadline covers preparation, queue and PCM.
+ */
+export async function requestBreeze(settings: BreezeSettings, text: string, options: BreezeRequestOptions = {}): Promise<BreezeSpeech> {
+  options.signal?.throwIfAborted()
+  const characters = Array.from(text).length
+  if (characters === 0) throw new Error('没有要念的内容')
+  if (characters > settings.maxTextLength) throw new Error(`口语超过 ${settings.maxTextLength} 字上限（当前 ${characters} 字）`)
+  const expression = options.expression?.trim() ?? ''
+  if (expression.length > 1000) throw new Error('expression_instruction 不能超过 1000 字符')
+  const timeoutMs = Math.floor(Math.min(settings.timeoutMs, options.requestTimeoutMs ?? settings.timeoutMs))
+  if (!Number.isFinite(timeoutMs) || timeoutMs <= 0) throw new Error('Breeze 请求预算必须为正数')
+  const client = options.client ?? 'conscious-mind'
+  if (!/^[A-Za-z0-9._-]{1,64}$/u.test(client)) throw new Error('Breeze client 标签无效')
+  const controller = new AbortController()
+  const signal = controller.signal
+  const callerAbort = () => controller.abort(options.signal?.reason)
+  options.signal?.addEventListener('abort', callerAbort, { once: true })
+  if (options.signal?.aborted) callerAbort()
+  const timer = setTimeout(() => controller.abort(new DOMException('BreezeTTS 请求超时', 'TimeoutError')), timeoutMs)
+  timer.unref?.()
+  try {
+    const instruction = expression.length === 0 ? settings.instruction : [
+      settings.instruction,
+      '本次只调整表达方式，不改变参考音色、年龄感、身份或声线。',
+      `本次表达控制：${expression}`,
+    ].join('\n')
+    const reference = await readFile(settings.referenceAudioPath, { signal })
+    signal.throwIfAborted()
+    const form = new FormData()
+    form.set('text', text)
+    form.set('instruction', instruction)
+    form.set('cfg_scale', String(settings.cfgScale))
+    form.set('ref_text', settings.referenceText)
+    form.set('seed', String(stableSeed(settings.styleName, text, settings.seed)))
+    const referenceBytes = Uint8Array.from(reference)
+    form.set('ref_audio', new Blob([referenceBytes.buffer], { type: 'audio/wav' }), basename(settings.referenceAudioPath))
+    signal.throwIfAborted()
+    const response = await waitForFetch((options.fetchImpl ?? fetch)(`${settings.server.replace(/\/+$/u, '')}/v1/audio/speech`, {
+      method: 'POST', body: form, signal,
+      headers: { 'X-Breeze-Client': client, 'X-Breeze-Timeout-Ms': String(Math.floor(timeoutMs)) },
+    }), signal)
+    signal.throwIfAborted()
+    if (!response.ok) {
+      // Never echo service bodies, reference text or cancellation capabilities.
+      void response.body?.cancel().catch(() => {})
+      const retry = response.headers.get('retry-after')
+      const detail = response.status === 503 ? '服务繁忙或尚未就绪' : response.status === 504 ? '排队或合成超时' : '请求失败'
+      const retryHint = retry !== null && /^\d+$/u.test(retry) ? `；建议等待 ${retry} 秒` : ''
+      throw new Error(`BreezeTTS ${detail}: HTTP ${response.status}${retryHint}`)
+    }
+    const contentType = response.headers.get('content-type')?.toLowerCase() ?? ''
+    const sampleFormat = response.headers.get('x-sample-format')?.toLowerCase()
+    const sampleRate = Number(response.headers.get('x-sample-rate'))
+    if (!contentType.startsWith('audio/pcm') || sampleFormat !== 's16le' || !Number.isInteger(sampleRate) || sampleRate <= 0) {
+      void response.body?.cancel().catch(() => {})
+      throw new Error('BreezeTTS 返回了不支持的音频格式')
+    }
+    const pcm = await readPcm(response, signal)
+    signal.throwIfAborted()
+    const audio = pcm16MonoToWav(pcm, sampleRate)
+    return { audio, mediaType: 'audio/wav', sampleRate, durationMs: Math.round(pcm.byteLength * 1000 / (sampleRate * 2)) }
+  } finally {
+    clearTimeout(timer)
+    options.signal?.removeEventListener('abort', callerAbort)
+  }
+}
+
+/** Lazy configuration wrapper around the common, single-submission transport. */
 export class BreezeTts implements VoiceSynthesizer {
   private settingsPromise?: Promise<BreezeSettings>
 
@@ -134,45 +268,8 @@ export class BreezeTts implements VoiceSynthesizer {
   }
 
   async synthesize(text: string, expressionInstruction?: string, signal?: AbortSignal): Promise<SynthesizedVoice> {
+    signal?.throwIfAborted()
     const settings = await this.settings()
-    const characters = Array.from(text).length
-    if (characters > settings.maxTextLength) {
-      throw new Error(`口语超过 ${settings.maxTextLength} 字上限（当前 ${characters} 字）`)
-    }
-    const expression = expressionInstruction?.trim() ?? ''
-    if (expression.length > 1000) throw new Error('expression_instruction 不能超过 1000 字符')
-    const instruction = expression.length === 0 ? settings.instruction : [
-      settings.instruction,
-      '本次只调整表达方式，不改变参考音色、年龄感、身份或声线。',
-      `本次表达控制：${expression}`,
-    ].join('\n')
-    const reference = await readFile(settings.referenceAudioPath)
-    const form = new FormData()
-    form.set('text', text)
-    form.set('instruction', instruction)
-    form.set('cfg_scale', String(settings.cfgScale))
-    form.set('ref_text', settings.referenceText)
-    form.set('seed', String(stableSeed(settings.styleName, text, settings.seed)))
-    const referenceBytes = Uint8Array.from(reference)
-    form.set('ref_audio', new Blob([referenceBytes.buffer], { type: 'audio/wav' }), basename(settings.referenceAudioPath))
-
-    const timeout = AbortSignal.timeout(settings.timeoutMs)
-    const response = await this.fetchImpl(`${settings.server}/v1/audio/speech`, {
-      method: 'POST',
-      body: form,
-      signal: signal === undefined ? timeout : AbortSignal.any([signal, timeout]),
-    })
-    if (!response.ok) {
-      const detail = (await response.text()).slice(0, 1000)
-      throw new Error(`BreezeTTS 请求失败: HTTP ${response.status}${detail.length > 0 ? ` ${detail}` : ''}`)
-    }
-    const contentType = response.headers.get('content-type')?.toLowerCase() ?? ''
-    const sampleFormat = response.headers.get('x-sample-format')?.toLowerCase()
-    const sampleRate = Number(response.headers.get('x-sample-rate'))
-    if (!contentType.startsWith('audio/pcm') || sampleFormat !== 's16le') {
-      throw new Error('BreezeTTS 返回了不支持的音频格式')
-    }
-    const pcm = new Uint8Array(await response.arrayBuffer())
-    return { audio: pcm16MonoToWav(pcm, sampleRate), mediaType: 'audio/wav' }
+    return requestBreeze(settings, text, { expression: expressionInstruction, signal, fetchImpl: this.fetchImpl, client: 'conscious-mind' })
   }
 }

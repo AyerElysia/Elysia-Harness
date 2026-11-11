@@ -246,6 +246,8 @@ output: {
 
 这是针对 BreezeTTS 的工具。原生声音事件和 `expression_instruction` 沿用 Elysium 的 `life_send_voice` 语义；参考音频、`ref_text`、可信基础 `instruction`、`cfg_scale`、`seed` 都由部署侧管理。工具不提供 `voice_style` 或 `text_language`，不能更换参考音色，也不使用 QQ 自带的角色语音。
 
+主意识与直播复用 `breeze-tts.ts` 的 `requestBreeze`，向同一个部署服务提交一次请求。全局有界 FIFO 与唯一推理 worker 由独立 Breeze 服务持有；客户端不再各建推理队列或轮询重投 409。一次 caller/config/request 预算覆盖排队、执行和完整 PCM 读取；取消会关闭 HTTP 读取，断流、空 PCM、半个采样及超时都不产生可发送的 WAV。503/504 是可观察失败，不自动重投可能已受理的 POST。固定本地音色不变，无云端回退。
+
 #### 参数 Schema
 
 参数顺序固定为 `channel`、`conversation`、`text`、`expression_instruction`，仅前三项必填：
