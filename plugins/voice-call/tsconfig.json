@@ -1,0 +1,32 @@
+{
+  "extends": "../../dsh/tsconfig.base.json",
+  "compilerOptions": {
+    "rootDir": "src",
+    "outDir": "lib/types",
+    "paths": {
+      "@elysia/conscious-mind/standing-prompts": [
+        "../conscious-mind/lib/types/standing-prompts.d.ts"
+      ],
+      "@elysia/conscious-mind/src/breeze-tts.ts": [
+        "../conscious-mind/lib/types/breeze-tts.d.ts"
+      ]
+    },
+    "jsx": "react-jsx",
+    "lib": [
+      "ES2024",
+      "DOM",
+      "DOM.Iterable"
+    ],
+    "noEmit": true,
+    "composite": false,
+    "incremental": false
+  },
+  "include": [
+    "src"
+  ],
+  "references": [
+    {
+      "path": "../../dsh/vendor/cordis"
+    }
+  ]
+}

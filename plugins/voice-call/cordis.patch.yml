@@ -1,0 +1,5 @@
+# Explicit-start voice calls, disabled by default. Mounting does not open media.
+# Enabled by the Web surface override only; real-call acceptance is pending.
+- insert:
+    - id: elysia-voice-call
+      name: '@elysia/voice-call'
