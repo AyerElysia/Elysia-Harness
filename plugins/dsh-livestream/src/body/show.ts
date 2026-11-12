@@ -2,7 +2,7 @@
  * 一场直播的身体：连着直播间、看着注意力层，把「现在该说的事」交给大脑，把大脑写的话念出来。
  *
  *   一场直播 = 大脑的一个会话，完整保留历史。身体在她空下来时（上一轮结束、话也念完了）挑出下一件事，
- *   作为一条消息推进这个会话；她回复的正文就是说出口的话，写出一段念一段（见 dsh/agent.ts）。
+ *   作为一条消息推进这个会话；公开发言由显式工具提交（见 dsh/agent.ts）。
  *   节奏全归身体管：她在想、在说的时候不推新的；主人的话、开场、谢幕排在弹幕前面。
  *
  * 不碰 DSH：推消息、TTS、提炼用的模型、记录目录都由插件从外面给（ShowHooks）。
@@ -18,14 +18,14 @@ import type { LiveEvent, LiveStatus, LiveUser } from '../core/live';
 import type { JournalRef, ProjectionPage, ReplayPlan } from '../dsh/session';
 import { OrderBook, type OrderBookData, type OrderState } from '../core/orders';
 import { cleanName, cleanText } from '../core/safety';
-import { speakable } from '../core/speakable';
+import { speakable, speechCaption } from '../core/speakable';
 import { topicText } from '../core/topicText';
 import { lookupViewer, type ViewerLookup } from '../core/viewerLookup';
 import type { BrainState, GameSource, GameStatus, StageLiveEvent, StageUser } from '../stage/protocol';
 import { gameStatusOf } from './gameStatus';
 import { Player, type PlayRequest } from './player';
 import type { VideoNotes } from './watchAlong';
-import { Stage } from './stage';
+import { Stage, type SpeechReceipt } from './stage';
 
 /** 一个视频不放了：怎么结束的、放了多少秒、这期间她说了什么 */
 export interface VideoEnd {
@@ -47,10 +47,11 @@ export interface ShowHooks {
    * Missing audio is a failure, never successful subtitle-only speech.
    */
   /** voice：嘉宾用自己的音色；不给就是她的 */
-  synthesize(text: string, signal: AbortSignal, voice?: string): Promise<{ audio: Uint8Array; timeline: Array<{ chars: number; atMs: number }>; audioMime?: 'audio/mpeg' | 'audio/wav'; durationMs?: number; timingSource?: 'estimated' | 'aligned' } | null>;
-  /** 下播后提炼观众记忆用的模型 */
+  synthesize(text: string, signal: AbortSignal, voice?: string, expressionInstruction?: string): Promise<{ audio: Uint8Array; timeline: Array<{ chars: number; atMs: number }>; audioMime?: 'audio/mpeg' | 'audio/wav'; durationMs?: number; timingSource?: 'estimated' | 'aligned' } | null>;
+  /** Runtime publication state. Its value stays stable while the output destination stays the same. */
+  speechOutput?(): string;
   /** Complete protocol input must be durably journalled before projection. */
-  journalInput?(event: LiveEvent, isUpdate: boolean, receiptId: string): Promise<JournalRef>;
+  journalInput?(event: LiveEvent, isUpdate: boolean, receiptId: string, showId?: string): Promise<JournalRef>;
   recordActivity?(entry: Record<string, unknown>): Promise<void>;
   log?(level: 'info' | 'warn', message: string): void;
   /** 存下正在播的这一场（插件重启后接着播用）；null：这场结束了 */
@@ -58,6 +59,26 @@ export interface ShowHooks {
   /** 游戏画面上舞台、撤下（OBS 抓游戏窗口、叠 HUD） */
   onGame?(source: GameSource | null): void;
 }
+
+export interface LiveSpeechInput {
+  id: string;
+  text: string;
+  stageMood?: string;
+  expressionInstruction?: string;
+}
+
+export type LiveSpeechResult = Pick<SpeechReceipt, 'id' | 'state' | 'detail'>;
+
+interface SpeechLine {
+  id: string;
+  caption: string;
+  synthesisText: string;
+  mood: string;
+  expressionInstruction?: string;
+}
+
+const OUTPUT_CHANGED = 'live-output-changed';
+const SHOW_ENDED = 'live-show-ended';
 
 /** 正在播的一场：插件重启后接着播要的东西 */
 export interface LiveSnapshot {
@@ -117,6 +138,7 @@ export interface ShowStatus {
   pending: Record<string, number>;
   lines: SpokenLine[];
   stageWatchers: number;
+  listenWatchers: number;
   /** 当前连着的房间号（没连为 null） */
   roomId: number | null;
 }
@@ -187,7 +209,11 @@ export class LiveShow {
   private inputError: string | undefined;
   private disposed = false;
   private readonly lifecycle = new AbortController();
-  private inputQueue: Array<{ event: LiveEvent; isUpdate: boolean; receiptId: string }> = [];
+  private speechBoundary = new AbortController();
+  private speechOutputRevision = 0;
+  private showId: string | undefined;
+  private readonly explicitSpeechIds = new Set<string>();
+  private inputQueue: Array<{ event: LiveEvent; isUpdate: boolean; receiptId: string; showId: string | undefined }> = [];
   private drainingInput = false;
   private recoveredTopics: Topic[] = [];
   private onAir = false;
@@ -280,12 +306,17 @@ export class LiveShow {
 
   // ── 直播间连接 ─────────────────────────────────────
 
+  get hasPlatformRoom(): boolean {
+    return this.roomId !== null;
+  }
+
   connect(roomId: number, cookie: string, rememberViewers = false): LiveStatus {
     this.rememberViewers = rememberViewers;
     this.unsubscribe?.();
     this.unsubscribeDisplay?.();
     this.unsubscribe = null;
     this.unsubscribeDisplay = null;
+    if (this.roomId !== roomId) this.resetSpeechBoundary(OUTPUT_CHANGED);
     this.roomId = roomId;
     this.attachHub();
     const status = this.hub.connect({ platform: 'bilibili', roomId, cookie });
@@ -299,6 +330,7 @@ export class LiveShow {
     this.unsubscribeDisplay?.();
     this.unsubscribeDisplay = null;
     this.hub.disconnect();
+    if (this.roomId !== null) this.resetSpeechBoundary(OUTPUT_CHANGED);
     this.roomId = null;
     if (this.roomTimer) clearInterval(this.roomTimer);
     this.roomTimer = null;
@@ -326,7 +358,7 @@ export class LiveShow {
 
   private observe(event: LiveEvent, isUpdate: boolean): void {
     if (this.disposed) return;
-    this.inputQueue.push({ event: structuredClone(event), isUpdate, receiptId: randomUUID() });
+    this.inputQueue.push({ event: structuredClone(event), isUpdate, receiptId: randomUUID(), showId: this.currentShowId });
     if (this.inputQueue.length >= 4096) this.hub.disconnect();
     this.drainInput();
   }
@@ -336,8 +368,8 @@ export class LiveShow {
     this.drainingInput = true;
     this.inputWork = (async () => {
       while (this.inputQueue.length && !this.disposed) {
-        const { event, isUpdate, receiptId } = this.inputQueue[0]!;
-        const journal = await this.hooks.journalInput?.(event, isUpdate, receiptId);
+        const { event, isUpdate, receiptId, showId } = this.inputQueue[0]!;
+        const journal = await this.hooks.journalInput?.(event, isUpdate, receiptId, showId);
         if (this.disposed) return;
         if (!this.isBlocked(event.user.id)) {
           const now = Date.now();
@@ -399,9 +431,15 @@ export class LiveShow {
 
   /** 开播：sessionId 是她直播用的会话（控制台刚开好的），身体先推开场 */
   goLive(sessionId: string, gameSessionId?: string): void {
+    if (this.brainSession !== sessionId) {
+      this.resetSpeechBoundary(SHOW_ENDED);
+      if (this.onAir) this.showId = randomUUID();
+    }
     this.brainSession = sessionId;
     this.gameSession = gameSessionId ?? null;
     if (this.onAir) return;
+    this.explicitSpeechIds.clear();
+    this.showId = randomUUID();
     this.resetGameLine();
     this.onAir = true;
     this.ending = false;
@@ -445,6 +483,9 @@ export class LiveShow {
   /** 插件重启后接着播（同一个会话、同一场记忆和记录）：先告诉她断了多久 */
   resumeLive(snapshot: LiveSnapshot, now = Date.now()): void {
     if (this.onAir) return;
+    this.resetSpeechBoundary(SHOW_ENDED);
+    this.explicitSpeechIds.clear();
+    this.showId = randomUUID();
     this.brainSession = snapshot.sessionId;
     this.gameSession = snapshot.gameSessionId ?? null;
     this.resetGameLine();
@@ -508,6 +549,8 @@ export class LiveShow {
     if (!this.onAir) return;
     this.stopVideo('off');
     this.onAir = false;
+    this.showId = undefined;
+    this.resetSpeechBoundary(SHOW_ENDED);
     this.ending = false;
     this.endingPushed = false;
     this.priority = [];
@@ -870,11 +913,14 @@ export class LiveShow {
     }
   }
 
-  /** 念她写的话：合成语音、交给舞台、等念完 */
-  async say(raw: string, mood: string, signal: AbortSignal, line: 'live' | 'game' = 'live', source?: { sessionId: string; seq: number }): Promise<string> {
-    signal = AbortSignal.any([signal, this.lifecycle.signal]);
-    const text = speakable(raw);
-    if (!text) return '';
+  private resetSpeechBoundary(detail: string): void {
+    const previous = this.speechBoundary;
+    this.speechBoundary = new AbortController();
+    this.speechOutputRevision += 1;
+    previous.abort(detail);
+  }
+
+  private withSpeechMic<T>(line: 'live' | 'game', play: () => Promise<T>): Promise<T> {
     const game = line === 'game';
     this.queued += 1;
     if (game) this.queuedGame += 1;
@@ -882,34 +928,8 @@ export class LiveShow {
       this.speaking += 1;
       this.attention.speechStarted();
       this.setBrain('speaking');
-      const start = Date.now();
-      let id: string | undefined;
       try {
-        signal.throwIfAborted();
-        const speech = await this.hooks.synthesize(text, signal);
-        if (!speech) throw new Error('Local speech synthesis is unavailable');
-        signal.throwIfAborted();
-        id = randomUUID();
-        const estimateMs = speech.durationMs ?? estimateSpeechMs(text);
-        const done = this.stage.waitSaid(id, estimateMs, signal);
-        this.stage.broadcast({
-          type: 'say', id, text, mood, estimateMs,
-          audio: Buffer.from(speech.audio).toString('base64'),
-          ...(speech.audioMime ? { audioMime: speech.audioMime } : {}),
-          ...(speech.timingSource ? { timingSource: speech.timingSource } : {}),
-          ...(speech.timeline.length ? { timeline: speech.timeline } : {}),
-        });
-        const receipt = await done;
-        if (receipt.state !== 'ended') throw new Error(`Playback ${receipt.state}${receipt.detail ? `: ${receipt.detail}` : ''}`);
-        this.lines = [...this.lines, { text, mood, at: start }].slice(-RECENT_LINES);
-        this.herLines.push(text);
-        this.spoken += [...text].length;
-        this.record({ type: 'say', state: 'ended', id, text, mood, start, end: Date.now(), ...(source ? { source } : {}), ...(game ? { line: 'game' } : {}) });
-        return text;
-      } catch (error) {
-        this.record({ type: 'say', state: signal.aborted ? 'cancelled' : 'failed', ...(id ? { id } : {}), text, mood, start, end: Date.now(), ...(source ? { source } : {}), error: error instanceof Error ? error.message : 'Playback failed' });
-        this.stage.broadcast({ type: 'note', tag: 'speech-error', text: '语音合成或播放失败；未确认说出' });
-        throw error;
+        return await play();
       } finally {
         this.speaking -= 1;
         this.queued -= 1;
@@ -918,6 +938,110 @@ export class LiveShow {
         this.setBrain(!this.onAir ? 'off' : this.turnRunning ? 'thinking' : 'listening');
       }
     }, game ? 1 : 0);
+  }
+
+  private async playSpeech(
+    line: SpeechLine,
+    signal: AbortSignal,
+    verifyOutput: () => void = () => {},
+  ): Promise<SpeechReceipt> {
+    verifyOutput();
+    signal.throwIfAborted();
+    const speech = line.expressionInstruction
+      ? await this.hooks.synthesize(line.synthesisText, signal, undefined, line.expressionInstruction)
+      : await this.hooks.synthesize(line.synthesisText, signal);
+    if (!speech?.audio.byteLength) throw new Error('Local speech synthesis is unavailable');
+    verifyOutput();
+    signal.throwIfAborted();
+    const estimateMs = speech.durationMs ?? estimateSpeechMs(line.synthesisText);
+    const receipt = this.stage.waitSaid(line.id, estimateMs, signal);
+    this.stage.broadcast({
+      type: 'say', id: line.id, text: line.caption, mood: line.mood, estimateMs,
+      audio: Buffer.from(speech.audio).toString('base64'),
+      ...(speech.audioMime ? { audioMime: speech.audioMime } : {}),
+      ...(speech.timingSource ? { timingSource: speech.timingSource } : {}),
+      ...(speech.timeline.length ? { timeline: speech.timeline } : {}),
+    });
+    return receipt;
+  }
+
+  private countSpoken(text: string, mood: string, start: number): void {
+    if (!text) return;
+    this.lines = [...this.lines, { text, mood, at: start }].slice(-RECENT_LINES);
+    this.herLines.push(text);
+    this.spoken += [...text].length;
+  }
+
+  /** Compatibility entry for existing operator and game speech. */
+  async say(raw: string, mood: string, signal: AbortSignal, line: 'live' | 'game' = 'live', source?: { sessionId: string; seq: number }): Promise<string> {
+    signal = AbortSignal.any([signal, this.lifecycle.signal]);
+    const text = speakable(raw);
+    if (!text) return '';
+    return this.withSpeechMic(line, async () => {
+      const start = Date.now(), id = randomUUID();
+      try {
+        const receipt = await this.playSpeech({ id, caption: text, synthesisText: text, mood }, signal);
+        if (receipt.state !== 'ended') throw new Error(`Playback ${receipt.state}${receipt.detail ? `: ${receipt.detail}` : ''}`);
+        this.countSpoken(text, mood, start);
+        this.record({ type: 'say', state: 'ended', id, text, mood, start, end: Date.now(), ...(source ? { source } : {}), ...(line === 'game' ? { line } : {}) });
+        return text;
+      } catch (error) {
+        this.record({ type: 'say', state: signal.aborted ? 'cancelled' : 'failed', id, text, mood, start, end: Date.now(), ...(source ? { source } : {}), error: error instanceof Error ? error.message : 'Playback failed' });
+        this.stage.broadcast({ type: 'note', tag: 'speech-error', text: '语音合成或播放失败；未确认说出' });
+        throw error;
+      }
+    });
+  }
+
+  /** Speak one explicit action without reusing a previous show or output mode. */
+  async liveSay(input: LiveSpeechInput, caller: AbortSignal): Promise<LiveSpeechResult> {
+    const { id } = input;
+    if (!/^[A-Za-z0-9._:-]{1,200}$/u.test(id)) return { id, state: 'failed', detail: 'invalid-speech-id' };
+    if (!this.onAir || this.disposed) return { id, state: 'failed', detail: 'live-show-inactive' };
+    const synthesisText = speakable(input.text, true);
+    if (!synthesisText) return { id, state: 'failed', detail: 'speech-empty' };
+    const expressionInstruction = input.expressionInstruction?.trim();
+    if (expressionInstruction && expressionInstruction.length > 1000) return { id, state: 'failed', detail: 'expression-too-long' };
+    if (this.explicitSpeechIds.has(id)) return { id, state: 'failed', detail: 'duplicate-speech-id' };
+    this.explicitSpeechIds.add(id);
+
+    const output = this.currentSpeechOutputKey;
+    const boundary = this.speechBoundary;
+    const route = new AbortController();
+    const signal = AbortSignal.any([caller, this.lifecycle.signal, boundary.signal, route.signal]);
+    const verifyOutput = () => {
+      if (this.currentSpeechOutputKey !== output) route.abort(OUTPUT_CHANGED);
+    };
+    const caption = speechCaption(synthesisText);
+    const mood = input.stageMood ?? 'talk';
+    return this.withSpeechMic('live', async () => {
+      const start = Date.now();
+      // Room changes and show end abort synchronously. Poll only while this
+      // line holds the mic to also catch changes in OBS's asynchronous phase.
+      const watcher = setInterval(verifyOutput, 100);
+      watcher.unref?.();
+      let result: LiveSpeechResult;
+      try {
+        const line = { id, caption, synthesisText, mood, ...(expressionInstruction ? { expressionInstruction } : {}) };
+        const receipt = await this.playSpeech(line, signal, verifyOutput);
+        // Browser receipts may carry only engineering detail into the tool result.
+        const detail = receipt.detail && /^[a-z0-9][a-z0-9-]{0,79}$/u.test(receipt.detail) ? receipt.detail : undefined;
+        result = { id, state: receipt.state, ...(detail === undefined ? {} : { detail }) };
+      } catch (error) {
+        if (signal.aborted) result = { id, state: 'cancelled', detail: 'speech-aborted' };
+        else if (error instanceof Error && error.name === 'TimeoutError') result = { id, state: 'timeout', detail: 'synthesis-timeout' };
+        else result = { id, state: 'failed', detail: 'synthesis-failed' };
+      } finally {
+        clearInterval(watcher);
+      }
+      if (result.state === 'cancelled' && signal.aborted) {
+        const reason: unknown = signal.reason;
+        if (reason === OUTPUT_CHANGED || reason === SHOW_ENDED) result.detail = reason;
+        else if (reason instanceof Error && reason.name === 'TimeoutError') result = { id, state: 'timeout', detail: 'speech-timeout' };
+      }
+      if (result.state === 'ended' && this.speechBoundary === boundary) this.countSpoken(caption, mood, start);
+      return result;
+    });
   }
 
   /**
@@ -956,6 +1080,17 @@ export class LiveShow {
     return text;
   }
 
+  /** Exact in-process show lifetime, assigned by explicit startup. */
+  get currentShowId(): string | undefined {
+    return this.onAir && !this.disposed ? this.showId : undefined;
+  }
+
+  /** Opaque route identity for a caller awaiting durable intent before dispatch. */
+  get currentSpeechOutputKey(): string | undefined {
+    const id = this.currentShowId;
+    return id === undefined ? undefined : JSON.stringify([id, this.speechOutputRevision, this.hooks.speechOutput?.()]);
+  }
+
   get currentSession(): string | null {
     return this.brainSession;
   }
@@ -987,7 +1122,7 @@ export class LiveShow {
 
   /** 这一场真的推流到直播间了：记忆里算一场（彩排不算「上一场」） */
   markBroadcast(): void {
-
+    this.resetSpeechBoundary(OUTPUT_CHANGED);
   }
 
   /** 这场直播的记录文件名（没在播为 null） */
@@ -1121,6 +1256,7 @@ export class LiveShow {
       pending: { ...snap.pending, ...(this.inputError ? { journalFailed: 1 } : {}) },
       lines: this.lines,
       stageWatchers: this.stage.watchers,
+      listenWatchers: this.stage.listenWatchers,
       roomId: this.roomId,
     };
   }

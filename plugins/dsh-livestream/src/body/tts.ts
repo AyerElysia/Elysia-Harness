@@ -5,6 +5,7 @@
 import { ELYSIUM_BREEZE_CONFIG } from '@elysia/conscious-mind/src/breeze-tts.ts';
 import { BreezeVoice } from './breeze';
 import { DEFAULT_VOICE } from './voices';
+import { speechCaption } from '../core/speakable';
 
 export { DEFAULT_VOICE };
 
@@ -24,28 +25,34 @@ export interface Speech {
   timeline: Array<{ chars: number; atMs: number }>;
 }
 
-export type SpeechAdapter = (text: string, signal: AbortSignal, voice?: string) => Promise<Speech>;
+export type SpeechAdapter = (text: string, signal: AbortSignal, voice?: string, expressionInstruction?: string) => Promise<Speech>;
 
 /** This checks speaker selection, not network health or configuration readiness. */
 export function canSpeak(voice = DEFAULT_VOICE): boolean {
   return voice === '' || voice === DEFAULT_VOICE;
 }
 
-async function speechFor(client: BreezeVoice, text: string, signal: AbortSignal, voice?: string): Promise<Speech> {
+async function speechFor(
+  client: BreezeVoice,
+  text: string,
+  signal: AbortSignal,
+  voice?: string,
+  expressionInstruction?: string,
+): Promise<Speech> {
   if (!canSpeak(voice)) throw new Error('此直播仅配置爱莉的本地 Breeze 音色，其他说话者的音色尚未配置');
   signal.throwIfAborted();
-  const line = await client.speak(text, { signal });
+  const line = await client.speak(text, { signal, ...(expressionInstruction ? { expression: expressionInstruction } : {}) });
   const timeline: Speech['timeline'] = [];
   let offset = 0;
   for (const clause of line.timing) {
     const found = text.indexOf(clause.text, offset);
     if (found < 0) continue;
-    const start = [...text.slice(0, found)].length;
+    const start = [...speechCaption(text.slice(0, found))].length;
     timeline.push({ chars: start, atMs: clause.start });
     offset = found + clause.text.length;
-    timeline.push({ chars: start + [...clause.text].length, atMs: clause.end });
+    timeline.push({ chars: [...speechCaption(text.slice(0, offset))].length, atMs: clause.end });
   }
-  const chars = [...text].length;
+  const chars = [...speechCaption(text)].length;
   if (timeline.at(-1)?.chars !== chars) timeline.push({ chars, atMs: line.ms });
   return { audio: line.wav, words: [], audioMime: 'audio/wav', durationMs: line.ms, timingSource: 'estimated', timeline };
 }
@@ -57,13 +64,13 @@ export function createSpeechAdapter(
   options: { requestTimeoutMs?: number } = {},
 ): SpeechAdapter {
   const client = new BreezeVoice(configPath, fetchImpl, options);
-  return (text, signal, voice) => speechFor(client, text, signal, voice);
+  return (text, signal, voice, expressionInstruction) => speechFor(client, text, signal, voice, expressionInstruction);
 }
 
 const localVoice = new BreezeVoice(ELYSIUM_BREEZE_CONFIG);
 
 /** Default runtime adapter; constructing it performs no I/O or network calls. */
-export const synthesize: SpeechAdapter = (text, signal, voice) => speechFor(localVoice, text, signal, voice);
+export const synthesize: SpeechAdapter = (text, signal, voice, expressionInstruction) => speechFor(localVoice, text, signal, voice, expressionInstruction);
 
 export interface VoiceStatus {
   available: boolean;

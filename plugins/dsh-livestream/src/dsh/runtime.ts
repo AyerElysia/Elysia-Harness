@@ -251,8 +251,8 @@ export function publishNotice(): void {
   show.stage.broadcast({ type: 'notice', text: settings.noticeText ?? '' });
 }
 
-async function speech(text: string, signal: AbortSignal, voice = currentVoice()) {
-  return synthesize(text, signal, voice);
+async function speech(text: string, signal: AbortSignal, voice = currentVoice(), expressionInstruction?: string) {
+  return synthesize(text, signal, voice, expressionInstruction);
 }
 export const voice = voiceStatus;
 
@@ -369,10 +369,16 @@ export async function initializeRuntime(ctx: Context, config: RuntimeConfig): Pr
   show = new LiveShow(
   {
     push: (sessionId, text, now, key, pages) => hooks.push(sessionId, text, now, key, pages),
-    journalInput: async (event, isUpdate, receiptId) => { const handle = await ensureLivestreamAgent(ctx, config); return journalInput(ctx, handle.agent.session, event, isUpdate, settings.roomId, receiptId); },
+    journalInput: async (event, isUpdate, receiptId, showId) => {
+      const handle = await ensureLivestreamAgent(ctx, config);
+      return journalInput(ctx, handle.agent.session, event, isUpdate, settings.roomId, receiptId, showId);
+    },
     recordActivity: async entry => { const agent = ctx.agents.get(LIVESTREAM_SESSION_ID); if (!agent) throw new Error('Livestream activity target is not live'); await appendActivity(ctx, agent.session, entry); },
-    synthesize: (text, signal, voice) => {
-      if (voice) return speech(text, signal, voice);
+    speechOutput: () => `${settings.publisher}:${localBroadcast.status().phase === 'idle' ? 'idle' : 'active'}`,
+    synthesize: (text, signal, voice, expressionInstruction) => {
+      // The prepared cache has no expression key. Never reuse undirected audio
+      // for an explicitly directed utterance.
+      if (voice || expressionInstruction) return speech(text, signal, voice, expressionInstruction);
       const ready = prepared.get(`${currentVoice()}|${text}`);
       if (ready) {
         prepared.delete(`${currentVoice()}|${text}`);
@@ -429,6 +435,12 @@ export async function initializeRuntime(ctx: Context, config: RuntimeConfig): Pr
   log: (level, message) => hooks.log(level, message),
 });
   acquired.push(() => broadcast.dispose());
+  const localShow = show;
+  const localBroadcast = broadcast;
+  localShow.stage.allowListeningWhen(() =>
+    runtimeOwner === ctx && settings.publisher === 'livehime'
+      && !localShow.hasPlatformRoom && localBroadcast.status().phase === 'idle',
+  );
   dm = new DmManager(new BiliAccount(cookie), join(dataDir, 'dm.json'));
   social = new SocialManager(new BiliSocial(cookie));
   videos = new BiliVideos(cookie);

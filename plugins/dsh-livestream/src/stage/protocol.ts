@@ -163,7 +163,15 @@ export type StageLiveEvent =
 /** 大脑现在在干什么：舞台上「正在想…」的提示用 */
 export type BrainState = 'off' | 'listening' | 'thinking' | 'speaking' | 'away';
 
+/** State reported by the browser that owns this sentence's audio. */
+export type SpeechPlaybackState = 'ended' | 'failed' | 'cancelled' | 'timeout';
+
 export type StageEvent =
+  /** Per-connection identity for reports from a speaking browser source. */
+  | { v: 1; type: 'playback-owner'; playbackId: string; at: number }
+  /** Captions start only after the owner reports actual playback. */
+  | { v: 1; type: 'subtitle'; state: 'started'; id: string; text: string; mood: string; estimateMs: number; timeline?: Array<{ chars: number; atMs: number }>; speaker?: string; elapsedMs: number; at: number }
+  | { v: 1; type: 'subtitle'; state: SpeechPlaybackState; id: string; at: number }
   /** build：舞台页代码的版本（插件更新后变）；连上时先发 */
   | { v: 1; type: 'hello'; character: CharacterManifest; template: TemplateManifest; build?: string; at: number }
   /**

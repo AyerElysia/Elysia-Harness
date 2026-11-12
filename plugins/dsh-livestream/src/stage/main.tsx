@@ -7,9 +7,9 @@ import React, { useEffect, useMemo, useState } from 'react';
 import { createRoot } from 'react-dom/client';
 import { arrange, type Mode, type Slot } from './layout';
 import type { WidgetType } from './protocol';
-import { assetUrl, connect, preview, unlockAudio } from './store';
+import { assetUrl, connect, litChars, preview, sourceMode, startListening, stopListening, unlockAudio, type Line } from './store';
 import { Effects } from './effects';
-import { AiLabel, Alerts, Board, Character, Chat, Game, Notice, Orders, Reply, Rice, Scene, Status, Subtitle, SUBTITLE_LINGER_MS, Terminal, useLinger, useStage, Video } from './widgets';
+import { AiLabel, Alerts, Board, Character, Chat, Game, Notice, Orders, paginate, Reply, Rice, Scene, Status, Subtitle, SUBTITLE_LINGER_MS, Terminal, useLinger, useStage, Video } from './widgets';
 
 const WIDGETS: Record<WidgetType, React.ComponentType<{ options?: Record<string, unknown> }>> = {
   character: Character,
@@ -118,5 +118,76 @@ function App() {
   );
 }
 
-connect();
-createRoot(document.getElementById('root')!).render(<App />);
+function AudioSource() {
+  const { needsClick, playback } = useStage();
+  return (
+    <div className="ls-audio-source" data-playback-state={playback.state} data-playback-line-id={playback.lineId ?? ''} data-last-ended-id={playback.lastEndedId ?? ''}>
+      {needsClick && <button className="ls-unlock" onClick={unlockAudio}>点一下启用后续语音</button>}
+    </div>
+  );
+}
+
+function SubtitlePage({ line }: { line: Line }) {
+  const chars = useMemo(() => [...line.text], [line.text]);
+  const pages = useMemo(() => paginate(chars, 32), [chars]);
+  const [page, setPage] = useState(0);
+
+  useEffect(() => {
+    const updatePage = () => {
+      const position = Math.max(0, Math.min(chars.length, litChars(line, chars.length)) - 1);
+      setPage(Math.max(0, pages.findIndex(([from, to]) => position >= from && position < to)));
+    };
+    updatePage();
+    if (pages.length <= 1) return;
+    const timer = setInterval(updatePage, 100);
+    return () => clearInterval(timer);
+  }, [line, pages, chars.length]);
+
+  const [from, to] = pages[page] ?? [0, chars.length];
+  const text = chars.slice(from, to).join('').replace(/\s+/g, ' ').trim();
+  return <p data-subtitle-id={line.id}>{line.speaker ? `${line.speaker}：` : ''}{text}</p>;
+}
+
+function SubtitleSource() {
+  const { line } = useStage();
+  return (
+    <div className="ls-subtitle-source">
+      {line && <SubtitlePage key={line.id} line={line} />}
+    </div>
+  );
+}
+
+function ListenSource() {
+  const { connected, listening, needsClick, playback } = useStage();
+  useEffect(() => {
+    addEventListener('pagehide', stopListening);
+    return () => {
+      removeEventListener('pagehide', stopListening);
+      stopListening();
+    };
+  }, []);
+
+  let status = '仅在本机播放';
+  if (needsClick) status = listening === 'active' ? '播放受阻，可停止后重试' : '播放受阻，请重试';
+  else if (listening === 'starting') status = '正在启用';
+  else if (listening === 'active') {
+    if (!connected) status = '正在连接';
+    else if (playback.state === 'playing') status = '正在播放';
+    else if (playback.state === 'timeout') status = '本句播放超时';
+    else if (playback.state === 'failed') status = '本句播放失败';
+    else status = '等待语音';
+  }
+  const enabled = listening !== 'off';
+  return (
+    <div className="ls-listen" data-playback-state={playback.state} data-last-ended-id={playback.lastEndedId ?? ''}>
+      <button type="button" onClick={enabled ? stopListening : startListening}>{enabled ? '停止试听' : '启用试听'}</button>
+      <span role="status">{status}</span>
+    </div>
+  );
+}
+
+if (sourceMode !== 'listen') connect();
+const Page = sourceMode === 'audio' ? AudioSource
+  : sourceMode === 'subtitles' ? SubtitleSource
+  : sourceMode === 'listen' ? ListenSource : App;
+createRoot(document.getElementById('root')!).render(<Page />);

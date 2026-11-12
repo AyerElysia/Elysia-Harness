@@ -356,7 +356,7 @@ const SOFT_BREAK = /[，、,；;：:）)」』]/;
  * 把一句话分成几页显示（每页最多 max 个字，大约两行）：优先在句号、感叹号处断，其次逗号，实在没有就硬断。
  * 只是显示上的分页，逐字时间不变：念到下一页的第一个字就翻页，字号就可以大一些
  */
-function paginate(chars: string[], max: number): Array<[number, number]> {
+export function paginate(chars: string[], max: number): Array<[number, number]> {
   const pages: Array<[number, number]> = [];
   let start = 0;
   while (start < chars.length) {

@@ -21,7 +21,7 @@ describe('upstream live body with Elysia authority and playback', () => {
     try {
       h.show.inject(event)
       await Promise.resolve()
-      expect(journal).toHaveBeenCalledWith(event, false, expect.any(String))
+      expect(journal).toHaveBeenCalledWith(event, false, expect.any(String), undefined)
       expect(h.show.status().pending.chats).toBe(0)
       release.resolve({ ref: 'fixture-full-ref', seq: 0, bytes: Buffer.byteLength(JSON.stringify(event)), hash: 'fixture' })
       await h.show.whenInputSettled()

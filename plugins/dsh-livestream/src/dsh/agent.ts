@@ -1,25 +1,18 @@
 /**
- * agent 子插件：挂在爱莉固定直播会话的 scope 下，接上 DSH 的服务，盯着她直播的会话。
- *
- * 只有一个说话出口：她回复的正文。会话里每出现一条带正文的 assistant 消息就念一条（写出一段念一段），
- * 每条只念一次。正文里的 [表情] 标记（角色包里有的）把话切成几段，每段带着自己的表情念：说着说着可以换表情。
- * 只发工具调用、没写正文的消息很正常（她在做事），没有要念的就跳过。
- * 没有说话工具、没有 say 参数：那种「要模型自己选择用的通道」在 HiyoriAI 和 dsh-game 里都踩过坑（她会不用）。
- *
- * 身体往会话里推一件事：DSH 的 agent 句柄 followup（追加一条消息并唤醒她）。
+ * 固定直播会话的 DSH 工具与状态监听。模型通过 live_say 明确公开表达，
+ * assistant 正文只保留在会话中。
  */
 
 import { defineTool } from '@deepseek-ai/dsh-tools';
 import type { Context } from '@deepseek-ai/cordis';
 import type { Agent } from '@deepseek-ai/dsh-agent';
 import { scopeOf } from '@deepseek-ai/dsh-scope';
-import { LIVESTREAM_SESSION_ID, readJournal } from './session';
+import { LIVESTREAM_SESSION_ID, readJournal, runLiveSpeech } from './session';
 import { randomUUID } from 'node:crypto';
 import { fetchProfile, profileSummary, profileText } from '../body/biliProfile';
 import { clock, infoText, searchText, subtitleText, type Subtitles, type VideoInfo, type VideoPart } from '../body/biliVideo';
 import { VideoNotes } from '../body/watchAlong';
 import { lookupProblem } from '../core/viewerLookup';
-import { splitByMood } from '../core/moodText';
 import { orderTags } from '../core/orders';
 import { ttsYuan, turnYuan } from '../core/cost';
 import { asr, cookie, currentMoods, dm, hooks, library, markAgentReady, settings, show, social, videos } from './runtime';
@@ -29,7 +22,7 @@ import { whoIs } from '../body/biliLogin';
 import { COMMENT_GAP_MS, FAVORITE_FOLDER, MAX_COMMENT_CHARS } from '../body/social';
 
 export const name = 'dsh-livestream-agent';
-export const inject = ['tools'];
+export const inject = ['tools', 'systemPrompt', 'sessions'];
 
 interface AgentContext {
   effect(effect: () => () => void, label?: string): unknown;
@@ -58,16 +51,11 @@ export class HandOffs {
   }
 }
 
-const wordsOf = (event: any): string => (event?.data?.message?.content ?? [])
-  .filter((p: any) => p?.type === 'text' && typeof p.text === 'string')
-  .map((p: any) => p.text.trim()).filter(Boolean).join('\n');
-
 /**
  * 盯着直播的会话：新的正文就念，一轮开始、结束告诉身体。
  * 有游戏线时两个会话一起盯：游戏线的话也念（嘴里排满了就少念一句），它的时刻里摘出游戏现在怎样，写给直播线
  */
 const cursors = new Map<string, number>();
-const handOffs = new HandOffs();
 let watching = false;
 /** 这场直播（她的会话，有游戏线时两个加起来）累计用掉的 token 和钱：舞台上换算成她吃了多少饭，show_stats 告诉她 */
 const freshUsage = (sessionId: string) => ({ sessionId, tokens: 0, input: 0, cacheRead: 0, output: 0, yuan: 0, priced: true, model: '' });
@@ -201,37 +189,45 @@ function libraryView(how: 'watch' | 'play', fromSec: number, untilSec?: number) 
   return { how, at: Date.now(), fromSec, ...(untilSec !== undefined ? { untilSec } : {}), ...(logName ? { show: logName } : {}), ...(chat.length ? { chat } : {}) };
 }
 
-export const READ_ACTIONS = ['view_profile', 'read_comments', 'check_inbox', 'read_dm', 'look', 'show_stats', 'my_fans', 'search_videos', 'watch_video', 'play_video', 'stop_video', 'read_livestream_event', 'pass'] as const;
+export const DEFAULT_ACTIONS = ['view_profile', 'read_comments', 'look', 'show_stats', 'my_fans', 'search_videos', 'watch_video', 'play_video', 'stop_video', 'read_livestream_event', 'live_say', 'pass'] as const;
 export const WRITE_ACTIONS = ['send_dm', 'like', 'post_comment', 'follow', 'delete_comment', 'post_dynamic', 'favorite', 'coin', 'mute', 'unmute', 'set_live_title'] as const;
 export interface Config { allowedWriteActions?: string[] }
 
 export function apply(ctx: Context, config: Config = {}): void {
-  const agent = scopeOf(ctx) as Agent | undefined;
+  registerLivestreamTools(ctx, scopeOf(ctx) as Agent | undefined, config);
+}
+
+/** Mount from the native AgentSetup handle, which already owns this exact scope. */
+export function mountLivestreamTools(agent: Agent, config: Config) {
+  if (agent.id !== LIVESTREAM_SESSION_ID) throw new Error('Livestream capabilities require the exact fixed agent scope');
+  return agent.ctx.plugin({ name, inject, apply: (ctx: Context) => registerLivestreamTools(ctx, agent, config) });
+}
+
+function registerLivestreamTools(ctx: Context, agent: Agent | undefined, config: Config): void {
   if (agent?.id !== LIVESTREAM_SESSION_ID) throw new Error('Livestream capabilities require the exact fixed agent scope');
-  const reads = new Set<string>(READ_ACTIONS);
+  const defaults = new Set<string>(DEFAULT_ACTIONS);
   const writes = new Set<string>(WRITE_ACTIONS);
   const allowed = new Set(config.allowedWriteActions ?? []);
   for (const name of allowed) if (!writes.has(name)) throw new Error(`Unknown livestream write capability: ${name}`);
   const registerTool = (tool: Parameters<typeof ctx.tools.register>[0]) => {
-    if (!reads.has(tool.name) && !allowed.has(tool.name)) return () => {};
+    if (!defaults.has(tool.name) && !allowed.has(tool.name)) return () => {};
     return ctx.tools.register(tool);
   };
+  ctx.effect(() => ctx.systemPrompt.context({
+    name: 'elysia-livestream:public-speech', order: 0, required: true, interpolate: false,
+    text: ({ agent: target }) => target === agent && show?.isOnAir
+      ? '直播发声方式：开场、回复弹幕和谢幕的公开口播都用 live_say。assistant 正文只显示在 DSH 会话。'
+        + '只关联你实际回应的本场事件，reply_to 使用事件原 ref。想结束本轮且不作回应时用 pass。'
+      : '',
+  }), 'livestream public speech context');
   markAgentReady();
   let lastSeq = Number(agent.session.seq) - 1;
   ctx.on('session/event', (session, event) => {
     if (session.id !== LIVESTREAM_SESSION_ID || !show.isOnAir || Number(event.seq) <= lastSeq) return;
     lastSeq = Number(event.seq);
-    if (event.type === 'turn/start') { handOffs.turnStarted(session.id); show.turnStarted(session.id); }
+    if (event.type === 'turn/start') show.turnStarted(session.id);
     else if (event.type === 'turn/end') show.turnEnded(session.id);
-    else if (event.type === 'assistant/message') {
-      countUsage(session.id, event);
-      const words = wordsOf(event);
-      if (!words) return;
-      for (const part of splitByMood(words, currentMoods())) {
-        void show.say(part.text, part.mood, AbortSignal.timeout(300_000), 'live', { sessionId: session.id, seq: Number(event.seq) })
-          .catch(() => hooks.log('warn', 'Livestream playback failed; see stage delivery state'));
-      }
-    }
+    else if (event.type === 'assistant/message') countUsage(session.id, event);
   });
   ctx.effect(() => registerTool(defineTool({
     name: 'read_livestream_event', description: '按本次直播输入的 ref 继续读取完整原始协议事件；UTF-8 字节分页，不读取其他会话。',
@@ -240,9 +236,60 @@ export function apply(ctx: Context, config: Config = {}): void {
     async execute(args) { return JSON.stringify(readJournal(agent.session, String(args.ref), Number(args.offset), args.maxBytes === undefined ? 8192 : Number(args.maxBytes))); },
   })), 'read_livestream_event tool');
   ctx.effect(() => registerTool(defineTool({
-    name: 'pass', description: '这一轮选择不作公开回应。', parameters: { reason: { type: 'string', required: true } },
+    name: 'live_say',
+    description: '通过直播舞台播放你要公开说的话，等播放器返回真实终态。开场、回复和谢幕都用此工具。assistant 正文只显示在 DSH 会话。',
+    parameters: {
+      text: { type: 'string', required: true, description: '公开口播正文。可以包含 Breeze 声音标记，例如 [笑]、[咳嗽]、[清嗓子]、[叹气]。' },
+      reply_to: { type: 'array', items: { type: 'string' }, description: '可选，1 至 8 个不同的本场原始事件 ref，仅关联本次确实回应的事件。不会发 B 站弹幕、提及或私信。' },
+      expression_instruction: { type: 'string', description: '可选，最多 1000 字符的语气、情绪、语速或停顿描述。参考音色保持固定。' },
+      stage_mood: { type: 'string', description: '可选，当前舞台角色支持的表情标签。省略使用 talk，只影响舞台表情。' },
+    },
+    isConcurrencySafe: () => false,
+    output: {
+      schema: {
+        type: 'object', additionalProperties: false,
+        properties: {
+          id: { type: 'string', required: true },
+          state: { type: 'string', enum: ['ended', 'failed', 'cancelled', 'timeout'], required: true },
+          detail: { type: 'string' },
+        },
+      },
+      render: (_args, value) => [{ type: 'text', text: JSON.stringify(value) }],
+    },
+    async execute(args, exec) {
+      if (exec.agent !== agent) throw new Error('只允许固定直播会话公开发声');
+      exec.signal.throwIfAborted();
+      if (!show.isOnAir) throw new Error('主播回应尚未开启，未播放');
+      const text = args.text.trim();
+      if (!text) throw new Error('公开口播正文不能为空');
+      const replyTo = args.reply_to;
+      if (replyTo && (replyTo.length < 1 || replyTo.length > 8 || new Set(replyTo).size !== replyTo.length)) {
+        throw new Error('reply_to 需要 1 至 8 个不同的本场事件引用');
+      }
+      const expressionInstruction = args.expression_instruction?.trim();
+      if (expressionInstruction && expressionInstruction.length > 1000) {
+        throw new Error('expression_instruction 不能超过 1000 字符');
+      }
+      const stageMood = args.stage_mood?.trim();
+      const moods = currentMoods();
+      if (stageMood && !moods.includes(stageMood)) {
+        throw new Error(`舞台未配置表情 ${stageMood}，可选：${moods.join('、')}`);
+      }
+      return runLiveSpeech(ctx, agent.session, exec.callId, {
+        text,
+        ...(replyTo ? { replyTo } : {}),
+        ...(expressionInstruction ? { expressionInstruction } : {}),
+        ...(stageMood ? { stageMood } : {}),
+      }, exec.signal);
+    },
+  })), 'live_say tool');
+  ctx.effect(() => registerTool(defineTool({
+    name: 'pass', description: '选择沉默并结束当前轮，等待新输入。原因只留在会话中。', parameters: { reason: { type: 'string', required: true } },
     output: { schema: { type: 'string' }, render: (_args, value) => [{ type: 'text' as const, text: value }] },
-    async execute(args) { return String(args.reason); },
+    async execute(args, exec) {
+      exec.concludeTurn();
+      return String(args.reason);
+    },
   })), 'pass tool');
 
   // 看观众的 B 站主页（公开信息）
@@ -371,39 +418,6 @@ ${profileText(profile)}` : '没打开自己的主页（B 站没返回，可能�
       return result.text;
     },
   })), 'post_comment tool');
-
-  // 收件箱
-  ctx.effect(() => registerTool(defineTool({
-    name: 'check_inbox',
-    description: '看开播账号的收件箱：最近的私信会话（谁、未读几条、最后一句），和别人在评论区回复你、@ 你的。',
-    parameters: {},
-    output: { schema: { type: 'string' }, render: (_args, value) => [{ type: 'text' as const, text: value }] },
-    async execute() {
-      show.toolCall('check_inbox', '', '在看私信和评论回复');
-      return social.inbox();
-    },
-  })), 'check_inbox tool');
-
-  ctx.effect(() => registerTool(defineTool({
-    name: 'read_dm',
-    description: '看你和一个人最近的私信往来（他说了什么、你回了什么）。他发来的图片会带着图片网址，游戏里的 picture 能用。',
-    parameters: {
-      who: { type: 'string', required: true, description: '名字（check_inbox 里的）或 UID' },
-    },
-    output: { schema: { type: 'string' }, render: (_args, value) => [{ type: 'text' as const, text: value }] },
-    async execute(args) {
-      const who = String(args.who ?? '').trim();
-      const talker = social.findTalker(who) ?? (/^\d{1,20}$/.test(who) ? { uid: who, name: `UID ${who}` } : null);
-      if (!talker) {
-        const viewer = show.lookupViewer(who);
-        if (viewer.kind !== 'found') return `不知道「${who}」是谁：先 check_inbox 看看私信列表，用那里的名字或 UID。`;
-        show.toolCall('read_dm', viewer.user.name, `在看和${viewer.user.name}的私信`);
-        return social.conversation(viewer.uid, viewer.user.name);
-      }
-      show.toolCall('read_dm', talker.name, `在看和${talker.name}的私信`);
-      return social.conversation(talker.uid, talker.name);
-    },
-  })), 'read_dm tool');
 
   const text = (value: string) => [{ type: 'text' as const, text: value }];
   const stringOut = { schema: { type: 'string' as const }, render: (_args: unknown, value: string) => text(value) };

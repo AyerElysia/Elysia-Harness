@@ -1,11 +1,14 @@
 /**
  * 舞台服务器：插件自己开一个端口（DSH 网页版和桌面版都能用），OBS 的浏览器源直接打开它。
  *
- *   GET  /?token=…                 舞台页（按当前模板摆好挂件）
+ *   GET  /source, /audio, /subtitles  组合舞台、语音与字幕浏览器源
+ *   GET  /stage                     静音预览
+ *   GET  /listen                    仅直接回环的本机彩排试听
+ *   GET  /?token=…                  完整舞台页（按当前模板摆好挂件）
  *   GET  /stage.js /stage.css       舞台页的代码（插件包 lib/）
  *   GET  /characters/<id>/<file>   角色包、/templates/<id>/<file> 模板（见 packs.ts）
  *   GET  /events?token=…           舞台事件流（SSE）
- *   POST /said?id=…&token=…        舞台念完一句
+ *   POST /said                     当前音频来源报告实际起播或终态
  *   GET  /video?id=…&token=…       正在放的视频（转发 B 站 CDN，带它要的 Referer，支持 Range）
  *   POST /media?id=…&state=…&token=…  视频开始放、放完、放不出来
  *
@@ -13,13 +16,16 @@
  */
 
 import { existsSync, readFileSync, realpathSync, statSync } from 'node:fs';
-import { timingSafeEqual } from 'node:crypto';
+import { createHmac, randomUUID, timingSafeEqual } from 'node:crypto';
 import { createServer, type IncomingMessage, type Server, type ServerResponse } from 'node:http';
 import { extname, join, normalize, sep } from 'node:path';
 import { Readable } from 'node:stream';
 import type { StageEvent } from '../stage/protocol';
 import type { Packs } from './packs';
-import type { Stage } from './stage';
+import type { PlaybackReport, SpeakingSource, Stage } from './stage';
+
+type Source = SpeakingSource | 'subtitles';
+const MAX_PLAYBACK_MS = 30 * 60_000;
 
 const TYPES: Record<string, string> = {
   '.html': 'text/html; charset=utf-8',
@@ -60,8 +66,12 @@ export class StageServer {
 
   /** 舞台页代码的版本：lib/stage.js 的修改时间。插件更新、DSH 重启后变，开着的舞台页（OBS）看到就自己刷新 */
   private readonly build: string;
+  private readonly tokens: Record<Source, string>;
 
   constructor(private readonly options: StageServerOptions) {
+    const scoped = (mode: Exclude<Source, 'full'>) =>
+      createHmac('sha256', options.token).update('dsh-livestream:stage-source:' + mode).digest('base64url');
+    this.tokens = { full: options.token, audio: scoped('audio'), subtitles: scoped('subtitles'), listen: scoped('listen') };
     const script = join(options.packageDir, 'lib', 'stage.js');
     this.build = existsSync(script) ? String(Math.round(statSync(script).mtimeMs)) : '';
   }
@@ -103,37 +113,48 @@ export class StageServer {
     const url = new URL(req.url ?? '/', 'http://127.0.0.1');
     res.setHeader('Referrer-Policy', 'no-referrer');
     res.setHeader('X-Content-Type-Options', 'nosniff');
-    // Preserve the already configured direct local source, without giving a
-    // public tunnel an unauthenticated stage capability.
-    if (req.method === 'GET' && (url.pathname === '/source' || url.pathname === '/stage')
-      && url.searchParams.get('token') === null && directLoopback(req, this.server)) {
+    const path = url.pathname;
+    const pathSource = path === '/audio' ? 'audio' : path === '/subtitles' ? 'subtitles' : path === '/listen' ? 'listen' : null;
+    const token = url.searchParams.get('token');
+    const preview = path === '/stage' || url.searchParams.get('preview') === '1';
+    // Only direct local browser sources can obtain a capability from an alias.
+    if (req.method === 'GET' && (pathSource || path === '/source' || path === '/stage')
+      && token === null && directLoopback(req, this.server)) {
       const target = new URL(this.url);
-      if (url.pathname === '/stage') target.searchParams.set('preview', '1');
+      if (pathSource) {
+        target.pathname = path;
+        target.searchParams.set('token', this.tokens[pathSource]);
+      } else if (preview) target.searchParams.set('preview', '1');
       res.writeHead(302, { location: target.pathname + target.search, 'cache-control': 'no-store' });
       res.end();
       return;
     }
-    if (!sameToken(url.searchParams.get('token'), this.options.token)) {
+    const source = (['full', 'audio', 'subtitles', 'listen'] as const).find(mode => sameToken(token, this.tokens[mode]));
+    if (!source) {
       res.writeHead(401, { 'content-type': 'text/plain; charset=utf-8' });
       res.end('舞台地址不对：请从 DSH 的直播控制台复制完整地址（带 token）。');
       return;
     }
-    const path = url.pathname;
+    if ((pathSource !== null && source !== pathSource)
+      || (source === 'listen' && !directLoopback(req, this.server))
+      || (source !== 'full' && (preview || !canAccessScopedSource(source, req.method, path)))) {
+      res.writeHead(403); res.end(); return;
+    }
     if (req.method === 'POST' && (path === '/said' || path === '/media')) {
       const origin = req.headers.origin;
-      if (url.searchParams.get('preview') === '1' || (origin !== undefined && origin !== 'http://' + req.headers.host)) {
+      if (preview || (origin !== undefined && origin !== 'http://' + req.headers.host)) {
         res.writeHead(403); res.end(); return;
       }
     }
-    if (req.method === 'POST' && path === '/said') {
+    if (req.method === 'POST' && path === '/said' && source !== 'subtitles') {
       const id = url.searchParams.get('id') ?? '';
-      const state = url.searchParams.get('state');
-      if (!/^[A-Za-z0-9._:-]{1,200}$/.test(id) || !['ended', 'failed', 'cancelled', 'timeout'].includes(state ?? '')) {
+      const playbackId = url.searchParams.get('playbackId') ?? '';
+      const report = playbackReport(url.searchParams);
+      if (!/^[A-Za-z0-9._:-]{1,200}$/.test(id)
+        || !/^[0-9a-f-]{36}$/.test(playbackId) || report === null) {
         res.writeHead(400); res.end(); return;
       }
-      const accepted = this.options.stage.said(id, state as 'ended' | 'failed' | 'cancelled' | 'timeout',
-        (url.searchParams.get('detail') ?? '').slice(0, 200));
-      res.writeHead(accepted ? 204 : 409);
+      res.writeHead(this.options.stage.reportPlayback(source, playbackId, id, report) ? 204 : 409);
       res.end();
       return;
     }
@@ -152,9 +173,9 @@ export class StageServer {
       res.end();
       return;
     }
-    if (path === '/events') return this.events(req, res, url);
+    if (path === '/events') return this.events(res, source, preview);
     if (path === '/video') return this.video(req, res, url.searchParams.get('id') ?? '');
-    if (path === '/' || path === '/index.html' || path === '/source' || path === '/stage') return this.file(res, join(this.options.packageDir, 'stage', 'index.html'));
+    if (path === '/' || path === '/index.html' || path === '/source' || path === '/stage' || pathSource) return this.file(res, join(this.options.packageDir, 'stage', 'index.html'));
     if (path === '/stage.js') return this.file(res, join(this.options.packageDir, 'lib', 'stage.js'));
     if (path === '/stage.css') return this.file(res, join(this.options.packageDir, 'stage', 'stage.css'));
     const pack = /^\/(characters|templates)\/([\w-]{1,64})\/(.+)$/.exec(path);
@@ -166,21 +187,30 @@ export class StageServer {
     res.end();
   }
 
-  private events(req: IncomingMessage, res: ServerResponse, url: URL): void {
+  private events(res: ServerResponse, source: Source, preview: boolean): void {
     res.writeHead(200, {
       'content-type': 'text/event-stream; charset=utf-8',
       'cache-control': 'no-store',
       connection: 'keep-alive',
     });
+    res.flushHeaders();
     const send = (event: StageEvent) => res.write(`data: ${JSON.stringify(event)}\n\n`);
     const { character, template } = this.options.current();
     const c = this.options.packs.character(character);
     const t = this.options.packs.template(template);
     if (c && t) send({ v: 1, type: 'hello', character: c, template: t, build: this.build, at: Date.now() });
-    // ?preview=1：控制台里的预览，静音、不回执
-    const unsubscribe = this.options.stage.subscribe(send, url.searchParams.get('preview') !== '1');
+    let unsubscribe: () => void;
+    if (preview) {
+      unsubscribe = this.options.stage.subscribe(event => send(event.type === 'say' ? { ...event, audio: null } : event), false);
+    } else if (source === 'subtitles') {
+      unsubscribe = this.options.stage.subscribeSubtitles(send);
+    } else {
+      const playbackId = randomUUID();
+      send({ v: 1, type: 'playback-owner', playbackId, at: Date.now() });
+      unsubscribe = this.options.stage.subscribePlayback(playbackId, source, send);
+    }
     const ping = setInterval(() => res.write(': ping\n\n'), 15_000);
-    req.on('close', () => {
+    res.on('close', () => {
       clearInterval(ping);
       unsubscribe();
     });
@@ -249,6 +279,31 @@ export class StageServer {
   }
 }
 
+
+function canAccessScopedSource(source: Exclude<Source, 'full'>, method: string | undefined, path: string): boolean {
+  if (method === 'POST') return source !== 'subtitles' && path === '/said';
+  return method === 'GET' && [`/${source}`, '/events', '/stage.js', '/stage.css'].includes(path);
+}
+
+function playbackReport(params: URLSearchParams): PlaybackReport | null {
+  const state = params.get('state');
+  if (state === 'started') {
+    const position = params.get('positionMs');
+    const duration = params.get('durationMs');
+    const positionMs = position === null ? undefined : Number(position);
+    const durationMs = duration === null ? undefined : Number(duration);
+    if (positionMs !== undefined && (!position?.trim() || !Number.isFinite(positionMs)
+      || positionMs < 0 || positionMs > MAX_PLAYBACK_MS)) return null;
+    if (durationMs !== undefined && (!Number.isFinite(durationMs)
+      || durationMs <= 0 || durationMs > MAX_PLAYBACK_MS
+      || (positionMs !== undefined && positionMs > durationMs))) return null;
+    return { state, ...(positionMs !== undefined ? { positionMs } : {}), ...(durationMs !== undefined ? { durationMs } : {}) };
+  }
+  if (state === 'ended' || state === 'failed' || state === 'cancelled' || state === 'timeout') {
+    return { state, detail: (params.get('detail') ?? '').slice(0, 200) };
+  }
+  return null;
+}
 
 /** Compare a stage capability without exposing prefix timing. */
 function sameToken(candidate: string | null, expected: string): boolean {

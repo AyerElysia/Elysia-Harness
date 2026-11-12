@@ -191,6 +191,20 @@ describe('upstream speech adapter with local Breeze', () => {
     expect(capture).toHaveBeenCalledTimes(1)
   })
 
+  it('sends directed vocal events to Breeze and measures timeline against caption text', async () => {
+    const capture = vi.fn(fakeFetch(new Uint8Array(48_000)))
+    const speak = createSpeechAdapter(configPath, capture)
+    const result = await speak('[笑] 你好😀。 [叹气]下一句。', new AbortController().signal, undefined, '慢一点')
+    const [, init] = capture.mock.calls[0]!
+    const form = init?.body as FormData
+    expect(form.get('text')).toBe('[笑] 你好😀。 [叹气]下一句。')
+    expect(form.get('instruction')).toEqual(expect.stringContaining('保持参考音色'))
+    expect(form.get('instruction')).toEqual(expect.stringContaining('本次表达控制：慢一点'))
+    const captionLength = [...'你好😀。 下一句。'].length
+    expect(result.timeline.at(-1)).toEqual({ chars: captionLength, atMs: 1000 })
+    expect(result.timeline.every(point => point.chars <= captionLength)).toBe(true)
+  })
+
   it('refuses a guest/cloud voice before reading config or contacting any server', async () => {
     const capture = vi.fn(fakeFetch(new Uint8Array(480)))
     const speak = createSpeechAdapter('/nonexistent', capture)

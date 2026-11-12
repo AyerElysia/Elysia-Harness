@@ -5,9 +5,9 @@
  * 这一页关掉也不影响直播。
  */
 
-import React, { useEffect, useMemo, useRef, useState, useSyncExternalStore } from 'react';
+import React, { useCallback, useEffect, useMemo, useRef, useState, useSyncExternalStore } from 'react';
 import QRCode from 'qrcode';
-import { ConsoleTransport } from './transport';
+import { ConsoleRequestError, ConsoleTransport } from './transport';
 
 // ── DSH 服务 ──────────────────────────────────────────
 
@@ -96,9 +96,9 @@ interface HostState {
   publisher?: 'livehime' | 'obs';
 }
 
-async function api<T = HostState>(path: string, body?: unknown): Promise<T> {
+async function api<T = HostState>(path: string, body?: unknown, signal?: AbortSignal): Promise<T> {
   if (!requests) throw new Error('直播控制台连接未就绪，请刷新页面');
-  return requests.request<T>(path, body);
+  return requests.request<T>(path, body, signal);
 }
 
 // ── 事件流 ────────────────────────────────────────────
@@ -259,6 +259,37 @@ function Img({ src, className, fallback = null }: { src: string; className: stri
   return <img className={className} src={src} alt="" onError={() => setBroken(true)} />;
 }
 
+function SplitSourceLinks({ stageUrl }: { stageUrl?: string }) {
+  const [copied, setCopied] = useState<string | null>(null);
+  const timer = useRef<ReturnType<typeof setTimeout> | null>(null);
+  useEffect(() => () => { if (timer.current) clearTimeout(timer.current); }, []);
+  return (
+    <div className="dl-split-sources" aria-label="直播姬浏览器源">
+      {([
+        { path: '/audio', label: '声音源', size: '320 × 120' },
+        { path: '/subtitles', label: '字幕源', size: '1280 × 240' },
+      ] as const).map(({ path, label, size }) => {
+        const url = stageUrl ? new URL(path, stageUrl).href : '';
+        return (
+          <div className="dl-obs" key={path}>
+            <span className="dl-label">{label}</span>
+            <code>{url}</code>
+            <button type="button" aria-label={`复制${label}地址`} disabled={!url} onClick={() => {
+              if (!navigator.clipboard) return;
+              void navigator.clipboard.writeText(url).then(() => {
+                if (timer.current) clearTimeout(timer.current);
+                setCopied(path);
+                timer.current = setTimeout(() => setCopied(null), 1500);
+              }).catch(() => setCopied(null));
+            }}>{copied === path ? '已复制' : '复制'}</button>
+            <span className="dl-meta">{size}</span>
+          </div>
+        );
+      })}
+    </div>
+  );
+}
+
 // ── 控制台 ────────────────────────────────────────────
 
 export function Console() {
@@ -268,7 +299,8 @@ export function Console() {
   // External publication is the safe default; OBS starts only when selected.
   const publisher = host?.publisher ?? host?.settings.publisher ?? 'livehime';
   const [busy, error, run] = useBusy();
-  const [loadError, setLoadError] = useState('');
+  const [loadFailure, setLoadFailure] = useState<{ message: string; retrying: boolean } | null>(null);
+  const hostRevision = useRef(0);
   const [room, setRoom] = useState('');
   const [copied, setCopied] = useState(false);
   const [drawer, setDrawer] = useState(false);
@@ -276,12 +308,39 @@ export function Console() {
   const previewRef = useRef<HTMLDivElement>(null);
   const secrets = useSecrets();
 
-  const refresh = () => api('state').then((s) => { setLoadError(''); setHost(s); setRoom((r) => r || (s.settings.roomId ? String(s.settings.roomId) : '')); });
+  const publishHost = useCallback((state: HostState) => {
+    hostRevision.current += 1;
+    setLoadFailure(null);
+    setHost(state);
+    setRoom(current => current || (state.settings.roomId ? String(state.settings.roomId) : ''));
+  }, []);
+  const refresh = () => api('state').then(publishHost);
   useEffect(() => {
-    let active = true;
-    void refresh().catch(error => { if (active) setLoadError(error instanceof Error ? error.message : '直播状态读取失败'); });
-    return () => { active = false; };
-  }, [transportConnected]);
+    if (!svc) return;
+    const owner = new AbortController();
+    let timer: ReturnType<typeof setTimeout> | undefined;
+    let delay = 500;
+    const readState = async () => {
+      const revision = hostRevision.current;
+      try {
+        const state = await api('state', undefined, owner.signal);
+        if (!owner.signal.aborted && revision === hostRevision.current) publishHost(state);
+      } catch (error) {
+        if (owner.signal.aborted || revision !== hostRevision.current) return;
+        const retrying = error instanceof ConsoleRequestError && error.retryable;
+        setLoadFailure({ message: error instanceof Error ? error.message : '直播状态读取失败', retrying });
+        if (retrying) {
+          timer = setTimeout(() => void readState(), delay);
+          delay = Math.min(delay * 2, 5000);
+        }
+      }
+    };
+    void readState();
+    return () => {
+      owner.abort();
+      clearTimeout(timer);
+    };
+  }, [svc, transportConnected, publishHost]);
 
   const show = status ?? host?.show ?? null;
   const settings = host?.settings;
@@ -322,6 +381,9 @@ export function Console() {
   const conn = show?.live.state ?? 'idle';
   const connTone = conn === 'connected' ? 'ok' : conn === 'error' ? 'bad' : conn === 'idle' ? 'idle' : 'warn';
   const previewUrl = host ? `${host.stageUrl}&preview=1${demo ? `&demo=${demo}` : ''}` : '';
+  const listenUrl = host && publisher === 'livehime' && show?.roomId === null && bc?.phase === 'idle'
+    ? new URL('/listen', host.stageUrl).href
+    : '';
   const brainTone = !show?.onAir ? 'idle' : show.brain === 'away' ? 'bad' : show.brain === 'speaking' ? 'warn' : 'ok';
   const brainText = show?.onAir ? (show.brain === 'thinking' && brainDetail ? brainDetail : BRAIN_TEXT[show.brain]) : '没在播';
   const pending = show ? (show.pending.chats ?? 0) + (show.pending.gifts ?? 0) + (show.pending.thanks ?? 0) + (show.pending.superchats ?? 0) : 0;
@@ -330,7 +392,7 @@ export function Console() {
   // 开播前准备：缺什么一眼看到，点一下打开设置
   const steps = [
     { key: 'tts', done: host?.voice?.available === true, text: '本地 Breeze 声音', hint: host?.voice?.error || (host?.voice?.available ? '已配置，播放结果以舞台回执为准' : '等待宿主报告配置状态') },
-    { key: 'obs', done: !!show?.stageWatchers, text: publisher === 'livehime' ? '直播姬接入舞台' : 'OBS 打开舞台', hint: publisher === 'livehime' ? '复制舞台地址，添加浏览器源并启用声音' : '复制下面的舞台地址' },
+    { key: 'obs', done: !!show?.stageWatchers, text: publisher === 'livehime' ? '直播姬接入声音源' : 'OBS 打开舞台', hint: publisher === 'livehime' ? '分别添加声音源和字幕源' : '复制下面的舞台地址' },
     { key: 'room', done: conn === 'connected', text: '连上直播间', hint: '不连也能用模拟观众彩排' },
     { key: 'cookie', done: show?.live.loggedIn === true || secrets.cookie === true, text: 'B 站 Cookie', hint: '看到观众的完整名字' },
   ];
@@ -366,7 +428,14 @@ export function Console() {
               : <button className="dl-btn dl-primary" disabled={busy || bc?.phase === 'preparing' || bc?.phase === 'face'} onClick={goLive}><i className="dl-go-dot" />{publisher === 'livehime' ? '开始直播回应' : settings?.broadcast ? '开播' : '开始彩排'}</button>}
           </div>
         </header>
-        {(error || loadError || transportError) && <p className="dl-error dl-banner" role="alert">{error || loadError || transportError}</p>}
+        {error && <p className="dl-error dl-banner" role="alert">{error}</p>}
+        {loadFailure && (
+          <p className="dl-error dl-banner" role={loadFailure.retrying ? 'status' : 'alert'}>
+            {loadFailure.retrying ? '正在重试读取直播状态' : '读取直播状态失败'}（{loadFailure.message}）
+          </p>
+        )}
+        {!loadFailure && transportError && <p className="dl-error dl-banner" role="status">正在重连直播事件流（{transportError}）</p>}
+        {!host && !loadFailure && !transportError && <p className="dl-banner" role="status">正在读取直播状态…</p>}
         {bc?.phase === 'error' && bc.error && error !== bc.error && <p className="dl-error dl-banner">{bc.error}</p>}
         {bc?.phase === 'face' && bc.faceQr && <FaceModal qr={bc.faceQr} onCancel={() => run(async () => { await api('broadcast/stop', {}); await refresh(); })} />}
 
@@ -374,7 +443,7 @@ export function Console() {
           <div className="dl-checklist">
             <b>开播前准备 <em>{doneCount}/{steps.length}</em></b>
             {steps.map((s) => (
-              <button key={s.key} className={s.done ? 'dl-step dl-step-done' : 'dl-step'} onClick={() => { if (s.key === 'obs') copyUrl(); else setDrawer(true); }}>
+              <button key={s.key} className={s.done ? 'dl-step dl-step-done' : 'dl-step'} onClick={() => { if (s.key === 'obs' && publisher === 'obs') copyUrl(); else setDrawer(true); }}>
                 <i>{s.done ? '✓' : ''}</i><span>{s.text}</span><small>{s.hint}</small>
               </button>
             ))}
@@ -387,15 +456,18 @@ export function Console() {
               <div className="dl-preview" ref={previewRef}>
                 {previewUrl && <iframe src={previewUrl} title="舞台预览" />}
                 <button className="dl-fullscreen" title="全屏看舞台（Esc 退出）" onClick={() => void previewRef.current?.requestFullscreen?.()}><FullscreenGlyph /><span>全屏</span></button>
-                <span className={`dl-preview-tag${show?.onAir ? ' dl-preview-live' : ''}`}><i />{publisher === 'livehime' ? (show?.onAir ? '回应中 · 舞台预览（此处静音）' : '预览：直播姬舞台源将显示「马上开始」的等待画面') : (show?.onAir ? '直播中 · 和 OBS 里一样（静音）' : '预览：开播后的样子 · OBS 里现在是「马上开始」的等待画面')}</span>
+                <span className={`dl-preview-tag${show?.onAir ? ' dl-preview-live' : ''}`}><i />{publisher === 'livehime' ? (show?.onAir ? '回应中 · 舞台预览（此处静音）' : '完整舞台预览（静音）') : (show?.onAir ? '直播中 · 和 OBS 里一样（静音）' : '预览：开播后的样子 · OBS 里现在是「马上开始」的等待画面')}</span>
               </div>
               <div className="dl-monitor-bar">
-                <div className="dl-obs">
-                  <span className="dl-label">{publisher === 'livehime' ? '直播姬浏览器源' : 'OBS 浏览器源'}</span>
-                  <code onClick={copyUrl} title="点一下复制">{host?.stageUrl ?? ''}</code>
-                  <button className={copied ? 'dl-done' : ''} onClick={copyUrl}>{copied ? '已复制' : '复制'}</button>
-                  <span className="dl-meta">1920 × 1080</span>
-                </div>
+                {listenUrl && <iframe className="dl-listen-frame" src={listenUrl} title="本机试听" allow="autoplay" referrerPolicy="no-referrer" />}
+                {publisher === 'livehime' ? <SplitSourceLinks stageUrl={host?.stageUrl} /> : (
+                  <div className="dl-obs">
+                    <span className="dl-label">OBS 浏览器源</span>
+                    <code onClick={copyUrl} title="点一下复制">{host?.stageUrl ?? ''}</code>
+                    <button className={copied ? 'dl-done' : ''} onClick={copyUrl}>{copied ? '已复制' : '复制'}</button>
+                    <span className="dl-meta">1920 × 1080</span>
+                  </div>
+                )}
               </div>
               <div className="dl-skins">
                 <span className="dl-label">主题</span>
@@ -422,7 +494,7 @@ export function Console() {
               <nav className="dl-tabs">
                 <button className={dock === 'owner' ? 'dl-on' : ''} onClick={() => setDock('owner')}>跟她说话</button>
                 <button className={dock === 'sim' ? 'dl-on' : ''} onClick={() => setDock('sim')}>模拟观众</button>
-                <span className="dl-meta">{dock === 'owner' ? '观众也会听到她的回答' : '不开直播间也能彩排'}</span>
+                <span className="dl-meta">{dock === 'owner' && show?.roomId != null ? '观众也会听到她的回答' : '本地彩排'}</span>
               </nav>
               {dock === 'owner' ? <OwnerSay onAir={!!show?.onAir} /> : <Simulator />}
             </section>
@@ -469,7 +541,7 @@ export function Console() {
               {show?.live.lastError && <p className="dl-error">{show.live.lastError}</p>}
             </div>
             <h3>{publisher === 'livehime' ? '直播姬发布' : '推流到 B 站'}</h3>
-            {publisher === 'livehime' && <p className="dl-hint">当前由直播姬负责画面、音频与发布。将舞台地址添加为浏览器源并启用声音；「开始直播回应」只控制爱莉的回应。开播与下播请在直播姬中操作。</p>}
+            {publisher === 'livehime' && <p className="dl-hint">在直播姬分别添加声音源与字幕源。声音源保持启用，字幕源摆到场景中需要的位置。使用这两个源时，关闭原来的完整舞台源。开播与下播请在直播姬中操作。</p>}
             {publisher === 'obs' && <>
             <ObsCheck />
             <div className="dl-field">
@@ -543,8 +615,9 @@ export function Console() {
             <LoginField />
             <SecretField label="B 站 Cookie（不想扫码时手填）" ref_={SECRET_REFS.cookie} configured={secrets.cookie} hint="浏览器里登录 B 站后复制的 Cookie；扫码登录会自动填这一项" />
             <h3>舞台</h3>
+            {publisher === 'livehime' && <SplitSourceLinks stageUrl={host?.stageUrl} />}
             <div className="dl-field">
-              <label>{publisher === 'livehime' ? '直播姬浏览器源地址（启用声音；宽 1920 高 1080）' : 'OBS 舞台地址（来源 → 浏览器 → 粘贴，宽 1920 高 1080）'}</label>
+              <label>{publisher === 'livehime' ? '完整舞台（可选，画面和声音合一）' : 'OBS 舞台地址（来源 → 浏览器 → 粘贴，宽 1920 高 1080）'}</label>
               <div className="dl-row">
                 <input readOnly value={host?.stageUrl ?? ''} onFocus={(e) => e.currentTarget.select()} />
                 <button className={copied ? 'dl-done' : ''} onClick={copyUrl}>{copied ? '已复制' : '复制'}</button>
@@ -938,6 +1011,9 @@ export const CONSOLE_CSS = `
 .dl-preview-tag i{width:6px;height:6px;border-radius:50%;background:var(--dl-faint)}
 .dl-preview-live i{background:#ff4d6d;animation:dl-rec 1.6s ease-out infinite}
 .dl-monitor-bar{padding:12px 16px;border-top:1px solid var(--dl-line)}
+.dl-listen-frame{display:block;width:min(100%,280px);height:48px;border:0;margin-bottom:8px}
+.dl-split-sources{display:grid;gap:8px}
+.dl-split-sources .dl-meta{white-space:nowrap}
 .dl-obs{display:flex;align-items:center;gap:10px;min-width:0}
 .dl-obs code{flex:1;min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;font:12px var(--dl-mono);color:var(--dl-dim);padding:8px 12px;border-radius:10px;background:var(--dl-sunken);cursor:pointer}
 .dl-skins{display:grid;grid-template-columns:auto 1fr;align-items:center;gap:12px 14px;padding:4px 16px 16px}

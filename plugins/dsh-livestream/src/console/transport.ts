@@ -11,22 +11,43 @@ export function nativePageFetch(): PageFetch {
   return carrier ?? ((path, init) => globalThis.fetch(path, { ...init, credentials: 'same-origin' }));
 }
 
+export class ConsoleRequestError extends Error {
+  constructor(message: string, readonly retryable: boolean) { super(message); }
+}
+
 export class ConsoleTransport {
   private readonly lifetime = new AbortController();
   private reader: ReadableStreamDefaultReader<Uint8Array> | null = null;
   private following = false;
   constructor(private readonly fetchHost: PageFetch = nativePageFetch()) {}
 
-  async request<T>(path: string, body?: unknown): Promise<T> {
-    const signal = this.lifetime.signal;
+  private async fetch(path: string, init: RequestInit): Promise<Response> {
+    try {
+      return await this.fetchHost(path, init);
+    } catch {
+      init.signal?.throwIfAborted();
+      throw new ConsoleRequestError('无法连接直播台宿主', true);
+    }
+  }
+
+  async request<T>(path: string, body?: unknown, caller?: AbortSignal): Promise<T> {
+    const signal = caller ? AbortSignal.any([this.lifetime.signal, caller]) : this.lifetime.signal;
     signal.throwIfAborted();
-    const response = await this.fetchHost('api/dsh-livestream/' + path, body === undefined
+    const response = await this.fetch('api/dsh-livestream/' + path, body === undefined
       ? { method: 'GET', cache: 'no-store', signal }
       : { method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify(body), signal });
     if (signal.aborted) { void response.body?.cancel().catch(() => {}); signal.throwIfAborted(); }
-    const data = await response.json().catch(() => ({ ok: false, error: '直播接口返回了无法读取的数据' }));
+    const data = await response.json().catch(error => {
+      signal.throwIfAborted();
+      if (response.ok && error instanceof TypeError) throw new ConsoleRequestError('读取直播台宿主响应时连接中断', true);
+      return { ok: false, error: '直播接口返回了无法读取的数据' };
+    });
     signal.throwIfAborted();
-    if (!response.ok) throw new Error('直播请求失败（HTTP ' + response.status + '）' + (typeof data.error === 'string' ? '：' + data.error : ''));
+    if (!response.ok) {
+      const { status } = response;
+      const retryable = status === 408 || status === 429 || status >= 500;
+      throw new ConsoleRequestError('直播请求失败（HTTP ' + status + '）' + (typeof data.error === 'string' ? '：' + data.error : ''), retryable);
+    }
     if (data.ok === false) throw new Error(typeof data.error === 'string' ? data.error : '直播接口拒绝了请求');
     return data as T;
   }
@@ -41,7 +62,7 @@ export class ConsoleTransport {
     const signal = this.lifetime.signal;
     while (!signal.aborted) {
       try {
-        const response = await this.fetchHost('api/dsh-livestream/events', { method: 'GET', headers: { accept: 'text/event-stream' }, cache: 'no-store', signal });
+        const response = await this.fetch('api/dsh-livestream/events', { method: 'GET', headers: { accept: 'text/event-stream' }, cache: 'no-store', signal });
         if (signal.aborted) { void response.body?.cancel().catch(() => {}); return; }
         if (!response.ok || !response.body || !response.headers.get('content-type')?.startsWith('text/event-stream')) {
           void response.body?.cancel().catch(() => {});
@@ -57,7 +78,7 @@ export class ConsoleTransport {
             if (done) break;
             parser.feed(decoder.decode(value, { stream: true }));
           }
-          if (!signal.aborted) throw new Error('直播事件连接已断开，正在重连');
+          if (!signal.aborted) throw new Error('直播事件连接已断开');
         } finally {
           if (this.reader === reader) this.reader = null;
           await reader.cancel().catch(() => {});
@@ -65,7 +86,7 @@ export class ConsoleTransport {
         }
       } catch (error) {
         if (signal.aborted) return;
-        status(error instanceof Error ? error.message : '直播事件连接失败，正在重连');
+        status(error instanceof Error && !(error instanceof TypeError) ? error.message : '直播事件连接中断');
       }
       await new Promise<void>(resolve => {
         const finish = () => { clearTimeout(timer); signal.removeEventListener('abort', finish); resolve(); };

@@ -1,6 +1,6 @@
 /**
  * 舞台页的状态：只从事件流来（protocol.ts）。挂件都读这里，不发请求、不含逻辑。
- * 唯一往回发的是「这句念完了」（出声的页面才发；预览页静音、不回执）。
+ * 只有出声源报告语音播放状态，完整舞台另报告视频状态。
  */
 
 import type { BrainState, CharacterManifest, GameSource, GameStatus, StageEvent, StageLiveEvent, StageOrder, StageUser, TemplateManifest } from './protocol';
@@ -58,7 +58,7 @@ export interface Line {
 
 /** 这句念到了第几毫秒：有在放的音频就读它的真实播放位置，不然按开始以来的时间 */
 export function playbackMs(line: Line): number {
-  if (audio && audioLine === line.id && !audio.paused) return audio.currentTime * 1000;
+  if (player && audioLine === line.id && !player.paused) return player.currentTime * 1000;
   return Date.now() - line.startedAt;
 }
 
@@ -134,6 +134,7 @@ export interface StageState {
   reaction: { key: string; mood: string } | null;
   /** 浏览器拦住了自动播放：要点一下 */
   needsClick: boolean;
+  listening: 'off' | 'starting' | 'active';
   /** Actual media state; only an ended event advances lastEndedId. */
   playback: { state: 'idle' | 'loading' | 'playing' | 'ended' | 'failed' | 'timeout' | 'cancelled'; lineId: string | null; lastEndedId: string | null; detail: string };
   /** 在放视频：舞台换成 video 布局 */
@@ -208,7 +209,7 @@ function startUpdating(): void {
 
 let state: StageState = {
   connected: false, character: null, template: null, brain: 'off', brainDetail: '', line: null, lineEndedAt: 0,
-  chats: [], alerts: [], focus: new Set(), reply: [], replySeq: 0, onAir: false, needsClick: false,
+  chats: [], alerts: [], focus: new Set(), reply: [], replySeq: 0, onAir: false, needsClick: false, listening: 'off',
   playback: { state: 'idle', lineId: null, lastEndedId: null, detail: '' },
   phase: wasUpdating() ? 'updating' : 'waiting', stats: freshStats(), tokens: 0, model: '', term: [], media: null, board: '', orders: [], notice: '', game: null, gameStatus: null, fx: [], reaction: null,
 };
@@ -232,8 +233,12 @@ function update(change: (s: StageState) => StageState): void {
 
 const params = new URLSearchParams(location.search);
 export const token = params.get('token') ?? '';
+export const sourceMode = location.pathname === '/audio' ? 'audio'
+  : location.pathname === '/subtitles' ? 'subtitles'
+  : location.pathname === '/listen' ? 'listen' : 'full';
 /** 控制台里的预览：静音、不回执 */
-export const preview = params.get('preview') === '1';
+export const preview = sourceMode === 'full' && (location.pathname === '/stage' || params.get('preview') === '1');
+const canPlaySpeech = sourceMode !== 'subtitles' && !preview;
 /** 控制台里刚换了主题：预览页演示一遍开场动画和直播中的样子（只在预览页、没在播的时候） */
 const demo = preview && params.has('demo');
 
@@ -241,88 +246,204 @@ export function assetUrl(kind: 'characters' | 'templates', id: string, file: str
   return `/${kind}/${id}/${encodeURIComponent(file)}?token=${encodeURIComponent(token)}`;
 }
 
-let audio: HTMLAudioElement | null = null;
+// The same DOM element is used for the user gesture and later speech.
+let player: HTMLAudioElement | null = null;
+let finishWarmup: ((ready: boolean) => void) | null = null;
+let eventSource: EventSource | null = null;
+
+function speechPlayer(): HTMLAudioElement {
+  if (!player) {
+    player = new Audio();
+    player.hidden = true;
+    document.body.append(player);
+  }
+  return player;
+}
+
+function clearPlayer(player: HTMLAudioElement): void {
+  player.pause();
+  player.removeAttribute('src');
+  player.load();
+}
+
+// 10 ms of silent PCM. This test is local and never represents a speech receipt.
+const SILENT_WAV = 'data:audio/wav;base64,UklGRsQAAABXQVZFZm10IBAAAAABAAEAQB8AAIA+AAACABAAZGF0YaAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA';
+
+function warmPlayer(done: (ready: boolean) => void): void {
+  if (activeSpeech || finishWarmup) { done(false); return; }
+  const player = speechPlayer();
+  const finish = (ready: boolean) => {
+    if (finishWarmup !== finish) return;
+    finishWarmup = null;
+    clearTimeout(timer);
+    clearPlayer(player);
+    done(ready);
+  };
+  finishWarmup = finish;
+  const timer = setTimeout(() => finish(false), 3000);
+  player.src = SILENT_WAV;
+  try { void player.play().then(() => finish(true), () => finish(false)); }
+  catch { finish(false); }
+}
 /** 正在放的音频是哪一句的 */
 let audioLine: string | null = null;
 type SpeechReceipt = 'ended' | 'failed' | 'cancelled' | 'timeout';
-let activeSpeech: { finish(state: SpeechReceipt, detail?: string): void } | null = null;
+type SayEvent = Extract<StageEvent, { type: 'say' }>;
+type SubtitleEvent = Extract<StageEvent, { type: 'subtitle' }>;
+interface PlaybackOwner { id: string; abort: AbortController }
+let playbackOwner: PlaybackOwner | null = null;
+let activeSpeech: { id: string; finish(state: SpeechReceipt, detail?: string, notify?: boolean): void } | null = null;
 let previewTimer: ReturnType<typeof setTimeout> | null = null;
 const seenSpeech = new Set<string>();
+const closedSpeech = new Set<string>();
+const hostFinishedSpeech = new Set<string>();
 
-function said(id: string, receipt: SpeechReceipt, detail = ''): void {
-  if (!preview) void fetch(`/said?id=${encodeURIComponent(id)}&state=${receipt}&detail=${encodeURIComponent(detail)}&token=${encodeURIComponent(token)}`, { method: 'POST', keepalive: true }).catch(() => {});
+function rememberSpeech(ids: Set<string>, id: string): void {
+  ids.add(id);
+  if (ids.size > 200) ids.delete(ids.values().next().value!);
+}
+
+async function said(owner: PlaybackOwner, id: string, receipt: SpeechReceipt | 'started', detail = '', timing?: { positionMs: number; durationMs: number }): Promise<boolean> {
+  if (playbackOwner !== owner || hostFinishedSpeech.has(id)) return false;
+  const params = new URLSearchParams({ id, state: receipt, playbackId: owner.id, token });
+  if (detail) params.set('detail', detail);
+  if (timing) {
+    params.set('positionMs', String(timing.positionMs));
+    params.set('durationMs', String(timing.durationMs));
+  }
+  try {
+    const response = await fetch(`/said?${params}`, { method: 'POST', keepalive: true, signal: owner.abort.signal });
+    return response.ok;
+  } catch {
+    return false;
+  }
 }
 
 function clearLine(id: string): void {
   update((s) => s.line?.id === id ? { ...s, line: null, lineEndedAt: Date.now() } : s);
 }
 
-function onSay(event: Extract<StageEvent, { type: 'say' }>): void {
-  // SSE reconnects or an accidental duplicate event must not play a line twice.
-  if (seenSpeech.has(event.id)) return;
-  seenSpeech.add(event.id);
-  if (seenSpeech.size > 200) seenSpeech.delete(seenSpeech.values().next().value!);
-  activeSpeech?.finish('cancelled', 'replaced-by-next-line');
+function beginLine(event: SayEvent | Extract<SubtitleEvent, { state: 'started' }>, elapsedMs = 0): void {
+  update((s) => ({ ...s, line: {
+    id: event.id, text: event.text, mood: event.mood,
+    startedAt: Date.now() - Math.max(0, elapsedMs), durationMs: event.estimateMs,
+    timeline: event.timeline, speaker: event.speaker,
+  } }));
+}
+
+function resetPlaybackConnection(): void {
+  playbackOwner?.abort.abort();
+  playbackOwner = null;
+  activeSpeech?.finish('cancelled', 'speaking-stage-disconnected', false);
   if (previewTimer) clearTimeout(previewTimer);
-  const begin = (durationMs: number) => update((s) => ({ ...s, line: { id: event.id, text: event.text, mood: event.mood, startedAt: Date.now(), durationMs, timeline: event.timeline, speaker: event.speaker } }));
-  begin(event.estimateMs);
+  previewTimer = null;
+  if (state.line) clearLine(state.line.id);
+}
+
+function onSubtitle(event: SubtitleEvent): void {
+  if (preview) return;
+  if (event.state !== 'started') {
+    rememberSpeech(hostFinishedSpeech, event.id);
+    rememberSpeech(closedSpeech, event.id);
+    if (activeSpeech?.id === event.id) activeSpeech.finish(event.state, '', false);
+    else clearLine(event.id);
+    return;
+  }
+  if ((sourceMode !== 'full' && sourceMode !== 'subtitles') || closedSpeech.has(event.id)) return;
+  const alreadyShowing = state.line?.id === event.id;
+  beginLine(event, Number.isFinite(event.elapsedMs) ? event.elapsedMs : 0);
+  if (sourceMode === 'full' && !alreadyShowing) recordSpokenLine(event);
+}
+
+function recordSpokenLine(event: Pick<SayEvent, 'speaker' | 'mood' | 'text'>): void {
+  update((s) => term(s, event.speaker ? 'guest' : 'say', `${event.speaker ? `${event.speaker}：` : ''}${MOOD_TEXT[event.mood] ? `（${MOOD_TEXT[event.mood]}）` : ''}${short(event.text, 26)}`));
+}
+
+function onSay(event: SayEvent): void {
+  const owner = playbackOwner;
+  if (!preview && (!canPlaySpeech || !owner)) return;
+  // A reconnect or a stale duplicate cannot play the same line again.
+  if (seenSpeech.has(event.id) || closedSpeech.has(event.id)) return;
+  rememberSpeech(seenSpeech, event.id);
   if (preview) {
-    // A preview animates subtitles but never plays or acknowledges speech.
+    if (previewTimer) clearTimeout(previewTimer);
+    beginLine(event);
+    recordSpokenLine(event);
     previewTimer = setTimeout(() => clearLine(event.id), event.estimateMs);
     return;
   }
+  if (!owner) return;
+  finishWarmup?.(false);
+  activeSpeech?.finish('cancelled', 'replaced-by-next-line');
   if (!event.audio) {
     update((s) => ({ ...s, playback: { ...s.playback, state: 'failed', lineId: event.id, detail: '没有可播放的音频' } }));
-    said(event.id, 'failed', 'audio-unavailable');
+    void said(owner, event.id, 'failed', 'audio-unavailable');
     return;
   }
-  const player = new Audio(`data:${event.audioMime ?? 'audio/mpeg'};base64,${event.audio}`);
-  audio = player;
+  const player = speechPlayer();
   audioLine = event.id;
   let settled = false;
+  let started: Promise<boolean> | undefined;
   let watchdog: ReturnType<typeof setTimeout> | null = null;
-  const finish = (receipt: SpeechReceipt, detail = '') => {
+  const duration = () => Number.isFinite(player.duration) && player.duration > 0 ? player.duration * 1000 : event.estimateMs;
+  const finish = (receipt: SpeechReceipt, detail = '', notify = true) => {
     if (settled) return;
     settled = true;
+    rememberSpeech(closedSpeech, event.id);
     if (watchdog) clearTimeout(watchdog);
     player.onloadedmetadata = null;
+    player.onplaying = null;
     player.onended = null;
     player.onerror = null;
-    if (receipt !== 'ended') player.pause();
-    if (audio === player) { audio = null; audioLine = null; }
+    clearPlayer(player);
+    audioLine = null;
     activeSpeech = null;
     clearLine(event.id);
     const visibleDetail = receipt === 'failed' ? '本句播放失败；检查声音设置，启用后续语音。'
       : receipt === 'timeout' ? '本句播放超时；请检查连接或刷新舞台。' : '';
     update((s) => ({ ...s, playback: { state: receipt, lineId: event.id, lastEndedId: receipt === 'ended' ? event.id : s.playback.lastEndedId, detail: visibleDetail } }));
-    said(event.id, receipt, detail);
+    if (!notify) return;
+    if (receipt !== 'ended') {
+      void said(owner, event.id, receipt, detail);
+    } else {
+      // The host must accept actual start before the terminal ended report.
+      void started?.then((accepted) => said(owner, event.id, accepted ? 'ended' : 'failed', accepted ? detail : 'start-receipt-rejected'));
+    }
   };
-  activeSpeech = { finish };
-  const arm = (duration: number) => {
+  activeSpeech = { id: event.id, finish };
+  const arm = (durationMs: number, detail: string) => {
     if (watchdog) clearTimeout(watchdog);
-    watchdog = setTimeout(() => finish('timeout', 'playback-timeout'), Math.max(0, duration) + 5000);
+    watchdog = setTimeout(() => finish('timeout', detail), Math.max(0, durationMs) + 5000);
   };
-  arm(event.estimateMs);
+  arm(event.estimateMs, 'playback-load-timeout');
   update((s) => ({ ...s, playback: { ...s.playback, state: 'loading', lineId: event.id, detail: '' } }));
   player.onloadedmetadata = () => {
-    const ms = Number.isFinite(player.duration) && player.duration > 0 ? player.duration * 1000 : event.estimateMs;
-    begin(ms);
-    arm(ms);
+    if (!started) arm(duration(), 'playback-start-timeout');
   };
-  player.onended = () => finish('ended');
+  player.onplaying = () => {
+    if (settled || started || playbackOwner !== owner) return;
+    const durationMs = duration();
+    const positionMs = Math.max(0, Number.isFinite(player.currentTime) ? player.currentTime * 1000 : 0);
+    arm(Math.max(0, durationMs - positionMs), 'playback-end-timeout');
+    update((s) => ({ ...s, needsClick: false, playback: { ...s.playback, state: 'playing' } }));
+    const timing = Number.isFinite(durationMs) && positionMs <= durationMs && durationMs <= 30 * 60_000
+      ? { positionMs, durationMs } : undefined;
+    started = said(owner, event.id, 'started', '', timing);
+    void started.then((accepted) => { if (!accepted) finish('failed', 'start-receipt-rejected'); });
+  };
+  player.onended = () => {
+    if (started) finish('ended');
+    else finish('failed', 'ended-before-playing');
+  };
   player.onerror = () => finish('failed', 'audio-load-error');
-  try {
-    void player.play().then(() => {
-      if (!settled) update((s) => ({ ...s, needsClick: false, playback: { ...s.playback, state: 'playing' } }));
-    }, () => {
-      if (settled) return;
-      update((s) => ({ ...s, needsClick: true }));
-      finish('failed', 'playback-rejected');
-    });
-  } catch {
+  const rejected = () => {
+    if (settled) return;
     update((s) => ({ ...s, needsClick: true }));
     finish('failed', 'playback-rejected');
-  }
+  };
+  player.src = `data:${event.audioMime ?? 'audio/mpeg'};base64,${event.audio}`;
+  try { void player.play().catch(rejected); }
+  catch { rejected(); }
 }
 
 /** 视频地址（舞台服务器转发的） */
@@ -332,17 +453,35 @@ export function mediaUrl(src: string): string {
 
 /** 视频开始放、放完、放不出来：告诉身体（出声的页面才发） */
 export function reportMedia(id: string, state: 'playing' | 'ended' | 'error', atSec?: number, detail?: string): void {
-  if (preview) return;
+  if (sourceMode !== 'full' || preview) return;
   const at = atSec !== undefined && Number.isFinite(atSec) ? `&at=${atSec.toFixed(1)}` : '';
   const why = detail ? `&detail=${encodeURIComponent(detail.slice(0, 200))}` : '';
   void fetch(`/media?id=${encodeURIComponent(id)}&state=${state}${at}${why}&token=${encodeURIComponent(token)}`, { method: 'POST' }).catch(() => {});
 }
 
 export function unlockAudio(): void {
-  void new Audio().play().catch(() => {});
-  // Failed lines have already reported a terminal result to their owner.
-  // Do not replay them after that owner released the microphone.
-  update((s) => ({ ...s, needsClick: false }));
+  if (!canPlaySpeech) return;
+  warmPlayer((ready) => update((s) => ({ ...s, needsClick: !ready })));
+}
+
+export function startListening(): void {
+  if (sourceMode !== 'listen' || state.listening !== 'off') return;
+  update((s) => ({ ...s, listening: 'starting', needsClick: false }));
+  warmPlayer((ready) => {
+    if (state.listening !== 'starting') return;
+    update((s) => ({ ...s, listening: ready ? 'active' : 'off', needsClick: !ready }));
+    if (ready) connect();
+  });
+}
+
+export function stopListening(): void {
+  if (sourceMode !== 'listen' || state.listening === 'off') return;
+  update((s) => ({ ...s, listening: 'off', connected: false, needsClick: false }));
+  finishWarmup?.(false);
+  const source = eventSource;
+  eventSource = null;
+  source?.close();
+  resetPlaybackConnection();
 }
 
 let alertSeq = 0;
@@ -536,24 +675,35 @@ function onBrain(event: Extract<StageEvent, { type: 'brain' }>): void {
 }
 
 function handle(event: StageEvent): void {
-  switch (event.type) {
-    case 'hello':
-      // 插件更新过（DSH 重启后重连上来，版本变了）：重新加载页面拿新代码。OBS 的浏览器源不会自己刷新
-      if (event.build && pageBuild && event.build !== pageBuild) {
-        if (state.onAir || state.phase === 'updating') {
-          try { sessionStorage.setItem(UPDATING_KEY, String(Date.now())); } catch { /* 存不了就算了 */ }
-        }
-        location.reload();
-        return;
+  if (event.type === 'playback-owner') {
+    if (canPlaySpeech && playbackOwner?.id !== event.playbackId) {
+      resetPlaybackConnection();
+      playbackOwner = { id: event.playbackId, abort: new AbortController() };
+    }
+    return;
+  }
+  if (event.type === 'subtitle') return onSubtitle(event);
+  if (event.type === 'say') return onSay(event);
+  if (event.type === 'hello') {
+    // 浏览器源重连时发现代码已更新，主动拿新包；只有完整舞台需要主题。
+    if (event.build && pageBuild && event.build !== pageBuild) {
+      if (sourceMode === 'full' && (state.onAir || state.phase === 'updating')) {
+        try { sessionStorage.setItem(UPDATING_KEY, String(Date.now())); } catch { /* 存不了就算了 */ }
       }
-      pageBuild ??= event.build;
+      resetPlaybackConnection();
+      location.reload();
+      return;
+    }
+    pageBuild ??= event.build;
+    if (sourceMode === 'full') {
       helloAt = Date.now();
       update((s) => ({ ...s, connected: true, character: event.character, template: event.template }));
       if (demo && !demoStarted) startDemo(event.character.name);
-      return;
-    case 'say':
-      update((s) => term(s, event.speaker ? 'guest' : 'say', `${event.speaker ? `${event.speaker}：` : ''}${MOOD_TEXT[event.mood] ? `（${MOOD_TEXT[event.mood]}）` : ''}${short(event.text, 26)}`));
-      return onSay(event);
+    }
+    return;
+  }
+  if (sourceMode !== 'full') return;
+  switch (event.type) {
     case 'brain': return onBrain(event);
     case 'tool': return update((s) => term({ ...s, brain: 'thinking', brainDetail: event.doing ?? s.brainDetail }, 'tool', `${event.name}${event.detail ? ` ${event.detail}` : ''}`));
     case 'live': return onLive(event.event, event.isUpdate);
@@ -617,9 +767,12 @@ function startDemo(name: string): void {
 }
 
 export function connect(): void {
-  if (state.phase === 'updating') setPhase('updating', { ms: UPDATING_MAX_MS, next: 'waiting' });
+  if (eventSource || (sourceMode === 'listen' && state.listening !== 'active')) return;
+  if (sourceMode === 'full' && state.phase === 'updating') setPhase('updating', { ms: UPDATING_MAX_MS, next: 'waiting' });
   const source = new EventSource(`/events?token=${encodeURIComponent(token)}${preview ? '&preview=1' : ''}`);
+  eventSource = source;
   source.onmessage = (message) => {
+    if (eventSource !== source) return;
     try {
       handle(JSON.parse(message.data) as StageEvent);
     } catch {
@@ -627,13 +780,17 @@ export function connect(): void {
     }
   };
   source.onerror = () => {
+    if (eventSource !== source) return;
+    resetPlaybackConnection();
     update((s) => ({ ...s, connected: false }));
     // 直播中断线（插件在重启、在更新）：过一会儿还没接上就盖「更新中」
-    if (!state.onAir || preview || updatingTimer) return;
+    if (sourceMode !== 'full' || !state.onAir || preview || updatingTimer) return;
     updatingTimer = setTimeout(() => {
       updatingTimer = null;
       if (!state.connected && state.onAir) startUpdating();
     }, UPDATING_AFTER_MS);
   };
-  source.onopen = () => update((s) => ({ ...s, connected: true }));
+  source.onopen = () => {
+    if (eventSource === source) update((s) => ({ ...s, connected: true }));
+  };
 }

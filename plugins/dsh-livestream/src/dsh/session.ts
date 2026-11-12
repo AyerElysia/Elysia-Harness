@@ -1,6 +1,6 @@
 /** Fixed Elysia livestream identity, scoped composition and native journal. */
 import type { Context } from '@deepseek-ai/cordis'
-import type { AgentHandle } from '@deepseek-ai/dsh-agent'
+import type { Agent, AgentHandle } from '@deepseek-ai/dsh-agent'
 import type {} from '@deepseek-ai/dsh-agent-default-model'
 import type {} from '@deepseek-ai/dsh-tools'
 import { appendPluginRecord, pluginRecordOf, SessionId, type Session, type SessionSeq } from '@deepseek-ai/dsh-session'
@@ -9,8 +9,11 @@ import { createHash, randomUUID } from 'node:crypto'
 import { mkdir } from 'node:fs/promises'
 import { resolve } from 'node:path'
 import * as StandingPrompt from '@elysia/conscious-mind/standing-prompts'
+import { restoreDirectSessionModel } from '@elysia/conscious-mind/src/restore-direct-session-model.ts'
 import * as Integration from './agent'
 import type { LiveEvent } from '../core/live'
+import type { LiveSpeechResult } from '../body/show'
+import { show } from './runtime'
 
 export const LIVESTREAM_SESSION_ID = SessionId('elysia-livestream')
 export const LIVESTREAM_SESSION_CWD = '/home/ayerelysia/Elysia/Elysium/Elysia-Harness/homes/web/livestream'
@@ -26,7 +29,10 @@ function fixed(c: SessionPromptConfig) {
   return { baseDir: resolve(c.baseDir), files: [...c.files], required: [...c.required ?? ['SOUL.md']], allowedWriteActions: [...c.allowedWriteActions ?? []].sort() }
 }
 /** Install prompt and capabilities in this exact agent scope, never globally. */
-export function composeLivestreamAgent(ctx: Context, config: SessionPromptConfig): Promise<void> {
+export function composeLivestreamAgent(ctx: Context, config: SessionPromptConfig, agent?: Agent): Promise<void> {
+  if (agent && (agent.id !== LIVESTREAM_SESSION_ID || agent.ctx !== ctx)) {
+    return Promise.reject(new Error('Livestream composition requires the exact fixed agent context'))
+  }
   const selected = fixed(config)
   const fingerprint = JSON.stringify(selected)
   const prior = receipts.get(ctx)
@@ -38,7 +44,8 @@ export function composeLivestreamAgent(ctx: Context, config: SessionPromptConfig
     let integration: { dispose(): Promise<unknown> } | undefined
     let restrict: (() => void) | undefined
     try {
-      integration = await ctx.plugin(Integration, { allowedWriteActions: selected.allowedWriteActions })
+      const tools = { allowedWriteActions: selected.allowedWriteActions }
+      integration = await (agent ? Integration.mountLivestreamTools(agent, tools) : ctx.plugin(Integration, tools))
       // Native restrictions mask inherited/global capabilities only. The
       // integration owns its scope-local registration allowlist independently.
       restrict = ctx.tools.restrict({ allow: [] })
@@ -57,7 +64,7 @@ export function composeLivestreamAgent(ctx: Context, config: SessionPromptConfig
 export function bindLivestreamAgentSetup(ctx: Context, config: SessionPromptConfig): () => void {
   const selected = fixed(config)
   return ctx.on('agent/created', async ({ agent }) => {
-    if (agent.id === LIVESTREAM_SESSION_ID) await composeLivestreamAgent(agent.ctx, selected)
+    if (agent.id === LIVESTREAM_SESSION_ID) await composeLivestreamAgent(agent.ctx, selected, agent)
   })
 }
 /** Content-free failure details for an operator reproducing a setup failure. */
@@ -84,17 +91,25 @@ export async function ensureLivestreamAgent(ctx: Context, config: SessionPromptC
     if (receipt) {
       if (receipt.fingerprint !== signature) throw new Error('Livestream composition mismatch; refusing another writer')
       await receipt.ready
-    } else await agent.runMaintenance(async signal => { signal.throwIfAborted(); await composeLivestreamAgent(agent.ctx, selected); signal.throwIfAborted() })
+    } else await agent.runMaintenance(async signal => { signal.throwIfAborted(); await composeLivestreamAgent(agent.ctx, selected, agent); signal.throwIfAborted() })
     const ready = receipts.get(agent.ctx)
     if (!ready?.complete || ready.fingerprint !== signature) throw new Error('Livestream composition is not ready')
     return { agent, dispose: async () => {} }
   }
   const existing = await borrow()
   if (existing) return existing
-  const agentOptions = ctx.agentDefaultModel.currentSelection()
-  const setup = (scope: Context) => composeLivestreamAgent(scope, selected)
+  const agentOptions = { ...ctx.agentDefaultModel.currentSelection() }
+  const setup = (scope: Context, agent: Agent) => composeLivestreamAgent(scope, selected, agent)
   await mkdir(LIVESTREAM_SESSION_CWD, { recursive: true })
-  try { return await ctx.agents.resume({ resumeSessionId: LIVESTREAM_SESSION_ID, agentOptions, setup }) }
+  try {
+    return await ctx.agents.resume({
+      resumeSessionId: LIVESTREAM_SESSION_ID, agentOptions: { ...agentOptions },
+      setup: (scope, agent) => {
+        restoreDirectSessionModel(agent, LIVESTREAM_SESSION_ID)
+        return setup(scope, agent)
+      },
+    })
+  }
   catch (error) {
     reportSessionFailure('resume',error)
     const concurrent = await borrow()
@@ -109,15 +124,32 @@ export interface InputJournal {
   actor: { kind: 'external'; id: string; name: string }
   source: { platform: string; roomId: number | null; sessionId: string; instanceId: string }
   occurrence: string
+  showId?: string
   occurredAt: number
   hash: string
   isUpdate: boolean
   event: LiveEvent
 }
+export interface LiveSpeechArgs {
+  text: string
+  replyTo?: string[]
+  stageMood?: string
+  expressionInstruction?: string
+}
+interface SpeechIntent {
+  id: string
+  showId: string
+  callId: string
+  callSeq: number
+  replyTo: string[]
+  argumentsHash: string
+}
 export interface JournalRef { ref: string; seq: number; bytes: number; hash: string }
 declare module '@deepseek-ai/dsh-session/types' {
   interface PluginRecordMap {
     'plugin:elysia-livestream/input': InputJournal
+    'plugin:elysia-livestream/speech-intent': SpeechIntent
+    'plugin:elysia-livestream/speech-receipt': LiveSpeechResult
     'plugin:elysia-livestream/projection-intent': ProjectionIntent
     'plugin:elysia-livestream/activity': { version: 1; actor: string; instanceId: string; sessionId: string; source: string; activity: Record<string, unknown> }
   }
@@ -125,7 +157,7 @@ declare module '@deepseek-ai/dsh-session/types' {
 const journals = new WeakMap<Session, Map<string, { seq: number; hash: string }>>()
 const hash = (text: string) => createHash('sha256').update(text).digest('hex')
 /** Persist complete protocol input before permitting any attention projection. */
-export async function journalInput(ctx: Context, session: Session, event: LiveEvent, isUpdate: boolean, roomId: number | null, receiptId?: string): Promise<JournalRef> {
+export async function journalInput(ctx: Context, session: Session, event: LiveEvent, isUpdate: boolean, roomId: number | null, receiptId?: string, showId?: string): Promise<JournalRef> {
   if (session.id !== LIVESTREAM_SESSION_ID) throw new Error('Foreign session journal refused')
   const json = JSON.stringify(event)
   const digest = hash(json)
@@ -148,7 +180,7 @@ export async function journalInput(ctx: Context, session: Session, event: LiveEv
     const seq = appendPluginRecord(session, 'plugin:elysia-livestream/input', {
       version: 1, actor: { kind: 'external', id: event.user.id, name: event.user.name },
       source: { platform: event.platform, roomId, sessionId: session.id, instanceId: LIVESTREAM_SESSION_ID },
-      occurrence, occurredAt: event.ts, hash: digest, isUpdate, event: JSON.parse(json) as LiveEvent,
+      occurrence, ...(showId ? { showId } : {}), occurredAt: event.ts, hash: digest, isUpdate, event: JSON.parse(json) as LiveEvent,
     })
     entry = { seq: Number(seq), hash: digest }
     index.set(occurrence, entry)
@@ -157,17 +189,21 @@ export async function journalInput(ctx: Context, session: Session, event: LiveEv
   if (!await ctx.sessions.flush(session)) throw new Error('Livestream journal has no durability owner')
   return { ref: `elysia-livestream:${entry.seq}:${digest}`, seq: entry.seq, hash: digest, bytes: Buffer.byteLength(json) }
 }
-/** UTF-8 pagination of the complete raw event; only this fixed session is read. */
-export function readJournal(session: Session, ref: string, offset = 0, maxBytes = 8192) {
+function journalRecord(session: Session, ref: string): InputJournal {
   if (session.id !== LIVESTREAM_SESSION_ID) throw new Error('Foreign session journal refused')
   const match = /^elysia-livestream:(\d+):([a-f0-9]{64})$/.exec(ref)
-  if (!match || !Number.isSafeInteger(offset) || offset < 0 || !Number.isSafeInteger(maxBytes) || maxBytes < 4 || maxBytes > 32768) throw new Error('Invalid journal page')
+  if (!match || !Number.isSafeInteger(Number(match[1]))) throw new Error('Invalid journal reference')
   const event = session.eventAt(Number(match[1]) as SessionSeq)
   const record = event && pluginRecordOf(event)
   if (record?.type !== 'plugin:elysia-livestream/input') throw new Error('Journal record not found')
   const data = record.data as InputJournal
-  const text = JSON.stringify(data.event)
-  if (data.version !== 1 || data.hash !== match[2] || hash(text) !== match[2]) throw new Error('Journal hash mismatch')
+  if (data.version !== 1 || data.hash !== match[2] || hash(JSON.stringify(data.event)) !== match[2]) throw new Error('Journal hash mismatch')
+  return data
+}
+/** UTF-8 pagination of the complete raw event; only this fixed session is read. */
+export function readJournal(session: Session, ref: string, offset = 0, maxBytes = 8192) {
+  if (!Number.isSafeInteger(offset) || offset < 0 || !Number.isSafeInteger(maxBytes) || maxBytes < 4 || maxBytes > 32768) throw new Error('Invalid journal page')
+  const text = JSON.stringify(journalRecord(session, ref).event)
   const bytes = Buffer.from(text)
   if (offset > bytes.length || (offset < bytes.length && (bytes[offset]! & 0xc0) === 0x80)) throw new Error('Invalid UTF-8 offset')
   let end = Math.min(bytes.length, offset + maxBytes)
@@ -188,12 +224,15 @@ interface NativeIndex {
   inputs: Array<{ entry: InputJournal; ref: string; seq: number }>
   intents: Map<string, ProjectionIntent>
   inserted: Set<string>
+  speechCalls: Map<string, number>
+  speechIntents: Map<string, SpeechIntent>
+  speechReceipts: Map<string, LiveSpeechResult>
 }
 const nativeIndexes = new WeakMap<Session, NativeIndex>()
 function nativeIndex(session: Session): NativeIndex {
   if (session.id !== LIVESTREAM_SESSION_ID) throw new Error('Foreign session projection refused')
   let index = nativeIndexes.get(session)
-  if (!index) { index = { offset: 0, inputs: [], intents: new Map(), inserted: new Set() }; nativeIndexes.set(session,index) }
+  if (!index) { index = { offset: 0, inputs: [], intents: new Map(), inserted: new Set(), speechCalls: new Map(), speechIntents: new Map(), speechReceipts: new Map() }; nativeIndexes.set(session,index) }
   for (; index.offset < Number(session.seq); index.offset++) {
     const event = session.eventAt(index.offset as SessionSeq)
     if (!event) throw new Error('Livestream native event gap')
@@ -208,12 +247,81 @@ function nativeIndex(session: Session): NativeIndex {
       const prior=index.intents.get(d.key)
       if (prior && JSON.stringify(prior) !== JSON.stringify(d)) throw new Error('Conflicting livestream projection intent')
       index.intents.set(d.key,d)
+    } else if (record?.type === 'plugin:elysia-livestream/speech-intent') {
+      const intent = record.data as SpeechIntent
+      index.speechIntents.set(intent.id, intent)
+    } else if (record?.type === 'plugin:elysia-livestream/speech-receipt') {
+      const receipt = record.data as LiveSpeechResult
+      index.speechReceipts.set(receipt.id, receipt)
+    } else if (event.type === 'tool/call' && event.data.name === 'live_say') {
+      index.speechCalls.set(event.data.callId, Number(event.seq))
     } else if (event.type === 'agent/inbox/spliced') {
       for (const message of event.data.inserted) index.inserted.add(message.id)
     } else if (event.type === 'user/message') index.inserted.add(event.data.id)
   }
   return index
 }
+const runningSpeech = new WeakMap<Session, Map<string, Promise<LiveSpeechResult>>>()
+
+/** Journal one native speech action before sending anything to the stage. */
+export async function runLiveSpeech(
+  ctx: Context, session: Session, callId: string, args: LiveSpeechArgs, signal: AbortSignal,
+): Promise<LiveSpeechResult> {
+  const index = nativeIndex(session)
+  const callSeq = index.speechCalls.get(callId)
+  if (callSeq === undefined) throw new Error('Live speech requires a native live_say call')
+  const id = 'live-speech-' + hash(JSON.stringify([session.id, callSeq, callId])).slice(0, 32)
+  const replyTo = [...args.replyTo ?? []]
+  const argumentsHash = hash(JSON.stringify([args.text, replyTo, args.stageMood, args.expressionInstruction]))
+  const prior = index.speechIntents.get(id)
+  if (prior && prior.argumentsHash !== argumentsHash) throw new Error('Live speech call arguments changed')
+
+  let running = runningSpeech.get(session)
+  if (!running) {
+    running = new Map()
+    runningSpeech.set(session, running)
+  }
+  const inProgress = running.get(id)
+  if (inProgress) return inProgress
+  const receipt = index.speechReceipts.get(id)
+  if (receipt) {
+    if (!await ctx.sessions.flush(session)) throw new Error('Livestream speech receipt has no durability owner')
+    return receipt
+  }
+  // A persisted intent can outlive its process. Its audio may already have
+  // played, so a new process cannot safely send it again.
+  if (prior) return { id, state: 'failed', detail: 'Prior playback outcome could not be confirmed' }
+
+  const showId = show?.currentShowId
+  const outputKey = show?.currentSpeechOutputKey
+  if (!showId || !outputKey || signal.aborted) return { id, state: 'cancelled', detail: 'Live speech is no longer active' }
+  if (replyTo.length > 8 || new Set(replyTo).size !== replyTo.length) throw new Error('Invalid live speech reply references')
+  for (const ref of replyTo) {
+    const input = journalRecord(session, ref)
+    if (input.showId !== showId) throw new Error('Live speech reply reference belongs to a different show')
+  }
+
+  const play = async (): Promise<LiveSpeechResult> => {
+    appendPluginRecord(session, 'plugin:elysia-livestream/speech-intent', {
+      id, showId, callId, callSeq, replyTo, argumentsHash,
+    })
+    if (!await ctx.sessions.flush(session)) throw new Error('Livestream speech intent has no durability owner')
+    const result: LiveSpeechResult = show?.currentSpeechOutputKey === outputKey && !signal.aborted
+      ? await show.liveSay({ id, text: args.text, stageMood: args.stageMood, expressionInstruction: args.expressionInstruction }, signal)
+      : { id, state: 'cancelled', detail: 'The live show or output changed before playback' }
+    appendPluginRecord(session, 'plugin:elysia-livestream/speech-receipt', result)
+    if (!await ctx.sessions.flush(session)) throw new Error('Livestream speech receipt has no durability owner')
+    return result
+  }
+  const pending = play()
+  running.set(id, pending)
+  try {
+    return await pending
+  } finally {
+    running.delete(id)
+  }
+}
+
 /** Pure native-history fold: accepted pages advance only contiguous UTF-8 offsets. */
 export function recoverLivestreamInputs(session: Session): ReplayPlan {
   const index=nativeIndex(session)

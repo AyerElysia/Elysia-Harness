@@ -13,7 +13,7 @@ const services = { uiWorkspace: { openSession }, sessions: { using }, layout: { 
 function host(publisher: 'livehime' | 'obs' = 'livehime') {
   return {
     ok: true, publisher, stageUrl: 'http://127.0.0.1:39999/?token=fixture',
-    show: { live: { state: 'connected', loggedIn: true, stats: {}, perMinute: {} }, onAir: false, brain: 'off', brainSession: null as string | null, heat: 'quiet', audience: false, pending: {}, lines: [], stageWatchers: 1, roomId: 123 },
+    show: { live: { state: 'connected', loggedIn: true, stats: {}, perMinute: {} }, onAir: false, brain: 'off', brainSession: null as string | null, heat: 'quiet', audience: false, pending: {}, lines: [], stageWatchers: 1, roomId: 123 as number | null },
     broadcast: { phase: 'idle', step: '', roomId: null, faceQr: null, error: null, health: null, startedAt: null },
     settings: { roomId: 123, character: 'elysia', template: 'default', voice: 'elysia-breeze', stagePort: 39999, idleAfterSec: 45, distillModel: '', ownRooms: [123], broadcast: true, areaId: null, liveTitle: '', pushProtocol: 'rtmp', streamKbps: 4500, asrPython: '', asrModel: '', boardText: '' },
     characters: [{ id: 'elysia', name: '爱莉希雅', builtin: true }], templates: [{ id: 'default', name: '原模板', builtin: true }], asr: { available: false }, defaultBoard: '',
@@ -58,7 +58,7 @@ beforeEach(() => {
 });
 afterEach(async () => {
   await act(async () => { root?.unmount(); root = null; });
-  disposeConsole(); document.body.innerHTML = ''; vi.unstubAllGlobals();
+  disposeConsole(); document.body.innerHTML = ''; vi.useRealTimers(); vi.unstubAllGlobals();
 });
 
 describe('original livestream console integration', () => {
@@ -82,6 +82,21 @@ describe('original livestream console integration', () => {
     await act(async () => { button('打开她直播的会话').click(); });
     expect(openSession).toHaveBeenCalledWith('elysia-livestream');
   });
+  it('offers opt-in local listening alongside the silent preview during rehearsal', async () => {
+    const state = host();
+    state.show.roomId = null;
+    stubHostFetch(async () => new Response(JSON.stringify(state)));
+    await mount();
+    const player = document.querySelector('iframe[title="本机试听"]');
+    expect(player?.getAttribute('src')).toBe('http://127.0.0.1:39999/listen');
+    expect(player?.getAttribute('allow')).toBe('autoplay');
+    expect(document.querySelector('iframe[title="舞台预览"]')?.getAttribute('src')).toContain('preview=1');
+  });
+  it('keeps the local listening player out of a connected platform room', async () => {
+    stubHostFetch(async () => new Response(JSON.stringify(host())));
+    await mount();
+    expect(document.querySelector('iframe[title="本机试听"]')).toBeNull();
+  });
   it('reads state and events through the public authenticated shell carrier', async () => {
     const state = host();
     const authenticated = stubHostFetch(async () => new Response(JSON.stringify(state), { status: 200 }));
@@ -96,6 +111,55 @@ describe('original livestream console integration', () => {
     expect(authenticated.mock.calls.some(([url]) => url === 'api/dsh-livestream/events')).toBe(true);
     expect(anonymous).not.toHaveBeenCalled();
     expect(EventSource).not.toHaveBeenCalled();
+  });
+  it('recovers the preview when state fails twice while the event stream stays connected', async () => {
+    vi.useFakeTimers();
+    const readState = vi.fn(async () => new Response(JSON.stringify(host())))
+      .mockRejectedValueOnce(new TypeError('Failed to fetch'))
+      .mockRejectedValueOnce(new TypeError('Failed to fetch'));
+    const carrier = stubHostFetch(readState);
+    await mount();
+    expect(readState).toHaveBeenCalledTimes(2);
+    expect(streamSignals).toHaveLength(1);
+    expect(document.querySelector('iframe[title="舞台预览"]')).toBeNull();
+    expect(document.querySelector('[role="status"]')?.textContent).toContain('正在重试读取直播状态');
+    expect(document.body.textContent).not.toContain('Failed to fetch');
+
+    await act(async () => { await vi.advanceTimersByTimeAsync(500); });
+
+    expect(readState).toHaveBeenCalledTimes(3);
+    expect(streamSignals).toHaveLength(1);
+    expect(document.querySelector('iframe[title="舞台预览"]')).not.toBeNull();
+    expect(document.body.textContent).not.toContain('正在重试读取直播状态');
+    expect(carrier.mock.calls.every(([, init]) => init?.method === 'GET')).toBe(true);
+  });
+  it('aborts an in-flight state refresh and cancels subsequent retries on unmount', async () => {
+    vi.useFakeTimers();
+    let pending: AbortSignal | undefined;
+    const readState = vi.fn((_url: string, init?: RequestInit) => new Promise<Response>((_resolve, reject) => {
+      pending = init?.signal ?? undefined;
+      pending?.addEventListener('abort', () => reject(pending?.reason), { once: true });
+    })).mockRejectedValueOnce(new TypeError('Failed to fetch'));
+    stubHostFetch(readState);
+    await mount();
+    expect(readState).toHaveBeenCalledTimes(2);
+    expect(pending?.aborted).toBe(false);
+
+    await act(async () => { root?.unmount(); root = null; await vi.advanceTimersByTimeAsync(10_000); });
+
+    expect(pending?.aborted).toBe(true);
+    expect(readState).toHaveBeenCalledTimes(2);
+  });
+  it('reports HTTP refusal without scheduling repeated state requests', async () => {
+    vi.useFakeTimers();
+    const readState = vi.fn(async () => new Response('{}', { status: 401 }));
+    stubHostFetch(readState);
+    await mount();
+    expect(document.querySelector('[role="alert"]')?.textContent).toContain('HTTP 401');
+    expect(document.body.textContent).not.toContain('正在重试读取直播状态');
+    const calls = readState.mock.calls.length;
+    await act(async () => { await vi.advanceTimersByTimeAsync(10_000); });
+    expect(readState).toHaveBeenCalledTimes(calls);
   });
   it('accepts backend login readiness even when the native credential store is empty', async () => {
     const state = host(); state.show.stageWatchers = 0;
@@ -118,12 +182,23 @@ describe('original livestream console integration', () => {
     stubHostFetch(vi.fn(async () => new Response(JSON.stringify(state), { status: 200 })));
     await mount();
     expect(document.body.textContent).toContain(watchers ? `舞台浏览器源已连接 ${watchers} 个` : '直播姬还未接入舞台');
-    expect(document.body.textContent).toContain('直播姬浏览器源');
+    expect(document.querySelector('[aria-label="直播姬浏览器源"]')).not.toBeNull();
     await act(async () => { button('设置').click(); });
     expect(document.body.textContent).toContain('开播与下播请在直播姬中操作');
     expect(document.body.textContent).not.toContain('OBS');
     expect(document.body.textContent).toContain('用于明确直播间归属');
     expect(document.body.textContent).toContain('可以选择回应或略过');
+  });
+  it('copies separate loopback sources without the full-stage token', async () => {
+    const writeText = vi.fn(async (_text: string) => {});
+    vi.stubGlobal('navigator', { ...navigator, clipboard: { writeText } });
+    stubHostFetch(async () => new Response(JSON.stringify(host()), { status: 200 }));
+    await mount();
+    for (const [label, path] of [['声音源', '/audio'], ['字幕源', '/subtitles']]) {
+      const copy = document.querySelector<HTMLButtonElement>(`[aria-label="复制${label}地址"]`);
+      await act(async () => { copy?.click(); });
+      expect(writeText).toHaveBeenLastCalledWith(`http://127.0.0.1:39999${path}`);
+    }
   });
   it('retains the upstream OBS publication path when that publisher is explicitly selected', async () => {
     const state = host('obs');
