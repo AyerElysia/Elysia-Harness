@@ -1,0 +1,6 @@
+# This profile is only copied into the private preview home, never mounted by the ordinary Web profile.
+- id: elysia-gemini-cascade
+  name: '@elysia/gemini-cascade'
+  config:
+    enabled: true
+    promptsDir: /home/ayerelysia/Elysia/Elysium/Elysia-Harness/homes/web/standing-prompts

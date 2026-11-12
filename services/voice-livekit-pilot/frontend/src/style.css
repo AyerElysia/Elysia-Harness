@@ -1,0 +1,12 @@
+:root { color-scheme: light dark; font: 16px/1.6 system-ui, sans-serif; }
+body { margin: 0; }
+main { max-width: 38rem; margin: 12vh auto; padding: 0 1.25rem; }
+h1 { line-height: 1.2; }
+p { margin: .7rem 0; }
+label { display: block; margin: 1.25rem 0; }
+input { margin-right: .5rem; }
+.controls { display: flex; gap: .6rem; flex-wrap: wrap; }
+button { font: inherit; color: inherit; border: 1px solid currentColor; border-radius: .5rem; background: transparent; padding: .45rem .9rem; }
+button:not(:disabled) { cursor: pointer; }
+button:disabled { opacity: .5; }
+[role="status"] { margin-top: 1rem; }

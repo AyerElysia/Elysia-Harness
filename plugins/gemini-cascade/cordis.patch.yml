@@ -1,0 +1,4 @@
+# Opt-in; no trial session, port or provider request at import.
+- insert:
+    - id: elysia-gemini-cascade
+      name: '@elysia/gemini-cascade'

@@ -1,0 +1,40 @@
+import { describe, expect, it } from 'vitest'
+import { NativeTurn } from '../src/native-turn.ts'
+
+describe('native ASR reply stream', () => {
+  it('emits live text before playout completes and reconciles a dropped suffix', async () => {
+    const turn = new NativeTurn()
+    const stream = turn.chunks(new AbortController().signal)
+    const waiting = stream.next()
+    turn.delta('  第一段  ')
+    expect((await waiting).value).toEqual({ type: 'block-start', index: 0, blockType: 'text' })
+    expect((await stream.next()).value).toEqual({ type: 'text-delta', index: 0, text: '第一段' })
+    turn.delta('第二段')
+    expect((await stream.next()).value).toEqual({ type: 'text-delta', index: 0, text: '  第二段' })
+    expect(turn.settle('done', '第一段  第二段。')).toBe(true)
+    expect((await stream.next()).value).toEqual({ type: 'text-delta', index: 0, text: '。' })
+    expect((await stream.next()).value?.type).toBe('block-end')
+    expect((await stream.next()).value).toEqual({ type: 'finish', reason: { kind: 'stop' } })
+  })
+  it('preserves interruption, rejecting late deltas and completion', async () => {
+    const turn = new NativeTurn()
+    turn.delta('已生成')
+    turn.settle('interrupted')
+    turn.delta('不可出现')
+    expect(turn.settle('done', '已生成不可出现')).toBe(false)
+    const stream = turn.chunks(new AbortController().signal)
+    expect((await stream.next()).value?.type).toBe('block-start')
+    expect((await stream.next()).value).toEqual({ type: 'text-delta', index: 0, text: '已生成' })
+    expect((await stream.next()).value).toMatchObject({ type: 'finish', reason: { kind: 'aborted' } })
+  })
+  it('rejects a conflicting completion and releases a waiting driver on abort', async () => {
+    const turn = new NativeTurn()
+    turn.delta('甲')
+    expect(turn.settle('done', '乙')).toBe(false)
+    const ctl = new AbortController()
+    const stream = new NativeTurn().chunks(ctl.signal)
+    const blocked = stream.next()
+    ctl.abort()
+    await expect(blocked).rejects.toMatchObject({ name: 'AbortError' })
+  })
+})
