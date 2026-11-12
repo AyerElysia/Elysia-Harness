@@ -13,28 +13,40 @@ importers:
         version: file:../../../../plugins/ayla-app
       '@elysia/conscious-mind':
         specifier: file:../../../../plugins/conscious-mind
-        version: file:../../../../plugins/conscious-mind
+        version: file:../../../../plugins/conscious-mind(@elysia/proactive-system@file:../../../../plugins/proactive-system)
       '@elysia/context-inspector':
         specifier: file:../../../../plugins/context-inspector
         version: file:../../../../plugins/context-inspector(@elysia/request-archive@file:../../../../plugins/request-archive)
       '@elysia/dsh-livestream':
-        specifier: file:../../../../plugins/dsh-livestream
-        version: file:../../../../plugins/dsh-livestream(@elysia/conscious-mind@file:../../../../plugins/conscious-mind)
+        specifier: link:../../../../plugins/dsh-livestream
+        version: link:../../../../plugins/dsh-livestream
       '@elysia/feishu-app':
         specifier: file:../../../../plugins/feishu-app
-        version: file:../../../../plugins/feishu-app(@elysia/conscious-mind@file:../../../../plugins/conscious-mind)
+        version: file:../../../../plugins/feishu-app(@elysia/conscious-mind@file:../../../../plugins/conscious-mind(@elysia/proactive-system@file:../../../../plugins/proactive-system))
+      '@elysia/gemini-cascade':
+        specifier: link:../../../../plugins/gemini-cascade
+        version: link:../../../../plugins/gemini-cascade
       '@elysia/kook-bot':
         specifier: file:../../../../plugins/kook-bot
-        version: file:../../../../plugins/kook-bot(@elysia/conscious-mind@file:../../../../plugins/conscious-mind)
+        version: file:../../../../plugins/kook-bot(@elysia/conscious-mind@file:../../../../plugins/conscious-mind(@elysia/proactive-system@file:../../../../plugins/proactive-system))
+      '@elysia/proactive-system':
+        specifier: file:../../../../plugins/proactive-system
+        version: file:../../../../plugins/proactive-system
       '@elysia/qq-napcat':
         specifier: file:../../../../plugins/qq-napcat
-        version: file:../../../../plugins/qq-napcat(@elysia/conscious-mind@file:../../../../plugins/conscious-mind)
+        version: file:../../../../plugins/qq-napcat(@elysia/conscious-mind@file:../../../../plugins/conscious-mind(@elysia/proactive-system@file:../../../../plugins/proactive-system))
       '@elysia/request-archive':
         specifier: file:../../../../plugins/request-archive
         version: file:../../../../plugins/request-archive
+      '@elysia/voice-call':
+        specifier: file:../../../../plugins/voice-call
+        version: file:../../../../plugins/voice-call(@elysia/conscious-mind@file:../../../../plugins/conscious-mind(@elysia/proactive-system@file:../../../../plugins/proactive-system))
       '@linxin666/dsh-remote-web-ui':
         specifier: 0.4.8
         version: 0.4.8
+      '@liustack/modsearch':
+        specifier: 5.10.12
+        version: 5.10.12
       dshmarket:
         specifier: github:dsh-market/dsh-market
         version: https://codeload.github.com/dsh-market/dsh-market/tar.gz/e320461dba3a7e99845f83c7bd106a2f1889dc7f
@@ -71,15 +83,20 @@ packages:
       '@deepseek-ai/dsh-commands': workspace:*
       '@deepseek-ai/dsh-compaction': workspace:*
       '@deepseek-ai/dsh-compaction-basic': workspace:*
+      '@deepseek-ai/dsh-credentials': workspace:*
       '@deepseek-ai/dsh-llm': workspace:*
       '@deepseek-ai/dsh-scope': workspace:*
       '@deepseek-ai/dsh-session': workspace:*
       '@deepseek-ai/dsh-system-prompt': workspace:*
+      '@deepseek-ai/dsh-time-context': workspace:*
       '@deepseek-ai/dsh-tool-fs': workspace:*
       '@deepseek-ai/dsh-tool-fs-search': workspace:*
+      '@deepseek-ai/dsh-tool-web': workspace:*
       '@deepseek-ai/dsh-tools': workspace:*
+      '@deepseek-ai/dsh-web': workspace:*
       '@deepseek-ai/dsh-working-directory': workspace:*
       '@deepseek-ai/schemastery': workspace:~
+      '@elysia/proactive-system': workspace:*
 
   '@elysia/context-inspector@file:../../../../plugins/context-inspector':
     resolution: {directory: ../../../../plugins/context-inspector, type: directory}
@@ -104,33 +121,6 @@ packages:
       '@deepseek-ai/schemastery': workspace:~
       '@elysia/request-archive': workspace:*
 
-  '@elysia/dsh-livestream@file:../../../../plugins/dsh-livestream':
-    resolution: {directory: ../../../../plugins/dsh-livestream, type: directory}
-    peerDependencies:
-      '@deepseek-ai/cordis': workspace:~
-      '@deepseek-ai/dsh-agent': workspace:*
-      '@deepseek-ai/dsh-agent-default-model': workspace:*
-      '@deepseek-ai/dsh-api-gateway': workspace:*
-      '@deepseek-ai/dsh-api-remote-access': workspace:*
-      '@deepseek-ai/dsh-api-session-controller': workspace:*
-      '@deepseek-ai/dsh-api-workspace-controller': workspace:*
-      '@deepseek-ai/dsh-brand': workspace:*
-      '@deepseek-ai/dsh-client-connection': workspace:*
-      '@deepseek-ai/dsh-client-ui-layout': workspace:*
-      '@deepseek-ai/dsh-client-ui-sidebar': workspace:*
-      '@deepseek-ai/dsh-client-ui-workspace': workspace:*
-      '@deepseek-ai/dsh-credentials': workspace:*
-      '@deepseek-ai/dsh-llm': workspace:*
-      '@deepseek-ai/dsh-scope': workspace:*
-      '@deepseek-ai/dsh-session': workspace:*
-      '@deepseek-ai/dsh-session-persistence': workspace:*
-      '@deepseek-ai/dsh-system-prompt': workspace:*
-      '@deepseek-ai/dsh-tools': workspace:*
-      '@deepseek-ai/dsh-typert-protocol': workspace:*
-      '@deepseek-ai/dsh-typert-registry': workspace:*
-      '@deepseek-ai/schemastery': workspace:~
-      '@elysia/conscious-mind': workspace:*
-
   '@elysia/feishu-app@file:../../../../plugins/feishu-app':
     resolution: {directory: ../../../../plugins/feishu-app, type: directory}
     peerDependencies:
@@ -145,6 +135,17 @@ packages:
       '@deepseek-ai/dsh-attachment': workspace:*
       '@deepseek-ai/schemastery': workspace:~
       '@elysia/conscious-mind': workspace:*
+
+  '@elysia/proactive-system@file:../../../../plugins/proactive-system':
+    resolution: {directory: ../../../../plugins/proactive-system, type: directory}
+    peerDependencies:
+      '@deepseek-ai/cordis': workspace:~
+      '@deepseek-ai/dsh-agent': workspace:*
+      '@deepseek-ai/dsh-schedule': workspace:*
+      '@deepseek-ai/dsh-scope': workspace:*
+      '@deepseek-ai/dsh-system-prompt': workspace:*
+      '@deepseek-ai/dsh-tool-schedule': workspace:*
+      '@deepseek-ai/dsh-tools': workspace:*
 
   '@elysia/qq-napcat@file:../../../../plugins/qq-napcat':
     resolution: {directory: ../../../../plugins/qq-napcat, type: directory}
@@ -162,6 +163,23 @@ packages:
       '@deepseek-ai/dsh-llm': workspace:*
       '@deepseek-ai/schemastery': workspace:~
 
+  '@elysia/voice-call@file:../../../../plugins/voice-call':
+    resolution: {directory: ../../../../plugins/voice-call, type: directory}
+    peerDependencies:
+      '@deepseek-ai/cordis': workspace:~
+      '@deepseek-ai/dsh-agent': workspace:*
+      '@deepseek-ai/dsh-client-connection': workspace:*
+      '@deepseek-ai/dsh-credentials': workspace:*
+      '@deepseek-ai/dsh-llm': workspace:*
+      '@deepseek-ai/dsh-scope': workspace:*
+      '@deepseek-ai/dsh-session': workspace:*
+      '@deepseek-ai/dsh-session-persistence': workspace:*
+      '@deepseek-ai/dsh-storage-domain': workspace:*
+      '@deepseek-ai/dsh-system-prompt': workspace:*
+      '@deepseek-ai/dsh-tools': workspace:*
+      '@deepseek-ai/schemastery': workspace:~
+      '@elysia/conscious-mind': workspace:*
+
   '@huggingface/tokenizers@0.2.0':
     resolution: {integrity: sha512-LidMHe1FpcSYH4vcSjXooda34pC0M8m1gmDOv7SQi6Iv+ib1zX7J3sHBCC9/3FPCkn2k1b55FneVqMRxrr99pg==}
 
@@ -173,8 +191,17 @@ packages:
       react: ^18.2.0
       react-dom: ^18.2.0
 
+  '@liustack/modsearch@5.10.12':
+    resolution: {integrity: sha512-yB9GgkqDNZui1urXx552CT6VB8hIMXWWGUfgE+oew8YHKmqHnLigF6kRlOVdEOI1OHD26tqygAfHi5BmO6pfcA==}
+    engines: {node: '>=22.13'}
+    hasBin: true
+
   '@standard-schema/spec@1.1.0':
     resolution: {integrity: sha512-l2aFy5jALhniG5HgqrD6jXLi/rUWrKvqN/qJx6yoJsgKhblVd+iqqU4RCXavm/jPityDo5TCvKMnpjKnOriy0w==}
+
+  agent-base@7.1.4:
+    resolution: {integrity: sha512-MnA+YT8fwfJPgBx3m60MNqakm30XOkyIoH1y6huTQvC0PwZG7ki8NacLBcrPbNoo8vEZy7Jpuk7+jMO+CUovTQ==}
+    engines: {node: '>= 14'}
 
   argparse@2.0.1:
     resolution: {integrity: sha512-8+9WqebbFzpX9OR+Wa6O29asIogeRMzcGtAINdpMHHyAg10f05aSFVBbcEqGf/PXw1EjAZ+q2/bEBg3DvurK3Q==}
@@ -186,6 +213,19 @@ packages:
   clsx@2.1.1:
     resolution: {integrity: sha512-eYm0QWBtUrBWZWG0d386OGAw16Z995PiOVo2B7bjWSbHedGl5e0ZWaq65kOGgUSNesEIDkB9ISbTg/JK9dhCZA==}
     engines: {node: '>=6'}
+
+  commander@13.1.0:
+    resolution: {integrity: sha512-/rFeCpNJQbhSZjGVwO9RFV3xPqbnERS8MmIQzCtD/zl6gpJuV/bMLuN92oG3F7d8oDEHHRrujSXNUr8fpjntKw==}
+    engines: {node: '>=18'}
+
+  debug@4.4.3:
+    resolution: {integrity: sha512-RGwwWnwQvkVfavKVt22FGLw+xYSdzARwm0ru6DhTVA3umU5hZc28V3kO4stgYryrTlLpuvgI9GiijltAjNbcqA==}
+    engines: {node: '>=6.0'}
+    peerDependencies:
+      supports-color: '*'
+    peerDependenciesMeta:
+      supports-color:
+        optional: true
 
   dshmarket@https://codeload.github.com/dsh-market/dsh-market/tar.gz/e320461dba3a7e99845f83c7bd106a2f1889dc7f:
     resolution: {gitHosted: true, integrity: sha512-DRVSY4I6gYfPx1cqzZZ9QC9obFElLOwR6ozXIZXTfaMc2XP+fsxGwVlRonGROzXUzVsNFJ27YuWRG/V6I7mjuw==, tarball: https://codeload.github.com/dsh-market/dsh-market/tar.gz/e320461dba3a7e99845f83c7bd106a2f1889dc7f}
@@ -200,14 +240,29 @@ packages:
       '@deepseek-ai/schemastery':
         optional: true
 
+  eventsource-parser@3.1.1:
+    resolution: {integrity: sha512-EKN1vKAMcZ8MlYMpaNuxN6R9yakzH6uajHcHVTqWJzvu5pWw9DyhbP35HH8MVBQ+dZjAfDxk+A8NiR9KWaXiyQ==}
+    engines: {node: '>=18.0.0'}
+
+  https-proxy-agent@7.0.6:
+    resolution: {integrity: sha512-vK9P5/iUfdl95AI+JVyUuIcVtd4ofvtrOr3HNtM2yxC9bnMbEdp3x01OhQNnjb8IJYi38VlTE3mBXwcfvywuSw==}
+    engines: {node: '>= 14'}
+
   js-yaml@4.3.2:
     resolution: {integrity: sha512-SFNOvSJ+Dgf/9An904Yx+CgSlIPCkIpao4qo51lpee25TIRejdH3rhR4EZMGoNx3/TP3O+wzWuiTFl4sqbltzA==}
     hasBin: true
+
+  ms@2.1.3:
+    resolution: {integrity: sha512-6FlzubTLZG3J2a/NVCAleEhjzq5oxgHyaCU9yYXvcLsvoVaHJq/s5xXI6/XXP6tz7R9xAOtHnSO/tXtF3WRTlA==}
 
   qrcode.react@4.2.0:
     resolution: {integrity: sha512-QpgqWi8rD9DsS9EP3z7BT+5lY5SFhsqGjpgW5DY/i3mK4M9DTBNz3ErMi8BWYEfI3L0d8GIbGmcdFAS1uIRGjA==}
     peerDependencies:
       react: ^16.8.0 || ^17.0.0 || ^18.0.0 || ^19.0.0
+
+  undici@7.29.1:
+    resolution: {integrity: sha512-RYONW2MeafgYlkVOKYKkA/Ag7BmXqgIWCa8t1m0JcxrQg9pI9lEqRhAOruOBCbAohOa/gkCF+iPi9hrgvTzu6Q==}
+    engines: {node: '>=20.18.1'}
 
   undici@7.30.1:
     resolution: {integrity: sha512-03KrMbjIFDWQR5RNPrSw3bd1r12JpyFQl9/yxjUbJtqkjmllqC5lFjZh6ujeuJCKr8EOQvRW872Oy/az+nLYxg==}
@@ -247,7 +302,9 @@ snapshots:
 
   '@elysia/ayla-app@file:../../../../plugins/ayla-app': {}
 
-  '@elysia/conscious-mind@file:../../../../plugins/conscious-mind': {}
+  '@elysia/conscious-mind@file:../../../../plugins/conscious-mind(@elysia/proactive-system@file:../../../../plugins/proactive-system)':
+    dependencies:
+      '@elysia/proactive-system': file:../../../../plugins/proactive-system
 
   '@elysia/context-inspector@file:../../../../plugins/context-inspector(@elysia/request-archive@file:../../../../plugins/request-archive)':
     dependencies:
@@ -255,35 +312,42 @@ snapshots:
       '@huggingface/tokenizers': 0.2.0
       zod: 4.4.3
 
-  '@elysia/dsh-livestream@file:../../../../plugins/dsh-livestream(@elysia/conscious-mind@file:../../../../plugins/conscious-mind)':
+  '@elysia/feishu-app@file:../../../../plugins/feishu-app(@elysia/conscious-mind@file:../../../../plugins/conscious-mind(@elysia/proactive-system@file:../../../../plugins/proactive-system))':
     dependencies:
-      '@elysia/conscious-mind': file:../../../../plugins/conscious-mind
+      '@elysia/conscious-mind': file:../../../../plugins/conscious-mind(@elysia/proactive-system@file:../../../../plugins/proactive-system)
+
+  '@elysia/kook-bot@file:../../../../plugins/kook-bot(@elysia/conscious-mind@file:../../../../plugins/conscious-mind(@elysia/proactive-system@file:../../../../plugins/proactive-system))':
+    dependencies:
+      '@elysia/conscious-mind': file:../../../../plugins/conscious-mind(@elysia/proactive-system@file:../../../../plugins/proactive-system)
       ws: 8.21.3
     transitivePeerDependencies:
       - bufferutil
       - utf-8-validate
 
-  '@elysia/feishu-app@file:../../../../plugins/feishu-app(@elysia/conscious-mind@file:../../../../plugins/conscious-mind)':
-    dependencies:
-      '@elysia/conscious-mind': file:../../../../plugins/conscious-mind
+  '@elysia/proactive-system@file:../../../../plugins/proactive-system': {}
 
-  '@elysia/kook-bot@file:../../../../plugins/kook-bot(@elysia/conscious-mind@file:../../../../plugins/conscious-mind)':
+  '@elysia/qq-napcat@file:../../../../plugins/qq-napcat(@elysia/conscious-mind@file:../../../../plugins/conscious-mind(@elysia/proactive-system@file:../../../../plugins/proactive-system))':
     dependencies:
-      '@elysia/conscious-mind': file:../../../../plugins/conscious-mind
-      ws: 8.21.3
-    transitivePeerDependencies:
-      - bufferutil
-      - utf-8-validate
-
-  '@elysia/qq-napcat@file:../../../../plugins/qq-napcat(@elysia/conscious-mind@file:../../../../plugins/conscious-mind)':
-    dependencies:
-      '@elysia/conscious-mind': file:../../../../plugins/conscious-mind
+      '@elysia/conscious-mind': file:../../../../plugins/conscious-mind(@elysia/proactive-system@file:../../../../plugins/proactive-system)
       ws: 8.21.3
     transitivePeerDependencies:
       - bufferutil
       - utf-8-validate
 
   '@elysia/request-archive@file:../../../../plugins/request-archive': {}
+
+  '@elysia/voice-call@file:../../../../plugins/voice-call(@elysia/conscious-mind@file:../../../../plugins/conscious-mind(@elysia/proactive-system@file:../../../../plugins/proactive-system))':
+    dependencies:
+      '@elysia/conscious-mind': file:../../../../plugins/conscious-mind(@elysia/proactive-system@file:../../../../plugins/proactive-system)
+      eventsource-parser: 3.1.1
+      https-proxy-agent: 7.0.6
+      undici: 7.29.1
+      ws: 8.21.3
+      zod: 4.6.7
+    transitivePeerDependencies:
+      - bufferutil
+      - supports-color
+      - utf-8-validate
 
   '@huggingface/tokenizers@0.2.0': {}
 
@@ -296,7 +360,14 @@ snapshots:
       yaml: 2.9.1
       zod: 4.6.7
 
+  '@liustack/modsearch@5.10.12':
+    dependencies:
+      commander: 13.1.0
+      undici: 7.30.1
+
   '@standard-schema/spec@1.1.0': {}
+
+  agent-base@7.1.4: {}
 
   argparse@2.0.1: {}
 
@@ -304,16 +375,35 @@ snapshots:
 
   clsx@2.1.1: {}
 
+  commander@13.1.0: {}
+
+  debug@4.4.3:
+    dependencies:
+      ms: 2.1.3
+
   dshmarket@https://codeload.github.com/dsh-market/dsh-market/tar.gz/e320461dba3a7e99845f83c7bd106a2f1889dc7f:
     dependencies:
       js-yaml: 4.3.2
       undici: 7.30.1
 
+  eventsource-parser@3.1.1: {}
+
+  https-proxy-agent@7.0.6:
+    dependencies:
+      agent-base: 7.1.4
+      debug: 4.4.3
+    transitivePeerDependencies:
+      - supports-color
+
   js-yaml@4.3.2:
     dependencies:
       argparse: 2.0.1
 
+  ms@2.1.3: {}
+
   qrcode.react@4.2.0: {}
+
+  undici@7.29.1: {}
 
   undici@7.30.1: {}
 

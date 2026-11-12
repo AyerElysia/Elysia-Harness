@@ -4,14 +4,18 @@
   "dependencies": {
     "@elysia/ayla-app": "file:../../../../plugins/ayla-app",
     "@elysia/conscious-mind": "file:../../../../plugins/conscious-mind",
+    "@elysia/context-inspector": "file:../../../../plugins/context-inspector",
+    "@elysia/dsh-livestream": "link:../../../../plugins/dsh-livestream",
     "@elysia/feishu-app": "file:../../../../plugins/feishu-app",
+    "@elysia/gemini-cascade": "link:../../../../plugins/gemini-cascade",
     "@elysia/kook-bot": "file:../../../../plugins/kook-bot",
+    "@elysia/proactive-system": "file:../../../../plugins/proactive-system",
     "@elysia/qq-napcat": "file:../../../../plugins/qq-napcat",
     "@elysia/request-archive": "file:../../../../plugins/request-archive",
+    "@elysia/voice-call": "file:../../../../plugins/voice-call",
     "@linxin666/dsh-remote-web-ui": "0.4.8",
-    "dshmarket": "github:dsh-market/dsh-market",
-    "@elysia/context-inspector": "file:../../../../plugins/context-inspector",
-    "@elysia/dsh-livestream": "file:../../../../plugins/dsh-livestream"
+    "@liustack/modsearch": "5.10.12",
+    "dshmarket": "github:dsh-market/dsh-market"
   },
   "dsh": {
     "profile": {
@@ -28,7 +32,10 @@
         "@elysia/context-inspector",
         "@linxin666/dsh-remote-web-ui",
         "@deepseek-ai/dsh-experimental-plugin-market-bundle",
-        "dshmarket"
+        "dshmarket",
+        "@liustack/modsearch",
+        "@elysia/voice-call",
+        "@elysia/gemini-cascade"
       ]
     }
   }

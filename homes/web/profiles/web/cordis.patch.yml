@@ -43,10 +43,18 @@
               backupDir: !!js process.env.DSH_HOME + '/standing-prompt-backups'
               maxPromptBytes: 65536
               backupRetention: 20
+          - id: elysia-web-capabilities
+            name: '@elysia/conscious-mind/web-capabilities'
+          - id: elysia-current-time
+            name: '@elysia/conscious-mind/current-time'
+            config:
+              timeZone: Asia/Shanghai
 
     - id: elysia-conscious-mind
       name: '@elysia/conscious-mind'
       config:
+        timeZone: Asia/Shanghai
+        scheduledPlans: true
         baseDir: !!js process.env.ELYSIA_PROMPTS_DIR ?? process.env.DSH_HOME +
           '/standing-prompts'
         files:
@@ -95,10 +103,6 @@
           '/standing-prompts'
         files:
           - SOUL.md
-          - USER.md
-          - MEMORY.md
-          - EXISTENCE.md
-          - TOOLS.md
           - LIVE.md
         stagePort: !!js Number(process.env.ELYSIA_STAGE_PORT ?? 3300)
         publisher: livehime
@@ -107,6 +111,35 @@
       name: '@elysia/context-inspector'
       config:
         dir: !!js process.env.ELYSIA_REQUESTS_DIR ?? process.env.DSH_HOME + '/requests'
+# ModSearch supplies real structured search results without an official key.
+# The D1 adapter stays mounted for diagnosis but is no longer selected: its
+# upstream returned message-only responses without a native search trace.
+# web_fetch continues to use the original anonymous HTTP provider.
+- id: web
+  name: '@deepseek-ai/dsh-web'
+  config:
+    searchProvider: modsearch
+    fetchProvider: http
+- insert:
+    - id: web-search-d1
+      name: '@elysia/conscious-mind/d1-search'
+      config:
+        apiKeyEnv: D1API_API_KEY
+        baseURL: https://d1api.xin/v1
+        model: deepseek-v4.1-flash
+        protocol: openai-responses
+        maxTokens: 4096
+        timeoutMs: 90000
+# Keep the exposed capability identical to the pre-ModSearch web tools. The
+# optional settings route does not inherit DSH connection authentication.
+- id: modsearch
+  name: '@liustack/modsearch'
+  config:
+    searchProvider: true
+    xSearch: false
+    readPage: false
+    settingsCard: false
+
 - id: ui-settings-general
   name: "@deepseek-ai/dsh-client-ui-settings-general"
   config:
@@ -137,3 +170,25 @@
   name: "@deepseek-ai/dsh-client-ui-chat"
   config:
     transcriptView: verbose
+
+# The main-owner plan gate mounts the same native Schedule Host after setup.
+- id: schedule
+  disabled: true
+
+# Retain the old package/history; do not mount its legacy standalone panel.
+- id: elysia-voice-call
+  name: '@elysia/voice-call'
+  disabled: true
+  config:
+    enabled: true
+    breezeServerUrl: http://127.0.0.1:7865
+    openaiProxyUrl: http://127.0.0.1:17878
+
+# Native conversation voice, bound to the existing loopback-only ASR worker.
+- id: elysia-gemini-cascade
+  name: '@elysia/gemini-cascade'
+  config:
+    enabled: true
+    mainSessionVoice: true
+    inputMode: local-asr
+    bridgeKeyFile: /home/ayerelysia/Elysia/DataInfra/voice-cascade/bridge.key
