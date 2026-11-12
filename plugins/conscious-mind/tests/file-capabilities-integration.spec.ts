@@ -184,3 +184,56 @@ it('isolates Elysia guards from another session and keeps native read-only polic
   }
   expect(ctx.tools.schemas(minimal.key).map(tool => tool.name).sort()).toEqual(minimalBefore)
 })
+
+it('mounts once in a shared preset scope without mistaking its key for an Agent', async () => {
+  const home = await mkdtemp(join(tmpdir(), 'elysia-file-preset-'))
+  const workspace = join(home, 'workspace')
+  const prompts = join(home, 'standing-prompts')
+  await mkdir(workspace)
+  await mkdir(prompts)
+  await writeFile(join(prompts, 'SOUL.md'), 'soul')
+  await writeFile(join(workspace, 'note.md'), 'inside')
+  await writeFile(join(home, 'outside.md'), 'outside')
+
+  const ctx = new Context()
+  onTestFinished(async () => {
+    await ctx.fiber.dispose()
+    await rm(home, { recursive: true, force: true })
+  })
+  ctx.provide('subprocess', {} as Context['subprocess'])
+  provideWorkingDirectoryFixture(ctx)
+  ctx.workingDirectory.set = vi.fn().mockResolvedValue(workspace)
+  await ctx.plugin(SystemPrompt)
+  await ctx.plugin(ToolRuntime, { mode: 'native' })
+  await ctx.plugin(LocalFileSystem, { cwd: workspace })
+  await ctx.plugin(LocalAttachmentStore, { dshHome: home })
+
+  const presetKey = {}
+  const preset = createScope(ctx, presetKey)
+  await preset.ctx.plugin(FileCapabilities, {
+    baseDir: prompts,
+    files: ['SOUL.md'],
+    workspaceDir: workspace,
+    backupDir: join(home, 'backups'),
+  })
+  expect(ctx.workingDirectory.set).not.toHaveBeenCalled()
+
+  const key = { session: { id: 'preset-agent', header: { cwd: workspace } } } as unknown as Agent
+  const agentScope = createScope(ctx, key, { parent: presetKey })
+  Object.assign(key, { ctx: agentScope.ctx })
+  expect(ctx.tools.schemas(key).map(tool => tool.name)).toEqual(expect.arrayContaining(['read', 'write', 'edit', 'glob', 'grep']))
+  const execute = (name: string, file_path: string) => ctx.tools.execute({
+    callId: `preset-${name}` as ToolCallId,
+    name,
+    arguments: { file_path },
+    agent: key,
+    signal: new AbortController().signal,
+  })
+  expect((await execute('read', join(workspace, 'note.md'))).isError).toBe(false)
+  expect((await execute('read', join(home, 'outside.md'))).isError).toBe(true)
+
+  const other = { session: { id: 'other-agent', header: { cwd: workspace } } } as unknown as Agent
+  const otherScope = createScope(ctx, other)
+  Object.assign(other, { ctx: otherScope.ctx })
+  expect(ctx.tools.get('read', other)).toBeUndefined()
+})

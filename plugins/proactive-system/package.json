@@ -1,6 +1,6 @@
 {
   "name": "@elysia/proactive-system",
-  "description": "Design placeholder for Elysia's asynchronous opportunity-based proactive system",
+  "description": "Native DSH plan reminder adapters and the asynchronous opportunity-system design scaffold",
   "version": "0.1.0",
   "private": true,
   "type": "module",
@@ -13,25 +13,48 @@
     },
     "./src/*": "./src/*",
     "./package.json": "./package.json",
-    "./cordis.patch.yml": "./cordis.patch.yml"
+    "./cordis.patch.yml": "./cordis.patch.yml",
+    "./plan-tools": {
+      "types": "./src/plan-tools.ts",
+      "default": "./src/plan-tools.ts"
+    },
+    "./plan-host": {
+      "types": "./src/plan-host.ts",
+      "default": "./src/plan-host.ts"
+    }
   },
   "files": [
     "src/**/*.ts",
     "cordis.patch.yml",
     "README.md",
-    "REQUIREMENTS.zh.md"
+    "REQUIREMENTS.zh.md",
+    "PLAN-V1.zh.md"
   ],
   "scripts": {
     "test": "vitest run"
   },
   "license": "MIT",
   "peerDependencies": {
-    "@deepseek-ai/cordis": "workspace:~"
+    "@deepseek-ai/cordis": "workspace:~",
+    "@deepseek-ai/dsh-agent": "workspace:*",
+    "@deepseek-ai/dsh-scope": "workspace:*",
+    "@deepseek-ai/dsh-tools": "workspace:*",
+    "@deepseek-ai/dsh-schedule": "workspace:*",
+    "@deepseek-ai/dsh-tool-schedule": "workspace:*",
+    "@deepseek-ai/dsh-system-prompt": "workspace:*"
   },
   "devDependencies": {
     "@deepseek-ai/cordis": "workspace:~",
     "@types/node": "^22.20.1",
-    "vitest": "^4.1.11"
+    "vitest": "^4.1.11",
+    "@deepseek-ai/dsh-agent": "workspace:*",
+    "@deepseek-ai/dsh-scope": "workspace:*",
+    "@deepseek-ai/dsh-tools": "workspace:*",
+    "@deepseek-ai/dsh-schedule": "workspace:*",
+    "@deepseek-ai/dsh-tool-schedule": "workspace:*",
+    "@deepseek-ai/dsh-llm": "workspace:*",
+    "@deepseek-ai/dsh-session": "workspace:*",
+    "@deepseek-ai/dsh-system-prompt": "workspace:*"
   },
   "dsh": {
     "bundle": {

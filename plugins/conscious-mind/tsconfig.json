@@ -21,6 +21,9 @@
       "path": "../../dsh/packages/core/agent-default-model"
     },
     {
+      "path": "../../dsh/packages/credentials/credentials"
+    },
+    {
       "path": "../../dsh/packages/attachment/attachment"
     },
     {
@@ -51,6 +54,9 @@
       "path": "../../dsh/packages/core/system-prompt"
     },
     {
+      "path": "../../dsh/packages/context/time-context"
+    },
+    {
       "path": "../../dsh/packages/core/tools"
     },
     {
@@ -61,6 +67,15 @@
     },
     {
       "path": "../../dsh/packages/fs/tool-fs-search"
+    },
+    {
+      "path": "../../dsh/packages/web/web"
+    },
+    {
+      "path": "../../dsh/packages/web/tool-web"
+    },
+    {
+      "path": "../proactive-system"
     }
   ]
 }

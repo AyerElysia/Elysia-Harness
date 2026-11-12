@@ -14,6 +14,7 @@ import { BreezeTts, ELYSIUM_BREEZE_CONFIG } from './breeze-tts.ts'
 import { defineSendTextTool } from './send-text.ts'
 import { defineSendVoiceTool } from './send-voice.ts'
 import { createMainSessionTurn } from './main-session.ts'
+import * as PlanHost from '@elysia/proactive-system/plan-host'
 
 export { StandingPromptError, loadStandingPrompt } from './load.ts'
 export { STANDING_PROMPT_SECTION } from './standing-prompts.ts'
@@ -35,7 +36,7 @@ export type { SendTextTurn } from './turn.ts'
 export { definePassTool } from './pass.ts'
 export type { PassArgs, PassResult } from './pass.ts'
 export { MAIN_SESSION_CWD, MAIN_SESSION_ID, composeMainAgent, createMainSessionTurn, formatInboundBatch, formatInboundEvent } from './main-session.ts'
-export type { MainSessionConfig } from './main-session.ts'
+export type { MainSessionConfig, MainSessionTurn } from './main-session.ts'
 export { mountFileCapabilities } from './file-capabilities.ts'
 
 /** Cordis plugin name. */
@@ -46,6 +47,8 @@ export const inject = ['systemPrompt']
 
 /** Main-agent standing files and the existing Breeze deployment config. */
 export interface Config {
+  /** IANA fallback clock zone for IM and scheduled inputs. Defaults to Asia/Shanghai. */
+  timeZone?: string
   /** Absolute directory, or a path relative to the process cwd at mount time. */
   baseDir: string
   /** File names inside `baseDir`, concatenated in this order. */
@@ -60,12 +63,15 @@ export interface Config {
   backupDir?: string
   /** Maximum UTF-8 bytes in one standing prompt. */
   maxPromptBytes?: number
+  /** Enable scoped native reminders with a main-owner startup gate. Defaults to false. */
+  scheduledPlans?: boolean
   /** Maximum retained backups per standing prompt. */
   backupRetention?: number
 }
 
 /** Runtime schema for the main agent's standing-prompt directory. */
 export const Config: z<Config> = z.object({
+  timeZone: z.string().default('Asia/Shanghai'),
   baseDir: z.string().required(),
   files: z.array(z.string()).required(),
   required: z.array(z.string()).default(['SOUL.md']),
@@ -74,6 +80,7 @@ export const Config: z<Config> = z.object({
   backupDir: z.string().default('/home/ayerelysia/Elysia/Elysium/Elysia-Harness/homes/web/standing-prompt-backups'),
   maxPromptBytes: z.number().default(65536),
   backupRetention: z.number().default(20),
+  scheduledPlans: z.boolean().default(false),
 })
 
 /**
@@ -87,17 +94,21 @@ export function apply(ctx: Context, config: Config): void {
   const breeze = new BreezeTts(config.breezeConfigPath ?? ELYSIUM_BREEZE_CONFIG)
   const pending = new InboundPending(ctx)
   ctx.effect(() => () => pending.stop())
-  ctx.inject(['agents', 'agentDefaultModel', 'agentLoop', 'sessionPersistence'], scoped => {
-    pending.replyWith(createMainSessionTurn(scoped, {
+  ctx.inject(['agents', 'agentDefaultModel', 'agentLoop', 'sessionPersistence'], async scoped => {
+    const turn = createMainSessionTurn(scoped, {
       baseDir: config.baseDir,
       files: config.files,
       required: config.required ?? ['SOUL.md'],
       complete: true,
+      timeZone: config.timeZone ?? 'Asia/Shanghai',
+      scheduledPlans: config.scheduledPlans ?? false,
       ...config.workspaceDir === undefined ? {} : { workspaceDir: config.workspaceDir },
       ...config.backupDir === undefined ? {} : { backupDir: config.backupDir },
       ...config.maxPromptBytes === undefined ? {} : { maxPromptBytes: config.maxPromptBytes },
       ...config.backupRetention === undefined ? {} : { backupRetention: config.backupRetention },
-    }))
+    })
+    pending.replyWith(turn)
+    if (config.scheduledPlans === true) await scoped.plugin(PlanHost, { ready: turn.ready })
   })
   const tools = ctx.reflect.get('tools', false) as Context['tools'] | undefined
   if (tools !== undefined) {

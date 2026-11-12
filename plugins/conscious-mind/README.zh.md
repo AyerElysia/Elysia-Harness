@@ -40,9 +40,17 @@ complete: true
 
 加载继续复用 `ctx.systemPrompt.section()`，使用 `interpolate: false` 和同步 `text` 回调，正文中的 `{{` 保持原样。complete 模式只让当前作用域的这段文本成为整份提示词，覆盖该 agent 的 Harness 身份段，不覆盖其他 session。后续模型步骤中的提示词变化由 DSH 既有投影处理；会话闲着时修改文件本身不会触发一轮。
 
-Web profile 目前实际添加了一个 `elysia` preset，挂载同一子插件并选择上面五份文件。`elysia-core` 仍只有需求，尚无对应 preset 配置。preset 创建的 session 与平台主 session 分开；真实重启后是否保留 preset 装配仍需验证。主运行层只接受作用域装配凭据完整且配置匹配的 live agent，不会自动热迁移旧的未装配实例。独立终端入口也在自己的 scope 中挂载这个子插件。
+Web profile 目前实际添加了一个 `elysia` preset，挂载同一子插件并选择上面五份文件。`elysia-core` 仍只有需求，尚无对应 preset 配置。preset 创建的 session 与平台主 session 分开；2026-11-11 已验证受控重启后可以新建并完成真实模型轮次，既有 preset session 的跨重启 resume 不在本次验收范围内。主运行层只接受作用域装配凭据完整且配置匹配的 live agent，不会自动热迁移旧的未装配实例。独立终端入口也在自己的 scope 中挂载这个子插件。
 
 主体文件正文保存在本包之外，插件只读取名单，不创作或迁移正文。当前渠道和会话现场仍来自入站事件，不写进稳定前缀。
+
+## 当前时间
+
+固定主意识与 Web 的 `elysia` preset 都通过 `@elysia/conscious-mind/current-time` 复用 DSH 原生 `@deepseek-ai/dsh-time-context`。它在每个实际执行的 `agent/pre-step` 采样当前时钟；`refreshIntervalMs: 0` 不跳过步骤，也不启动 tick、定时唤醒或额外模型请求。主运行层默认时区、Web preset 显式配置的 fallback 均为 `Asia/Shanghai`。Web `user-rpc` 本轮携带唯一有效的 `clientTimeZone` 时，按原生逻辑优先使用浏览器时区；IM 或计划提醒没有浏览器时区时，当前时钟采样使用上海时区。原生对缺失或混合浏览器时区的提示仍保留，不把时钟 fallback 冒充用户已明确选择的时区。
+
+首次真实报时的日期、时间和时区已正确，但模型额外猜错了原生时钟未提供的星期。`current-time.ts` 因而保留原生时钟，另以 `source.kind: 'elysia-calendar-context'` 追加独立日历事实：每次补充只取一次 `Date.now()`，由 `Intl` 按配置时区、`zh-CN`、公历 `gregory` 和数字 `latn` 生成完整日期、星期、时分秒及 GMT 偏移，并附同一次采样的 UTC ISO。只有 `agent === owner` 的精确作用域步骤才追加；它不解析或覆盖原生输入，也不改变原生浏览器时区优先规则。浏览器选择其他时区时，这份日历仍明确按当前配置的 `Asia/Shanghai` 计算，两份输入各自独立采样。第二次真实验收结果仍由北京时间上下文报告记录，不在此预先声明通过。
+
+时间作为 `source.kind: 'time-context'` 的独立、可追溯输入进入当前请求与耐久会话，不追加到 `complete: true` 的 standing 正文，也不修改主体文件。主意识上下文隔离只排除 `agent-instructions` 与 `runtime-context`，因此保留这份原生时钟输入。既有 UTC ISO 时间戳的存储格式不变；时间末尾 `Z` 表示 UTC，不表示主机时钟错误，查看北京时间时需加八小时。接入与真实验收进展见[北京时间上下文记录](../../docs/report/2026-11-12-beijing-time-context.md)，此处不预先声明验收通过。
 
 ## 文件能力
 
@@ -52,13 +60,23 @@ Web profile 目前实际添加了一个 `elysia` preset，挂载同一子插件�
 
 搜索同时检查完整 canonical result 与显示用 metadata，不能借显示截断隐藏越界路径或硬链接；任一返回路径不合规时阻止整份结果。卸载文件能力 fiber 会移除其原生工具与守卫；子插件挂载失败或主意识后续装配失败也会回收已取得的插件。这里是原生文件工具外的路径策略，并非 shell 或内核隔离；外部进程并发改动仍需遵守文件所有权。工程 agent 和迁移程序不通过这项能力代写主体提示词正文。
 
+共享 preset 的插件先于具体 Agent 挂载，因此文件能力只在 scope key 确实带有 Agent session 时设置初始工作目录；registry 的共享 scope key 不会传给 `workingDirectory.set()`。具体工具调用仍以 `exec.agent` 解析目录并执行同一套路径权限，子 Agent 继承 preset 工具时不会绕过限制。
+
+## 网络能力
+
+`@elysia/conscious-mind/web-capabilities` 在真实主意识与 Web `elysia` preset 中复用 DSH 原生 `web_search` 和 `web_fetch`，不在 host 全局注册，也不向其他 session 开放。搜索输入为 1～4 个非空查询，抓取输入为一个 HTTP(S) URL；结果保留来源与外部不可信内容提示。此能力不包含浏览器点击、网站登录或下载执行。
+
+搜索后端现由 `@liustack/modsearch@5.10.12` 提供 `modsearch` provider，替换 DSH 原生 `web_search` 的执行后端而不改变工具 Schema。默认使用免注册 Firecrawl，并可按引擎链退到 Keenable、You.com；本次没有写入或使用 DeepSeek 官方 Key。profile 固定关闭额外的 `x_search`、`read_page` 和不继承 DSH 登录认证的设置路由，只保留原有网络工具范围；`web_fetch` 继续显式使用原来的匿名 `http` provider。
+
+D1 OpenAI 适配器暂时保留用于诊断，但不再选中。历史上官方 DeepSeek 凭据返回 HTTP 401；D1 上游只返回 message，没有 `completed web_search_call`，因此此前真实搜索未通过。2026-11-12 改用 ModSearch 后，隔离会话真实执行 `web_search`，错误数为 0，并返回 Firecrawl 的 8 条来源；`web_fetch` 也重新取得 Example Domain 的 HTTP 200 正文。真实主意识工具清单未增加其他工具，服务保持健康。免注册引擎仍受配额与限流约束，失败时应查看真实 attempts，不能将工具可见或 HTTP 200 当作搜索成功。详细契约、历史排查与验收记录见 `REQUIREMENTS.zh.md` 第五阶段。
+
 ## send_text
 
 > 状态：工具已实现。QQ、飞书、KOOK 的 `conversation` 格式由各自的渠道插件定义。段间停顿和主动外联仍待定。
 
 `send_text` 是主意识把文字发到外部渠道的工具。渠道是 QQ、飞书、Kook，以及以后接上的同类入口。
 
-模型直接写出的 assistant 正文只留在这条 session 里，不会出现在任何渠道上。要让对方看见，必须调用 `send_text`。说话因此是一次有意动作，不是泄漏。
+DSH 打字和通话转写在当前会话收到回复。普通对话直接写 assistant 正文，语音通话用原生播报链路。真实外部渠道的入站带有可信来源，向外部投递文字时使用 `send_text`。从 DSH 另发到指定外部对象时，用户在当前会话确认具体目标和内容后才执行。
 
 本工具对标 Elysium 的 `life_send_text`。`thought`、`mood`、`decision`、`expected_response` 四个内在字段继续保留：它们是主体在同一次表达动作里亲自提交的内在记录——不是 provider reasoning 的回填，也不同于 session 日志被动留存的 assistant 正文。这份显式记录供人格连续性与后训练使用，DSH 的账本是补充，不替代它。
 
@@ -72,13 +90,21 @@ Web profile 目前实际添加了一个 `elysia` preset，挂载同一子插件�
 
 Harness 提供 `agents` 服务时，插件自动把 pending 接到主意识。主意识只有一个 agent、一条固定 id 为 `elysia-conscious-mind` 的长期 session：已有 live agent 必须具备完整且配置匹配的提示词/工具装配凭据，才可复用；没有 live agent 时尝试 resume。resume 失败后若没有兼容的并发恢复实例，当前代码仍会尝试按同一 id create，尚未区分 session 不存在与其他恢复失败。不兼容的 live 实例会明确失败，不执行 followup，入站批次留在 pending。每批事件写成一个 user message，通过 `followup()` 交给 Harness 原生 agent loop，并等待 `whenIdle()`。模型、会话历史、压缩和工具调用都由 Harness 管理，不再走独立的 chat-completions fetch。
 
-create/resume 的 setup 路径通过 `composeMainAgent` 挂载作用域前缀，并暴露 `send_text`、`send_voice`、DSH 原生的 `read`、`read_image`、`write`、`edit`、`glob`、`grep` 和本作用域注册的 `pass`。setup 成功后，在以 agent context 为键的进程内 WeakMap 中记录固定配置签名和完成状态，不记录正文；相同配置重复 setup 复用同一 promise，不同配置拒绝替换，scope 卸载时清除凭据。既有或竞态恢复的 live agent 只有凭据完整且匹配时才能借用；旧未装配实例需经正常作用域恢复，不改写 header 或私有历史。代码执行及其他全局工具继续屏蔽；文件工具使用下述作用域权限。`read_image` 只用于主动读取工作区内获准的本地图片，聊天图片走独立的附件入站链路。`pass` 必填 `reason`，只记录这一轮为什么不说话，不触碰任何渠道。她可以回复一个或多个会话，也可以不说话，运行时不强迫二选一中的任何一个。已取走的事件留在长期 session 历史中。旧的 `createSendTextTurn` 仍保留给独立实验，但不是 ElyHarn 服务安装的主意识回复轮。
+create/resume 的 setup 路径通过 `composeMainAgent` 挂载作用域前缀，并暴露 `send_text`、`send_voice`、DSH 原生的 `read`、`read_image`、`write`、`edit`、`glob`、`grep`、`web_search`、`web_fetch` 和本作用域注册的 `pass`。setup 成功后，在以 agent context 为键的进程内 WeakMap 中记录固定配置签名和完成状态，不记录正文；相同配置重复 setup 复用同一 promise，不同配置拒绝替换，scope 卸载时清除凭据。既有或竞态恢复的 live agent 只有凭据完整且匹配时才能借用；旧未装配实例需经正常作用域恢复，不改写 header 或私有历史。代码执行及其他全局工具继续屏蔽；文件工具使用下述作用域权限。`read_image` 只用于主动读取工作区内获准的本地图片，聊天图片走独立的附件入站链路。`pass` 必填 `reason`，把这一轮不说话的原因留在 session，不触碰任何渠道；成功执行时调用原生 `exec.concludeTurn()` 请求结束本轮。她可以回复一个或多个会话，也可以不说话，运行时不强迫二选一中的任何一个。已取走的事件留在长期 session 历史中。旧的 `createSendTextTurn` 仍保留给独立实验，但不是 ElyHarn 服务安装的主意识回复轮。
+
+`pass` 的成功结果先由原生工具执行链写入 `tool/result`，再按 agent loop 的收尾规则结束本轮；不能只返回 `{ passed: true }` 而让模型继续为同一选择空转。执行期间真正到达的新输入仍按原生 inbox 的待处理规则继续，不清空、丢弃或按正文去重。`time-context` 与 `elysia-calendar-context` 只是实际 `pre-step` 中附加的框架上下文，不是独立 inbox 来信或唤醒源；正确收尾后，它们不会自行开启下一步。这项修复不增加关键词触发或固定判断规则。事故与真实验收进展见[pass 轮次收尾记录](../../docs/report/2026-11-12-pass-turn-completion.md)，此处不预先声明部署验收通过。
 
 ## 主意识上下文隔离
 
 主意识在自己的 agent scope 内关闭 DSH 可选运行环境注入，并在 `agent/pre-step` 生产者完成后，按来源排除 `agent-instructions` 和 `runtime-context` 两类框架消息。普通用户消息即使提到 `AGENTS.md` 也会保留；其他 session 不受此过滤影响。装配时，已经可见的这两类旧框架消息通过追加空的 surface replacement 退出当前投影，原始事件和来源引用仍留在耐久日志中，重复装配不会重复替换空消息。其他来源（包括已有检查点）保持可见。
 
 过滤器由当前 agent scope 持有；装配失败会立即撤销过滤器与运行环境抑制，scope 卸载也会清理。此隔离不改变原 session id/cwd，也不直接改写历史或主体文件。
+
+### 简单计划
+
+设置 scheduledPlans: true 时，固定主意识挂载 @elysia/proactive-system 的原生计划工具与 Host 启动门。爱莉使用 schedule_create({prompt, title, after_seconds}) 设定多久后提醒自己，也可使用原生 schedule_list / schedule_update / schedule_delete。到时回到同一 session，不直接向渠道发送，也不代她执行事项。
+
+宿主加载等待本次主意识完成装配和发布，不等待 whenIdle；profile 原先直接启动的 schedule 行需停用，保持只有一个原生 Host。该主意识 owner 释放时，计划 Host 同步退出。细则见 [第一版简单计划](../../plugins/proactive-system/PLAN-V1.zh.md)。
 
 ### 主动压缩上下文
 

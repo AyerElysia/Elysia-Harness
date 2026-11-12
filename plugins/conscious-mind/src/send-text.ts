@@ -111,10 +111,11 @@ export async function deliverSendText(outbound: OutboundText, args: SendTextArgs
 export function defineSendTextTool(outbound: OutboundText) {
   return defineTool({
     name: 'send_text',
-    description: '把文字发到外部渠道。assistant 正文不会出现在任何渠道上。只用于文字：对方要求语音、想听声音时，不要调用本工具解释或代替，必须改用 send_voice；以本轮实际工具表为准，不要沿用过去没有语音工具的旧判断。先写 thought、mood、decision、expected_response，最后写 content。content 里的换行会拆成多条消息。thought 必须是这次真实的非空思考。',
+    description: '把文字投递到已登记的外部会话。DSH 会话内打字或通话时，普通回应直接写在当前会话正文。收到外部渠道消息并决定回复时，使用本次入站实际标注的渠道和会话。只有当前 DSH 用户明确要求向指定外部渠道及收件人发送文字时，才传 explicit_request: true 来请求界面确认。此字段只发起确认，实际投递须经用户在界面批准。DSH 普通回应和外部消息的原路回复均省略该字段。历史渠道或历史会话不能当作当前收件人。若本次实际需要向外部会话发送语音，使用 send_voice。先写 thought、mood、decision、expected_response，最后写 content。content 里的换行会拆成多条消息。thought 必须是这次真实的非空思考。',
     parameters: {
       channel: { type: 'string', required: true, description: '渠道名，例如 qq、feishu、kook。必须是已经登记的渠道。' },
-      conversation: { type: 'string', required: true, description: '这个渠道上的哪一段对话。入口消息里带着，回复时照抄。' },
+      conversation: { type: 'string', required: true, description: '外部渠道上的会话 ID。回复时采用本次入站的会话；另行投递时采用当前用户指定的会话。' },
+      explicit_request: { type: 'boolean', description: '仅在当前 DSH 用户明确指定外部渠道和收件人并请求投递时传 true，以发起界面确认。该字段不授予发送权限。普通 DSH 回应和外部原路回复均省略。' },
       thought: { type: 'string', required: true, description: '这次表达自己写下的内心活动。必须非空。不要从 reasoning 或 content 回填，也不要写进发出去的正文。' },
       mood: { type: 'string', required: true, description: '此刻的心情。没有明确情绪时传空字符串，不要编造默认情绪。' },
       decision: { type: 'string', required: true, description: '决定如何回应。不适用时传空字符串，不要复制 content。' },

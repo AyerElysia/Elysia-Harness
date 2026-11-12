@@ -3,8 +3,8 @@
  * Harness agent loop — not by a side fetch to a chat-completions endpoint.
  *
  * A pending batch becomes one user message in that session, then the agent
- * runs until idle. She answers through send_text, stays silent through pass,
- * and nothing in the runtime forces either choice.
+ * runs until idle. Local dialogue uses assistant text. Channel replies use
+ * the outbound tools, and pass is available for deliberate silence.
  * @module @elysia/conscious-mind/main-session
  */
 
@@ -26,13 +26,17 @@ import { StandingPromptError } from './load.ts'
 import * as StandingPrompt from './standing-prompts.ts'
 import type { Config as StandingPromptConfig } from './standing-prompts.ts'
 import * as FileCapabilities from './file-capabilities.ts'
+import * as WebCapabilities from './web-capabilities.ts'
+import * as CurrentTime from './current-time.ts'
+import { hasLocalDialogueInput, platformMessageSource } from './reply-origin.ts'
+import { installLocalSendConfirmation } from './local-send-confirmation.ts'
+import { restoreDirectSessionModel } from './restore-direct-session-model.ts'
+import * as PlanTools from '@elysia/proactive-system/plan-tools'
 
 declare module '@deepseek-ai/cordis' {
   interface Context {
     /** Ready concrete agent factory; injected without importing its source tree. */
     agentLoop: unknown
-    /** Durable session storage required before the main agent can resume. */
-    sessionPersistence: unknown
   }
 }
 
@@ -131,6 +135,10 @@ interface MainAgentComposition {
 const mainCompositions = new WeakMap<Context, MainAgentComposition>()
 
 export interface MainSessionConfig extends StandingPromptConfig {
+  /** IANA fallback clock zone for IM and scheduled inputs. Defaults to Asia/Shanghai. */
+  timeZone?: string
+  /** Expose native reminders in this main-agent scope. Defaults to false. */
+  scheduledPlans?: boolean
   workspaceDir?: string
   backupDir?: string
   maxPromptBytes?: number
@@ -144,6 +152,8 @@ function fixedPromptConfig(config: MainSessionConfig): MainSessionConfig {
     files: [...config.files],
     required: [...config.required ?? ['SOUL.md']],
     complete: config.complete ?? true,
+    timeZone: config.timeZone ?? 'Asia/Shanghai',
+    ...config.scheduledPlans === undefined ? {} : { scheduledPlans: config.scheduledPlans },
     ...config.workspaceDir === undefined ? {} : { workspaceDir: resolve(config.workspaceDir) },
     ...config.backupDir === undefined ? {} : { backupDir: resolve(config.backupDir) },
     ...config.maxPromptBytes === undefined ? {} : { maxPromptBytes: config.maxPromptBytes },
@@ -174,14 +184,19 @@ export function composeMainAgent(agentCtx: Context, promptConfig: MainSessionCon
   mainCompositions.set(agentCtx, composition)
   composition.ready = (async () => {
     const prompt = await agentCtx.plugin(StandingPrompt, config)
+    let currentTime: { dispose(): Promise<unknown> } | undefined
     let capabilities: { dispose(): Promise<unknown> } | undefined
+    let web: { dispose(): Promise<unknown> } | undefined
+    let plans: { dispose(): Promise<unknown> } | undefined
     let compaction: { dispose(): Promise<unknown> } | undefined
     let compactCommand: { dispose(): Promise<unknown> } | undefined
     let removeIsolation: (() => void) | undefined
     let removePass: (() => void) | undefined
     let removeRestriction: (() => void) | undefined
+    let removeLocalSendConfirmation: (() => void) | undefined
     try {
       removeIsolation = isolateMainAgentContext(agentCtx, agent)
+      currentTime = await agentCtx.plugin(CurrentTime, { timeZone: config.timeZone ?? 'Asia/Shanghai' })
       // Use the same injected child-plugin path as Web presets. Calling the
       // mount function directly would hide workingDirectory in a real Agent scope.
       capabilities = await agentCtx.plugin(FileCapabilities, {
@@ -193,24 +208,32 @@ export function composeMainAgent(agentCtx: Context, promptConfig: MainSessionCon
         ...config.maxPromptBytes === undefined ? {} : { maxPromptBytes: config.maxPromptBytes },
         ...config.backupRetention === undefined ? {} : { backupRetention: config.backupRetention },
       })
+      web = await agentCtx.plugin(WebCapabilities)
+      if (config.scheduledPlans === true) plans = await agentCtx.plugin(PlanTools)
       // Reuse DSH's durable compaction transaction and human command. Manual
       // only: adding this entry point must not change automatic turn behavior.
       compaction = await agentCtx.plugin(BasicCompactionEngine, { auto: false })
       compactCommand = await agentCtx.plugin(CommandCompact)
       removePass = agentCtx.tools.register(definePassTool())
       removeRestriction = agentCtx.tools.restrict({ allow: ['send_text', 'send_voice', 'read_image'] })
+      removeLocalSendConfirmation = installLocalSendConfirmation(agentCtx, hasLocalDialogueInput)
       agentCtx.effect(() => () => {
+        removeLocalSendConfirmation?.()
         if (mainCompositions.get(agentCtx) === composition) mainCompositions.delete(agentCtx)
       }, 'elysia-conscious-mind.composition()')
       composition.complete = true
     } catch (error) {
       const cleanup = await Promise.allSettled([
+        Promise.resolve().then(() => removeLocalSendConfirmation?.()),
         Promise.resolve().then(() => removeRestriction?.()),
         Promise.resolve().then(() => removePass?.()),
         Promise.resolve().then(() => removeIsolation?.()),
         Promise.resolve().then(() => compactCommand?.dispose()),
         Promise.resolve().then(() => compaction?.dispose()),
+        Promise.resolve().then(() => plans?.dispose()),
+        Promise.resolve().then(() => web?.dispose()),
         Promise.resolve().then(() => capabilities?.dispose()),
+        Promise.resolve().then(() => currentTime?.dispose()),
         Promise.resolve().then(() => prompt?.dispose()),
       ])
       const failures = cleanup.filter((result): result is PromiseRejectedResult => result.status === 'rejected')
@@ -242,7 +265,14 @@ async function resumeOrCreateMainAgent(ctx: Context, promptConfig: MainSessionCo
   const agentOptions = ctx.agentDefaultModel.currentSelection()
   const meta = { cwd: MAIN_SESSION_CWD }
   try {
-    return await ctx.agents.resume({ resumeSessionId: MAIN_SESSION_ID, agentOptions, setup })
+    return await ctx.agents.resume({
+      resumeSessionId: MAIN_SESSION_ID,
+      agentOptions: { ...agentOptions },
+      setup: (agentCtx, agent) => {
+        restoreDirectSessionModel(agent, MAIN_SESSION_ID)
+        return setup(agentCtx, agent)
+      },
+    })
   } catch (error) {
     // The web UI may have resumed the visible session while resume was loading.
     // Reuse that live Agent instead of trying to create the same id again.
@@ -253,6 +283,11 @@ async function resumeOrCreateMainAgent(ctx: Context, promptConfig: MainSessionCo
   }
 }
 
+/** Pending entry point plus readiness of the correctly composed, published main Agent. */
+export interface MainSessionTurn extends PendingTurn {
+  readonly ready: Promise<Agent>
+}
+
 /**
  * Build the pending turn that drives the long session through the Harness
  * agent registry. The handle is memoized; a failed resume/create is retried
@@ -261,11 +296,17 @@ async function resumeOrCreateMainAgent(ctx: Context, promptConfig: MainSessionCo
  * @param promptConfig - fixed standing composition for this existing main session.
  * @returns the pending-turn handler.
  */
-export function createMainSessionTurn(ctx: Context, selectedPromptConfig: MainSessionConfig): PendingTurn {
+export function createMainSessionTurn(ctx: Context, selectedPromptConfig: MainSessionConfig): MainSessionTurn {
   const promptConfig = fixedPromptConfig(selectedPromptConfig)
   let mainAgent: Promise<AgentHandle> | undefined
+  const readiness = Promise.withResolvers<Agent>()
+  // Callers without plans may never await ready; explicit consumers still see rejection.
+  void readiness.promise.catch((_error: unknown) => undefined)
   const ensure = (): Promise<AgentHandle> => {
-    mainAgent ??= resumeOrCreateMainAgent(ctx, promptConfig).catch((error: unknown) => {
+    mainAgent ??= resumeOrCreateMainAgent(ctx, promptConfig).then((handle) => {
+      readiness.resolve(handle.agent)
+      return handle
+    }).catch((error: unknown) => {
       mainAgent = undefined
       throw error
     })
@@ -286,15 +327,17 @@ export function createMainSessionTurn(ctx: Context, selectedPromptConfig: MainSe
   }
   preheat()
   ctx.effect(() => () => {
+    readiness.reject(new Error('Main session owner stopped before readiness'))
     if (preheatRetry !== undefined) clearTimeout(preheatRetry)
     void mainAgent?.then(handle => handle.dispose()).catch(() => {})
   }, 'elysia-conscious-mind.main-session()')
-  return async batch => {
+  const turn: PendingTurn = async batch => {
     const handle = await ensure()
     handle.agent.followup(createUserMessage({
       content: formatInboundBatch(batch),
-      source: { kind: 'user' },
+      source: platformMessageSource,
     }))
     await handle.agent.whenIdle()
   }
+  return Object.assign(turn, { ready: readiness.promise })
 }

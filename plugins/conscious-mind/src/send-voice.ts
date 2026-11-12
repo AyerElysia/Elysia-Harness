@@ -88,10 +88,11 @@ export async function deliverSendVoice(
 export function defineSendVoiceTool(outbound: OutboundVoice, synthesizer: VoiceSynthesizer) {
   return defineTool({
     name: 'send_voice',
-    description: '把口语通过 BreezeTTS 合成为爱莉固定的本地音色，并发送到指定外部会话。对方说“发个语音”“想听你的声音”或明确要求 send_voice 时，直接调用本工具，不要先用 send_text 解释。text 可以直接包含 [笑]、[叹气]、[咳嗽]、[清嗓子]，这些会作为真实声音事件演绎，不会逐字念出。可选 expression_instruction 只调整本次情绪、语气、速度和停顿，不能改变音色。已有音频不要调用本工具，改用 send_file。QQ 平台角色语音不能代替爱莉的本地音色。',
+    description: '把口语通过 BreezeTTS 合成为爱莉固定的本地音色，并投递到支持语音的已登记外部会话。DSH 会话内打字或通话时，普通回应直接写在当前会话正文。在外部渠道收到语音回复请求时，使用本次入站实际标注的渠道和会话。只有当前 DSH 用户明确要求向指定外部渠道及收件人发送语音时，才传 explicit_request: true 来请求界面确认。此字段只发起确认，实际投递须经用户在界面批准。DSH 普通回应和外部消息的原路回复均省略该字段。历史渠道或历史会话不能当作当前收件人。text 可以直接包含 [笑]、[叹气]、[咳嗽]、[清嗓子]，这些会作为真实声音事件演绎，不会逐字念出。可选 expression_instruction 只调整本次情绪、语气、速度和停顿，不能改变音色。已有音频不要调用本工具，改用 send_file。QQ 平台角色语音不能代替爱莉的本地音色。',
     parameters: {
       channel: { type: 'string', required: true, description: '已登记且支持语音的渠道名。' },
-      conversation: { type: 'string', required: true, description: '该渠道上的会话 ID，照抄入站事件。' },
+      conversation: { type: 'string', required: true, description: '外部渠道上的会话 ID。回复时采用本次入站的会话；另行投递时采用当前用户指定的会话。' },
+      explicit_request: { type: 'boolean', description: '仅在当前 DSH 用户明确指定外部渠道和收件人并请求投递时传 true，以发起界面确认。该字段不授予发送权限。普通 DSH 回应和外部原路回复均省略。' },
       text: { type: 'string', required: true, description: '交给 BreezeTTS 合成的口语；可包含其原生声音事件标记。' },
       expression_instruction: { type: 'string', description: '可选的本次情绪、语气、速度、停顿等表达控制；会附加到可信 Breeze instruction 后，不能覆盖参考音色。' },
     },

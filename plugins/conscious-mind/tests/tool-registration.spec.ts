@@ -47,11 +47,15 @@ it('composes the real read_image registration into the main agent allow-list', a
   ctx.tools.register(globalTool('send_text'))
   ctx.tools.register(globalTool('send_voice'))
 
-  const key = { id: 'elysia-conscious-mind' as SessionId } as Agent
+  const key = {
+    id: 'elysia-conscious-mind' as SessionId,
+    session: { id: 'elysia-conscious-mind', header: { cwd: join(home, 'workspace') } },
+  } as unknown as Agent
   let scope!: Scope
   await ctx.plugin(Object.assign((inner: Context) => { scope = createScope(inner, key) }, {
     inject: ['tools', 'systemPrompt'],
   }))
+  Object.assign(key, { ctx: scope.ctx })
   await composeMainAgent(scope.ctx, {
     baseDir: home,
     files: ['SOUL.md'],

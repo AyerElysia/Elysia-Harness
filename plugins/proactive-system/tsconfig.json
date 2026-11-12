@@ -10,6 +10,21 @@
   "references": [
     {
       "path": "../../dsh/vendor/cordis"
+    },
+    {
+      "path": "../../dsh/packages/core/agent"
+    },
+    {
+      "path": "../../dsh/packages/core/scope"
+    },
+    {
+      "path": "../../dsh/packages/core/tools"
+    },
+    {
+      "path": "../../dsh/packages/schedule/schedule"
+    },
+    {
+      "path": "../../dsh/packages/schedule/tool-schedule"
     }
   ]
 }

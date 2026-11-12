@@ -17,11 +17,11 @@ export interface PassResult {
   reason: string
 }
 
-/** Model-facing pass tool. It only records; it never sends anything. */
+/** Record the explicit choice of silence and conclude the current turn without sending. */
 export function definePassTool() {
   return defineTool({
     name: 'pass',
-    description: '这一轮选择不说话。不调用任何渠道发送，session 里留下这次为什么不说。运行时不会强迫你调用 send_text。',
+    description: '这一轮选择不说话，并结束当前轮，等待新输入。不调用任何渠道发送，session 里留下这次为什么不说。运行时不会强迫你调用 send_text。',
     parameters: {
       reason: { type: 'string', required: true, description: '这次选择不说话的原因，一句自然语言。' },
     },
@@ -39,7 +39,8 @@ export function definePassTool() {
         return [{ type: 'text' as const, text: JSON.stringify(value) }]
       },
     },
-    execute(args): Promise<PassResult> {
+    execute(args, exec): Promise<PassResult> {
+      exec.concludeTurn()
       return Promise.resolve({ passed: true, reason: String(args.reason ?? '').trim() })
     },
   })

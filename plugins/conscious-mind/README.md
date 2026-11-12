@@ -58,7 +58,7 @@ Search admission checks the complete canonical result as well as its displayed m
 
 `send_text` is how the conscious mind sends text to an external channel. Channels are QQ, Feishu, KOOK, and comparable entry points added later.
 
-Assistant text the model writes directly stays in that session and appears on no channel. To make it visible to the other person, she must call `send_text`. Speaking is thus a deliberate act, not a leak.
+Assistant text is the reply for local DSH chat and call transcripts. External channel inputs carry trusted provenance, and `send_text` delivers text to those channels. An explicit request from a local DSH turn to send elsewhere uses DSH's native question panel to confirm the destination and content before delivery.
 
 This tool mirrors Elysium's `life_send_text`. The four inner fields `thought`, `mood`, `decision`, and `expected_response` are retained: they are inner records the subject personally submits within the same act of expression, not a backfill of provider reasoning, and unlike assistant text the session log passively retains. That explicit record serves persona continuity and post-training; the DSH ledger supplements it, not replaces it.
 

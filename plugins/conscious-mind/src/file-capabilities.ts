@@ -235,7 +235,11 @@ function visiblePaths(value: unknown, key?: string): string[] {
  */
 export async function mountFileCapabilities(ctx: Context, config: Config): Promise<() => void> {
   const roots = await rootsOf(config)
-  const agent = scopeOf(ctx) as Agent | undefined
+  const scope = scopeOf(ctx)
+  // Preset plugins mount once under a registry-owned scope before any concrete
+  // Agent exists. Only a real Agent scope can accept a working-directory set;
+  // executions below still resolve and authorize against their real exec.agent.
+  const agent = scope !== undefined && 'session' in scope ? scope as Agent : undefined
   if (agent !== undefined && ctx.workingDirectory !== undefined) {
     await ctx.workingDirectory.set(agent, roots.workspace)
   }

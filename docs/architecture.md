@@ -98,11 +98,11 @@ session 是运行边界，不是主体边界；潜意识拟建独立 session，�
 | `send_voice` | `send-voice.ts`、`breeze-tts.ts` | ✅ | BreezeTTS 本地音色；当前只有 KOOK 注册语音 sender |
 | `read_image` | DSH 原生工具 | ✅ 已开放 | 主动读取已有本地图片，不代替聊天附件入站 |
 | `send_file` | 统一文件投递需求 | 🔴 未实现 | 已有图片/音频/视频/其他文件共用工具与 `OutboundFile`，尚无源码或渠道注册 |
-| `pass` | `pass.ts` | ✅ | — |
+| `pass` | `pass.ts` | ✅ | 成功调用原生 `concludeTurn` 请求结束本轮；结果先落账，新输入按原生规则继续，见第 9 节 |
 | `list_contacts` | — | 🔴 待自建 | 依赖人物目录 |
 | 出站路由 | `outbound.ts` | ✅ | 按渠道名精确匹配，缺失即失败 |
 | 定时 | `dsh/packages/schedule` | ✅ | 六种规则 + 时区 + 错过合并 |
-| 定时路由 | — | 🔴 待补 | 见 6.4 |
+| 定时接入 | proactive-system/plan-tools、plan-host | ✅ 代码接入与运行重载验证通过 | 原生提醒回到固定主意识；见 6.4 |
 | UI 可见 | 主 session 元数据 | ✅ 已提供 cwd | 持久化列表依赖此字段；真实重启恢复仍需验收 |
 | 潜意识 | `plugins/subconscious/REQUIREMENTS.zh.md` | 🔴 仅需求 | 尚无心跳插件、独立 session 或事件消费实现 |
 | 压缩 | `dsh/packages/compaction` | ✅ | — |
@@ -132,6 +132,14 @@ session 是运行边界，不是主体边界；潜意识拟建独立 session，�
 主回复处理器保存所选配置的快照。文件名单属于该 agent 的固定装配，每次 assemble 重新读正文，不按轮次换名单、不扫描目录。必需文件缺失或为空会失败，可选缺失/空文件跳过，其他读取错误抛出。文件正文、旧主 session id/cwd 和已有 header 不由这项改动迁移或改写。
 
 Web profile 当前只添加 `elysia` preset，配置五份文件并挂载同一 scoped 子插件；`elysia-core` 尚未配置。preset 创建的是独立 session，不自动加入平台 pending。独立 `tui.ts` 也在自己的 scope 中装配前缀，但仍是进程内历史与直接模型请求的实验入口。真实 preset 重启恢复仍需验证。主意识 setup 成功后，以 agent context 为键在进程内 WeakMap 记录固定配置签名和完成状态，不包含文件正文；scope 卸载时清除。相同配置重复 setup 复用 promise，不同配置拒绝替换。既有或竞态恢复的 live agent 须匹配完整凭据；旧未装配实例不会自动热迁移，需通过正常恢复 setup 装配，不改写 header 或私有历史。
+
+### 6.1.2 当前时间上下文
+
+主意识和 Web `elysia` preset 在自己的 scope 内挂载 `@elysia/conscious-mind/current-time`，复用原生 `@deepseek-ai/dsh-time-context`；每个实际执行的 `agent/pre-step` 采样一次，`refreshIntervalMs: 0` 不跳过步骤，不另建 tick 或自动唤醒。主运行层默认时区和 Web 显式 fallback 为 `Asia/Shanghai`。本轮 Web `user-rpc` 有唯一有效的 `clientTimeZone` 时，原生浏览器时区优先；IM、计划提醒没有浏览器时区时，采样时钟使用上海时区。缺失或混合浏览器时区的原生提示仍保留，时钟 fallback 不等于用户已明确指定时区。
+
+首次真实报时正确给出了日期、时间和时区，但模型自行补充的星期有误，原生时钟未提供该字段。`current-time.ts` 另追加 `source.kind: 'elysia-calendar-context'` 的独立日历输入：对每次补充使用单次 `Date.now()`，以 `Intl` 的 `zh-CN`、公历 `gregory`、数字 `latn` 和配置时区生成完整日期、星期、时分秒、GMT 偏移及该次采样的 UTC ISO；仅在 `agent === owner` 时追加。此输入与原生时钟各自独立采样，不解析、覆盖原生结果或改变其浏览器时区优先逻辑；即使浏览器使用其他时区，日历仍标明按当前配置的 `Asia/Shanghai` 计算。第二次真实验收另见报告，此处不预判结果。
+
+采样结果以 `source.kind: 'time-context'` 独立进入可追溯的模型输入与耐久日志，不改 `complete: true` 的 standing 正文或主体文件；现有按来源排除 `agent-instructions`、`runtime-context` 的上下文隔离不会删除它。UTC ISO 存储格式保持不变，`Z` 明确表示 UTC；它与北京时间相差八小时不意味着主机时钟错误。真实验收结果由[北京时间上下文记录](report/2026-11-12-beijing-time-context.md)单独记录，不以配置或源码接入冒充已经验证。
 
 ### 6.2 入站元信息与图片
 
@@ -176,25 +184,13 @@ interface Person {
 
 配套工具 `list_contacts()`：返回人物列表与各渠道可达性，让模型自己选择。不直接改 `send_text` 的签名——保持它只做 `channel`+`conversation` 的纯路由。
 
-### 6.4 定时唤醒后的路由
+### 6.4 最小计划接入
 
-`dsh/packages/schedule/schedule/src/runtime.ts` 的投递只有三步：
+主意识启用 scheduledPlans 后，在自己的 agent scope 挂载原生 @deepseek-ai/dsh-tool-schedule。最小创建使用 prompt、title、after_seconds；计划由原生 Host 存储并在到时向原 session followup，忙时照常入箱，flush 后记录投递，不等待模型整轮或事项完成。
 
-```ts
-resolved.agent.followup(message)   // 往 session 塞消息
-await this.ctx.sessions.flush(...) // 持久化
-```
+profile 停用原先直接加载的 schedule 行，由 @elysia/proactive-system/plan-host 在正确主意识完成装配、发布后加载同一个原生 ScheduleService，避免启动时逾期任务经通用默认 preset 抢先恢复主意识。没有改写已有 session header 或 preset。该主意识 owner 释放时关闭本次 Host；新的应用启动再次先恢复主意识，再加载持久计划。
 
-塞进去的消息 `source` 只有 `{ kind: 'schedule' }`，**没有 channel / conversation**。
-
-所以「到点了」能触发对话，但「发给谁」需要额外信息。两条路：
-
-| 方案 | 优点 | 缺点 |
-|---|---|---|
-| 任务文本里写明收件人 | 不改 DSH | 路由信息混进自然语言 |
-| `conscious-mind` 唤醒时注入「最近活跃会话」 | 干净 | 需要在 followup 时挂钩 |
-
-倾向后者：路由是工程事实，不该让模型从散文里猜。
+计划不是渠道消息，不隐式选择最近活跃会话作为收件人。她可以在计划原文里留下自己需要的上下文与明确目标，提醒到达后再通过既有工具选择是否发送。一次提醒入箱只表示调度交付，不表示外部消息送达或计划执行完成。使用、Schema、恢复与验收见 [第一版简单计划](../plugins/proactive-system/PLAN-V1.zh.md)。
 
 ### 6.5 其余待处理项
 
@@ -247,9 +243,11 @@ agentCtx.tools.restrict({ allow: ['send_text', 'send_voice', 'read_image'] })
 
 按 `composeMainAgent` 装配后的主 agent 暴露 `send_text`、`send_voice`、`read`、`read_image`、`write`、`edit`、`glob`、`grep` 和本作用域注册的 `pass`；只有装配凭据完整且配置匹配的 live agent 才可借用。文本文件与搜索工具只由文件能力子插件在目标 agent scope 注册，不在 host plane 全局开启；standard、minimal 的既有工具与权限不变。文件能力子插件只开放配置工作区（排除 `.migration`）与精确选中的提示词文件，`read_image` 仅可读取工作区图片。备份、名单外文件、符号链接逃逸与可检测硬链接被阻断；搜索检查完整 canonical result，不能只依赖截断后的显示 metadata。提示词修改前保存逐字节运维备份，检查必需文件非空与最终 UTF-8 字节上限；原生 DSH 继续负责已读观察、陈旧版本、字面编辑及原子写入。装配后期失败会回收提示词与文件守卫两个子插件，不遗留半套能力。代码执行仍未开放，聊天图片继续使用独立附件入站链路。原 session cwd header 保持不变，实际工作目录由 working-directory 服务设为工作区。
 
+`pass` 是明确的不外发选择，成功时调用 `exec.concludeTurn()` 请求本轮收尾；原生执行链先将其成功结果写入 `tool/result`，agent loop 再依待处理 inbox 决定结束或继续处理真正的新输入。返回 `{ passed: true }` 本身不等于已经结束轮次。`time-context` 和 `elysia-calendar-context` 只在实际 `pre-step` 附加框架输入，不占用外部 inbox，不是独立唤醒源，不能在正常终止后自行再触发一轮。修复不以新用户消息去重、关键词规则或清空待处理输入来掩盖重复 `pass`。事故与真实验收另见[pass 轮次收尾记录](report/2026-11-12-pass-turn-completion.md)，不由源码修改预判部署验收结果。
+
 `send_voice` 经 BreezeTTS 合成固定本地音色，再交给渠道语音 sender。当前 KOOK 已实现上传与原生语音发送，平台明确拒绝该类型时才退为音频文件消息；状态未知不自动重发。QQ、飞书语音仍待接入。统一 `send_file(channel, conversation, path)`、共享文件检查与 `OutboundFile` 以及渠道投递仍只有需求，不能据此宣称已有文件发送可用。
 
-新增 `list_contacts`、`schedule_*` 时必须同步改这一行 `allow` 列表。注意 `restrict` 是白名单语义——漏加就是工具不可见。
+该 allow 只限制全局／继承的工具名；作用域内注册的 pass、文件、网络和 schedule_* 工具仍可见，不应把这些本地名字加入 global allow，否则原生 restrict 会拒绝未知全局名字。后续新增工具必须先核对其注册所在层，而不是机械扩大这份列表。
 
 `send_text` 的渠道由各渠道插件在 `outboundText` 上登记。Ayla 插件只在 `elyh` 形态登记 `ayla`；
 standalone 形态不登记，也**不**给主意识多一条途径——它自己的 `send_text` 只在该 agent 作用域可见。

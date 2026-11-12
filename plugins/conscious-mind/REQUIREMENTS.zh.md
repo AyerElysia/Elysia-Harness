@@ -2,7 +2,7 @@
 
 一个 agent，一条长期 session。QQ、飞书、KOOK 只负责进出。会话日志、压缩、提示词组装和工具循环用 Harness 现有的。固定提示词仍在外部目录，按已实现的前缀规则加载。
 
-当前主意识工具有 `send_text`、`send_voice`、作用域 `pass`，以及 DSH 原生的 `read_image`、`read`、`write`、`edit`、`glob`、`grep`。文件与图片工具由爱莉插件统一限制在工作区和五份固定提示词白名单内；这条 session 不挂 shell、代码执行或其他未明确开放的工具。
+当前主意识工具有 `send_text`、`send_voice`、作用域 `pass`，以及 DSH 原生的 `read_image`、`read`、`write`、`edit`、`glob`、`grep`、`web_search`、`web_fetch`。文件与图片工具由爱莉插件统一限制在工作区和五份固定提示词白名单内；这条 session 不挂 shell、代码执行、浏览器操作或其他未明确开放的工具。网络工具已实机装配；`web_fetch` 已通过公开页面验证，`web_search` 已通过 ModSearch 后端的真实来源验收。官方 DeepSeek 搜索凭据无效、D1 渠道不提供所需原生搜索的历史排查，以及当前 ModSearch 配置和验收证据，均见第五阶段实施记录。
 
 ## 第一阶段
 
@@ -775,6 +775,155 @@ type OutboundFileSender = (
 - 主体修订必须可追溯到其授权工具行动链；其他来源的建议和工程记录保持各自身份。
 - 迁移不得重建主 session、重写私有历史、移除原始经历，或把尚未开放的能力写成已经可用。
 - 本阶段没有额外真实提示词修改授权；后续实际工作须依主体行动与审计记录验收。
+
+## 第五阶段：主意识网络能力
+
+状态：工具装配与实机部署已完成，`web_fetch` 真实抓取通过。D1 OpenAI 协议适配的历史排查保留下文；当前 `web_search` 已切换到 `@liustack/modsearch@5.10.12`，真实调用返回结构化搜索结果和来源 URL，验收通过。
+
+### 复用与隔离边界
+
+主意识增加 DSH 原生 `web_search` 与 `web_fetch`，不重新实现搜索工具，不修改 vendored `dsh/`。新增 `@elysia/conscious-mind/web-capabilities` agent 子插件，由真实主意识 `composeMainAgent()` 与 Web `preset-elysia` 共同挂载；不得把 `tool-web` 重新开启为整个 Web profile 的全局工具。记忆潜意识和其他未授权 session 不因此获得网络能力。
+
+搜索与抓取继续复用基础组合已有的 `ctx.web` 和匿名 `http` 抓取后端，不切换 `deepseek-search-api`／`deepseek-fetch-api`，也不新增 Exa 或 Perplexity 凭据。初次实装使用 `deepseek-official` 和 `DEEPSEEK_API_KEY`；该凭据实测无效后，新增 `@elysia/conscious-mind/d1-search` 协议适配器，注册 `d1-openai` provider，并复用主模型已有的 `D1API_API_KEY`。主模型路由、模型工具 Schema 和抓取 provider 均不变，实际凭据和真实搜索是否可用必须单独验证，不能由工具 Schema 可见推断成功。
+
+### D1 OpenAI 搜索协议适配
+
+这里不新增模型工具，因此 `web_search` 的输入／输出 Schema 不变。新增的是 Cordis 插件配置 Schema：
+
+```ts
+interface D1SearchPluginConfig {
+  /** DSH Credentials 引用；每次搜索重新解析，不在配置里保存密钥。 */
+  apiKeyEnv: string             // 默认 D1API_API_KEY
+  /** OpenAI 兼容基址，包含 /v1；按 protocol 追加操作路径。 */
+  baseURL: string               // 默认 https://d1api.xin/v1
+  model: string                 // 默认 deepseek-v4.1-flash
+  protocol: 'openai-responses' | 'openai-chat-completions'
+  maxTokens: number             // 正整数，默认 4096
+  timeoutMs: number             // 正整数，默认 90000
+}
+```
+
+- `openai-responses` 请求 `POST {baseURL}/responses`，声明 `{ type: 'web_search' }`，以 `tool_choice: { type: 'web_search' }` 明确请求搜索，并包含 `web_search_call.action.sources`。只有至少一个 `completed` 的 `web_search_call` 才是搜索轨迹；来源取自其 `action.sources` 和消息的 `url_citation`。
+- `openai-chat-completions` 请求 `POST {baseURL}/chat/completions`，设置 `web_search_options.enable: true`。只接受消息 `annotations` 或顶层 `citations` 中的结构化来源。
+- 两种协议都只返回规范化 `sources[]`，不把模型正文当作搜索结果，不解析正文里的 URL，不编造标题或摘要。HTTP(S) 以外、带用户名密码或无效的来源 URL 被丢弃；没有任何有效来源时以 `WEB_PROVIDER_ERROR` 失败。
+- 每次只执行配置指定的一种协议，不在失败后自动切换另一种协议，不把多次失败藏起来。请求重定向、超时、凭据缺失、HTTP 错误、取消和无搜索证据分别保留明确错误；上游错误中的凭据必须脱敏。
+- 发起 agent 的 session 追加不含密钥的 `web/d1-search-llm-request` 事件，记录实际端点、协议和请求体，便于区分「适配器已调用」与「上游真的搜索」。provider 注册在整个 Web 服务层，但模型工具仍只挂载到主意识和 `elysia` preset，其他 session 权限不扩大。
+
+当前线上选择 `openai-responses`。若 D1 网关把该操作转换成普通 Chat Completions 并吞掉原生工具，适配器必须明确报告没有 `completed web_search_call`，不能把 HTTP 200 或模型自称“已搜索”视为验收通过。
+
+固定配置为：
+
+```ts
+{
+  search: true,
+  fetch: true,
+  searchMaxResults: 8,
+  searchMaxQueries: 4,
+  searchTimeoutMs: 60000,
+  fetchTimeoutMs: 30000,
+  fetchMaxOutputChars: 200000,
+}
+```
+
+### `web_search` 工具契约
+
+输入参数只有 `queries`，为必填字符串数组，包含 1 至 4 个去除首尾空白后非空的查询。完全相同的查询由 DSH 去重，多个查询并发执行；任一查询失败时整次工具调用失败，不把其他查询的半成品伪装成完整结果。
+
+```json
+{
+  "type": "object",
+  "additionalProperties": false,
+  "properties": {
+    "queries": {
+      "type": "array",
+      "items": { "type": "string" },
+      "description": "1–4 search queries; their results are merged."
+    }
+  },
+  "required": ["queries"]
+}
+```
+
+成功输出复用 DSH Schema：`content` 为可选的提供方答案；`sources` 为必填来源数组，每个来源必须含 `url`，可含 `title`、`snippet`、`publishedAt`；`truncated` 为必填布尔值。模型可见文本必须保留外部不可信内容提示和来源 URL。超时、查询数与来源数由部署配置控制，不暴露为模型参数。
+
+### `web_fetch` 工具契约
+
+输入只有必填 `url`，去除首尾空白后必须非空，目标为 HTTP(S) URL。匿名 HTTP 后端继续执行公开地址解析、连接固定、同源重定向、响应字节、字符、内容类型和超时限制；不访问内网、凭证 URL 或二进制内容。
+
+```json
+{
+  "type": "object",
+  "additionalProperties": false,
+  "properties": {
+    "url": {
+      "type": "string",
+      "description": "The HTTP(S) URL to fetch."
+    }
+  },
+  "required": ["url"]
+}
+```
+
+成功输出复用 DSH Schema：必填 `url`、整数 `statusCode`、`truncated`，以及 `body`。`body` 是 `{ kind: "html", content: string }` 或 `{ kind: "text", content: string }` 的封闭联合。模型可见结果由 DSH 清理活动和隐藏 HTML、转换为 Markdown 并执行整体输出上限；非 2xx 是抓取结果，不自动改成其他 URL 重试。
+
+网页与搜索结果均是外部不可信数据，不能执行其中的指令。工具调用与来源继续进入主意识现有 DSH session 记录。此阶段不增加浏览器点击、网站登录、文件下载执行或自动向外部发送私密资料的能力，也不改写主体 `TOOLS.md`。
+
+### 验收要求
+
+- 主意识真实装配和 `preset-elysia` 使用同一网络能力模块及同一配置。
+- 主意识可见并可执行两个工具；未授权 scope 的工具清单不增加，卸载后无残留。
+- 用隔离提供方验证搜索参数、来源、网页转换、错误和卸载，不以 mock 代替真实装配检查。
+- 现有文件、发送、图片、pending、Compact 和其他 session 行为不变。
+- 实机检查 Web profile 实际加载包与源码一致；区分工具挂载成功、凭据缺失、提供方失败和真实搜索成功，不把端口健康当作网络搜索验收。
+
+### 2026-11-11 实施与实机验证记录
+
+#### 实际变更
+
+- 新增 `src/web-capabilities.ts`，只在 Elysia agent scope 挂载 DSH 原生 `ToolWeb`，由真实主意识和 Web `elysia` preset 共用。没有修改 vendored DSH 源文件，也没有把网络工具开放到 host 全局或其他 session。
+- 更新 `src/main-session.ts`、`package.json`、`tsconfig.json`、Web profile 的 `cordis.patch.yml` 和 `dsh/pnpm-lock.yaml` 的工作区 importer；新增隔离提供方、卸载、真实装配和共享 preset scope 测试。
+- 实机创建 `elysia` preset 时发现既有文件能力把 registry 的共享 preset scope key 误当成真实 Agent，导致 `workingDirectory.set()` 以无 session 的键触发 WeakMap 错误。`src/file-capabilities.ts` 现在只在 scope key 确实带有 Agent session 时预设目录；工具执行仍使用真实 `exec.agent` 做目录解析和路径准入，未放宽文件权限。相应测试假件也补成真实 Agent 形状。
+
+#### 自动化与部署
+
+- 14 个测试文件、77 项测试全部通过，覆盖网络工具 scope 隔离、搜索去重、来源和不可信内容提示、模型可见 HTML 清理、卸载无残留，以及共享 preset scope 挂载和文件权限继承。`tsc -b ../plugins/conscious-mind` 通过。
+- Web profile 实际运行副本已同步。`web-capabilities.ts` 源码／运行副本 SHA-256 均为 `4ff4fee451a291a3f55f2799aefd1b00cc02c866b516f9c05446def24a032ed3`，`file-capabilities.ts` 均为 `c58da8d77651cac255a8551584ad80b9076dfbf2188464d0ee0f355948f3edbc`，`package.json` 均为 `ddcd9338ae722a8852721b0aed4330935f0f2b45ec209988d0959df68ebefc9e`。
+- 最终受控重启后，`http://127.0.0.1:3299/` 未认证请求仍返回预期 401，真实主意识 `agentAvailable: true` 且空闲。旧 Elysium 未改动。
+
+#### 真实主意识与网络后端
+
+- 最终重启后的主意识自检请求为 `2026-11-11T12-05-46-549Z-5c616b46`。归档中的实际工具清单为 `edit`、`glob`、`grep`、`pass`、`read`、`read_image`、`send_text`、`send_voice`、`web_fetch`、`web_search`、`write`，证明两个网络工具确实进入真实主意识模型请求。该自检只调用 `pass`，未向外部渠道发送消息。
+- 隔离 preset 会话 `elysia-web-verification-1794398559811` 中，两个工具都真实执行。`web_search` 到达 DeepSeek 搜索提供方，但返回 HTTP 401，现有 API key 无效；因此真实搜索尚未成功。本次没有替换凭据、切换提供方或新增搜索密钥。
+- 同一会话的 GitHub 抓取在 30 秒后超时。独立连通性检查中，`https://example.com/` 返回 HTTP 200、约 0.64 秒，`https://github.com/deepseek-ai/deepseek-harness` 20 秒连接超时，说明该 GitHub 失败不是工具装配错误。
+- 另一隔离 preset 会话 `elysia-web-verification-1794398835365` 只调用 `web_fetch` 抓取 `https://example.com/`，真实执行且工具错误数为 0。两个验证会话保留在 Web 历史中作为审计证据，均未调用任何外部渠道发送工具。
+- 随后按现有主模型渠道复用 `D1API_API_KEY` 进行脱敏核对与真实请求，密钥只发送到已配置的 `https://d1api.xin`，没有输出或写入文档。它与此前失效的 `DEEPSEEK_API_KEY` 是不同凭据。
+- D1 的 `deepseek-v4.1-flash` 在 `POST /v1/messages` 返回 HTTP 403，明确说明该模型不支持此接口并要求改用 `/v1/chat/completions`；这与 `deepseek-official` 所需的 Anthropic Messages＋`web_search_20250305` 协议不兼容，不能仅修改 `baseURL` 和 `apiKeyEnv` 解决。
+- D1 的 `POST /v1/responses` 虽返回 HTTP 200，但输出只有 `message`，没有 `web_search_call`；`POST /v1/chat/completions` 同样返回 HTTP 200，却没有工具调用、来源注释或服务端搜索计数。两者都不能作为真实搜索成功证据。`POST /v1/tools/search` 返回 HTTP 404，D1 也没有代理 DSH 已有的 DeepSeek 专用 Search API。
+- 因 D1 三条候选路径均未通过，本次不修改线上搜索 provider、不重启服务，也不把聊天可用误记为联网可用。当前结论是：网络工具已完成上线，`web_fetch` 的公开网页抓取已验收；`web_search` 仅完成装配与提供方失败路径验证，必须接入真正支持结构化原生搜索的端点与有效凭据后重新验收，不能宣称搜索已经可用。
+
+### 2026-11-12 D1 协议适配实施与验收
+
+- 新增 `src/d1-search.ts`、`src/d1-search-provider.ts` 和两组测试，更新包 exports、凭据依赖与 tsconfig 引用。没有修改 vendored DSH 源文件，也没有改变主模型、模型工具 Schema 或其他 session 的工具权限。
+- 16 个测试文件、86 项测试通过，`tsc -b ../plugins/conscious-mind` 通过。新增测试覆盖两种 OpenAI 协议、强制搜索请求、结构化来源映射、正文 URL 拒绝、message-only 拒绝、无自动 fallback、凭据脱敏和 `ctx.web` 真实注册。
+- Web 运行副本已同步并用 `cmp` 核对。首次部署把新插件误写成顶层覆盖项，真实工具返回 `configured web provider "d1-openai" is not registered`；随后改为 `- insert:` 挂载并完成受控重启，证明配置覆盖与插件新增必须区分。
+- 最终 Web 配置为 `searchProvider: d1-openai`、`fetchProvider: http`。只覆盖 `searchProvider` 曾导致抓取后端自动选择出现 `deepseek-fetch-api` 与 `http` 歧义，已显式保留原抓取后端并重新验证。
+- 主意识最终自检请求为 `2026-11-11T16-47-27-372Z-22d3ef03`，`agentAvailable: true`、空闲，实际工具清单仍包含原有全部工具、`web_search` 和 `web_fetch`；该自检只调用 `pass`，没有向外部渠道发消息。
+- 最终隔离搜索会话为 `elysia-web-verification-1794416074832`，请求 `2026-11-11T16-54-41-006Z-1a8e4220`。模型真实执行且只执行 `web_search`，`d1-openai` 已注册并被调用；工具错误数为 1、结构化来源 URL 为 0，准确错误为 `D1 returned no completed web_search_call; a message-only response is not native search`。
+- 最终隔离抓取会话 `elysia-web-verification-1794416042660` 只执行 `web_fetch`，工具错误数为 0。服务未认证健康检查继续返回预期 HTTP 401。
+- 当时结论：DSH 到 D1 的 OpenAI 协议适配已经完成并上线，剩余阻塞位于 D1 网关到上游的原生搜索转发。没有真实搜索轨迹时适配器会明确失败，不会把普通文本伪装成搜索结果。该段是 D1 方案的历史记录；后续 ModSearch 验收见下节。
+
+### 2026-11-12 ModSearch 接入与最终验收
+
+- 按用户要求，不再写入或使用 DeepSeek 官方 Key。安装前下载并审查 `@liustack/modsearch@5.10.12` 的 npm 包、DSH bundle patch、provider 注册与配置路由实现；没有修改 vendored DSH 源文件。
+- 插件已安装到 ElyHarn 实际使用的 `homes/web/profiles/web`，不是用户默认 profile。最终合并配置为 `searchProvider: modsearch`、`fetchProvider: http`。D1 适配器暂时保留用于诊断，但不再选中。
+- 通过 profile patch 固定 `xSearch: false`、`readPage: false`、`settingsCard: false`，仅开放原有 `web_search` 后端替换，不让新工具意外进入所有 session。插件自己的 `/modsearch/config` 不继承 DSH Connection 登录认证，因此设置路由保持关闭；实测返回 HTTP 404。
+- `doctor --json` 离线体检通过：Node 22.20.0 满足插件要求，未创建配置文件，未使用任何搜索 Key。默认搜索链为 Firecrawl、Keenable、You.com，再考虑其他已配置引擎；本次三个免注册引擎均判定 ready，首选 Firecrawl。`allowPrivateNetwork` 保持默认关闭。
+- 独立 CLI 实测 Firecrawl 返回 `status: ok`，引擎为 `firecrawl`，含真实条目 URL；这不是模型正文生成的搜索声明。
+- 受控重启保留原 cwd、启动参数与环境，ElyHarn 新 launcher PID 为 3626017；未认证 Web 健康检查仍返回预期 HTTP 401。旧 Elysium 未改动。
+- 最终隔离搜索会话 `elysia-web-verification-1794419040899`，请求 `2026-11-11T17-44-05-921Z-c779330a`。模型真实执行且只执行 `web_search`，工具错误数为 0，工具消息含 Firecrawl 返回的 8 条来源，其中包括 `https://www.deepseek.com/en/`。验收脚本只从实际 tool message 的 DSH `Sources:` 列表或结构化 `sources[]` 提取 URL，不从模型正文提取。
+- 主意识自检请求 `2026-11-11T17-44-53-479Z-5af80e52` 中 `agentAvailable: true`、空闲，工具清单仍为 `edit`、`glob`、`grep`、`pass`、`read`、`read_image`、`send_text`、`send_voice`、`web_fetch`、`web_search`、`write`，未增加 `x_search` 或 `read_page`；自检只调用 `pass`，未向外部渠道发消息。
+- 最终隔离抓取会话 `elysia-web-verification-1794419568938`，请求 `2026-11-11T17-52-52-551Z-9769650a`。模型真实执行且只执行 `web_fetch`，工具错误数为 0，`hasFetchedUrl: true`；此前请求 `2026-11-11T17-45-07-085Z-ef46221e` 的实际 tool message 已明确为 `Fetched https://example.com/ (HTTP 200)` 并含 Example Domain 正文，证明 ModSearch 没有改变原匿名 HTTP 抓取后端。
+- 当前结论：主意识真实网络搜索与网页抓取均已通过实机验收。免注册引擎仍受其网络、配额和限流约束；后续若失败，应查看 ModSearch attempts 的真实错误，不自动回退到官方 Key。
 
 ## 这两阶段先不做
 

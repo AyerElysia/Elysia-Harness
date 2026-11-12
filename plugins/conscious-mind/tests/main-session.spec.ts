@@ -12,8 +12,10 @@ import type { InboundEvent } from '../src/inbound.ts'
 import { MAIN_SESSION_CWD, MAIN_SESSION_ID, clearMainSessionDshContext, composeMainAgent, createMainSessionTurn, formatInboundBatch, isolateMainAgentContext } from '../src/main-session.ts'
 import { definePassTool } from '../src/pass.ts'
 import * as StandingPrompt from '../src/standing-prompts.ts'
+import * as CurrentTime from '../src/current-time.ts'
+import * as WebCapabilities from '../src/web-capabilities.ts'
 
-const exec = { signal: new AbortController().signal } as ToolRunContext
+const exec = { signal: new AbortController().signal, concludeTurn: vi.fn() } as unknown as ToolRunContext
 const testHome = mkdtempSync(join(tmpdir(), 'elysia-main-session-'))
 const promptBase = join(testHome, 'standing-prompts')
 const workspace = join(testHome, 'workspace')
@@ -42,7 +44,7 @@ function compositionContext() {
     plugin,
     on,
     systemPrompt: { suppressRuntimeContext },
-    tools: { register, restrict },
+    tools: { register, restrict, guard: vi.fn(() => vi.fn()) },
     effect(callback: () => () => void) { const dispose = callback(); disposers.push(dispose); return dispose },
   } as unknown as Context
   ;(ctx as { root: Context }).root = ctx
@@ -127,6 +129,7 @@ describe('pass tool', () => {
       passed: true,
       reason: '现在不想插话',
     })
+    expect(exec.concludeTurn).toHaveBeenCalledOnce()
   })
 })
 
@@ -181,8 +184,10 @@ describe('main session turn', () => {
     const register = vi.fn()
     const restrict = vi.fn()
     const plugin = vi.fn().mockResolvedValue(undefined)
-    await setup?.({ tools: { register, restrict }, systemPrompt: { suppressRuntimeContext: vi.fn() }, root: { on: vi.fn() }, on: vi.fn(), plugin, effect: (callback: () => () => void) => callback() } as unknown as Context)
-    expect(plugin).toHaveBeenCalledWith(StandingPrompt, promptConfig)
+    await setup?.({ tools: { register, restrict, guard: vi.fn(() => vi.fn()) }, systemPrompt: { suppressRuntimeContext: vi.fn() }, root: { on: vi.fn() }, on: vi.fn(), plugin, effect: (callback: () => () => void) => callback() } as unknown as Context)
+    expect(plugin).toHaveBeenCalledWith(StandingPrompt, { ...promptConfig, timeZone: 'Asia/Shanghai' })
+    expect(plugin).toHaveBeenCalledWith(CurrentTime, { timeZone: 'Asia/Shanghai' })
+    expect(plugin).toHaveBeenCalledWith(WebCapabilities)
     expect(register).toHaveBeenCalledOnce()
     expect(register.mock.calls[0]?.[0].name).toBe('pass')
     expect(restrict).toHaveBeenCalledWith({ allow: ['send_text', 'send_voice', 'read_image'] })
@@ -206,7 +211,7 @@ describe('main session turn', () => {
     expect(followup).toHaveBeenCalledOnce()
     expect(agent.whenIdle).toHaveBeenCalledOnce()
     expect(create).not.toHaveBeenCalled()
-    expect(scoped.plugin).toHaveBeenCalledTimes(4)
+    expect(scoped.plugin).toHaveBeenCalledTimes(6)
     scoped.dispose()
   })
 
@@ -259,8 +264,10 @@ describe('main agent tool scope', () => {
     const register = vi.fn()
     const restrict = vi.fn()
     const plugin = vi.fn().mockResolvedValue(undefined)
-    await composeMainAgent({ tools: { register, restrict }, systemPrompt: { suppressRuntimeContext: vi.fn() }, root: { on: vi.fn() }, on: vi.fn(), plugin, effect: (callback: () => () => void) => callback() } as unknown as Context, promptConfig)
-    expect(plugin).toHaveBeenCalledWith(StandingPrompt, promptConfig)
+    await composeMainAgent({ tools: { register, restrict, guard: vi.fn(() => vi.fn()) }, systemPrompt: { suppressRuntimeContext: vi.fn() }, root: { on: vi.fn() }, on: vi.fn(), plugin, effect: (callback: () => () => void) => callback() } as unknown as Context, promptConfig)
+    expect(plugin).toHaveBeenCalledWith(StandingPrompt, { ...promptConfig, timeZone: 'Asia/Shanghai' })
+    expect(plugin).toHaveBeenCalledWith(CurrentTime, { timeZone: 'Asia/Shanghai' })
+    expect(plugin).toHaveBeenCalledWith(WebCapabilities)
     expect(register.mock.calls[0]?.[0].name).toBe('pass')
     expect(restrict).toHaveBeenCalledWith({ allow: ['send_text', 'send_voice', 'read_image'] })
   })
@@ -270,10 +277,12 @@ describe('main agent tool scope', () => {
     const second = composeMainAgent(scoped.ctx, { ...promptConfig, files: [...promptConfig.files] })
     expect(first).toBe(second)
     await first
-    expect(scoped.plugin).toHaveBeenCalledTimes(4)
+    expect(scoped.plugin).toHaveBeenCalledTimes(6)
     expect(scoped.register).toHaveBeenCalledOnce()
     expect(scoped.restrict).toHaveBeenCalledOnce()
     await expect(composeMainAgent(scoped.ctx, { ...promptConfig, files: ['SOUL.md', 'USER.md'] }))
+      .rejects.toThrow(/拒绝替换/)
+    await expect(composeMainAgent(scoped.ctx, { ...promptConfig, timeZone: 'UTC' }))
       .rejects.toThrow(/拒绝替换/)
     scoped.dispose()
   })
@@ -285,11 +294,13 @@ it('disposes scoped plugins and context isolation when a later tool restriction 
   const scoped = compositionContext()
   const prompt = { dispose: vi.fn().mockResolvedValue(undefined) }
   const capabilities = { dispose: vi.fn().mockResolvedValue(undefined) }
-  scoped.plugin.mockResolvedValueOnce(prompt).mockResolvedValueOnce(capabilities)
+  const clock = { dispose: vi.fn().mockResolvedValue(undefined) }
+  scoped.plugin.mockResolvedValueOnce(prompt).mockResolvedValueOnce(clock).mockResolvedValueOnce(capabilities)
   scoped.restrict.mockImplementationOnce(() => { throw new Error('missing search tool') })
   await expect(composeMainAgent(scoped.ctx, promptConfig)).rejects.toThrow('missing search tool')
   expect(prompt.dispose).toHaveBeenCalledOnce()
   expect(capabilities.dispose).toHaveBeenCalledOnce()
+  expect(clock.dispose).toHaveBeenCalledOnce()
   expect(scoped.removeContextFilter).toHaveBeenCalledOnce()
   expect(scoped.restoreRuntimeContext).toHaveBeenCalledOnce()
 })
@@ -299,11 +310,13 @@ it('attempts every composition cleanup even when one child fails to dispose', as
   const scoped = compositionContext()
   const prompt = { dispose: vi.fn().mockResolvedValue(undefined) }
   const capabilities = { dispose: vi.fn().mockRejectedValue(new Error('guard disposal failed')) }
-  scoped.plugin.mockResolvedValueOnce(prompt).mockResolvedValueOnce(capabilities)
+  const clock = { dispose: vi.fn().mockResolvedValue(undefined) }
+  scoped.plugin.mockResolvedValueOnce(prompt).mockResolvedValueOnce(clock).mockResolvedValueOnce(capabilities)
   scoped.restrict.mockImplementationOnce(() => { throw new Error('missing search tool') })
   await expect(composeMainAgent(scoped.ctx, promptConfig)).rejects.toBeInstanceOf(AggregateError)
   expect(prompt.dispose).toHaveBeenCalledOnce()
   expect(capabilities.dispose).toHaveBeenCalledOnce()
+  expect(clock.dispose).toHaveBeenCalledOnce()
 })
 
 describe('main agent DSH context isolation', () => {
