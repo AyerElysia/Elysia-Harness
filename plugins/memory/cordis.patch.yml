@@ -1,0 +1,4 @@
+# Inactive scaffold. Explicit mounting is safe but adds no memory capability.
+- insert:
+    - id: elysia-memory
+      name: '@elysia/memory'
