@@ -1,4 +1,10 @@
 # Preserve the pinned upstream license bytes and their recorded checksums.
+#
+# The two tokenizer assets are checked against manifest.json's sha256 at load
+# time, so they must stay byte-exact too: `core.autocrlf=true` on Windows would
+# otherwise rewrite every LF as CRLF and the integrity check fails.
 plugins/context-inspector/tokenizers/deepseek-v4.1-flash/LICENSE -text whitespace=cr-at-eol
+plugins/context-inspector/tokenizers/deepseek-v4.1-flash/tokenizer.json -text
+plugins/context-inspector/tokenizers/deepseek-v4.1-flash/tokenizer_config.json -text
 # Retain the original OFL notice, including its upstream line whitespace.
 plugins/dsh-livestream/assets/templates/default/fonts/ZCOOLKuaiLe-OFL.txt -text whitespace=-blank-at-eol
