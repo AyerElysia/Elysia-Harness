@@ -12,7 +12,8 @@
 {
   "prompt": "想重新看看小星星有没有吃饭；这里由爱莉自己补充当初的来由和必要的会话信息。",
   "title": "关注小星星吃饭",
-  "after_seconds": 1800
+  "rrule": "DTSTART;TZID=Asia/Shanghai:20270101T183000\nRRULE:FREQ=DAILY;COUNT=1",
+  "target": "this_session"
 }
 ~~~
 
@@ -20,35 +21,36 @@
 
 ## 六类中文工具说明
 
-[src/plan-guidance.ts](src/plan-guidance.ts) 保存本轮获批的六类中文案例：关心对方日常、了解后续进展、接回中断话题、记住自己答应的事、安排自己的具体事情，以及接住对方明确提出的提醒。它们用于解释何时可以自主使用计划工具，不是关键词触发器、固定调度规则或代码代做的事项判断；是否创建、时间和内容仍由她结合具体情况决定。
+[src/plan-guidance.ts](src/plan-guidance.ts) 保存六类中文案例：关心对方日常、了解后续进展、接回中断话题、记住自己答应的事、安排自己的具体事情，以及接住对方明确提出的提醒。案例说明提醒可以怎么写，不是关键词触发器、固定调度规则或授权。只有对方明确要求时才创建或改动定时任务；此前明确授权且正在执行的任务仍可按该授权处理。
 
-[plan-tools](src/plan-tools.ts) 在 owner 精确 scope 的 system-prompt/assemble waterfall 中先 await next，随后只追加 schedule_create、schedule_list、schedule_delete 和 schedule_update 的 description。其他 scope（包括后代 agent）保持原样；四个工具的原生参数、校验、返回值与 execute 不变。
+[plan-tools](src/plan-tools.ts) 使用 DSH 支持的必需运行上下文提供中文指导。只有当前作用域精确匹配工具的挂载者且原生工具可用时，该说明才会进入模型请求；其他作用域（包括后代 agent）不会收到。
 
-ctx.tools.schemas 仍保留原英文工具定义；中文说明存在于实际模型 assembly 的 tools[].description，不通过修改注册表实现。complete:true 的主体提示词正文保持不变，不改写 SOUL.md、USER.md 或 MEMORY.md，也不把案例当成已发生经历或已建立的正式计划。
+工具参数、校验、返回值、执行与模型可见的工具描述均使用原生定义。主体提示词正文保持不变，不改写 SOUL.md、USER.md 或 MEMORY.md，也不把案例当成已发生经历或已建立的正式计划。
 
 ## 原生工具与 Schema
 
-本轮复用 @deepseek-ai/dsh-tool-schedule 已定义的模型工具，参数、校验、返回值与 execute 保持原生实现，只在模型组装时补充中文 description。参数与结果 Schema 的唯一实现位于 [tool-schedule](../../dsh/packages/schedule/tool-schedule/src/index.ts)，记录及结果类型位于 [schedule domain](../../dsh/packages/schedule/schedule/src/domain.ts)。
+参数与结果 Schema 的唯一实现位于 [tool-schedule](../../dsh/packages/schedule/tool-schedule/src/index.ts)，记录及结果类型位于 [schedule types](../../dsh/packages/schedule/schedule/src/types.ts)。
 
-最小相对时间创建路径的输入顺序沿用原生定义：
+一次提醒的创建参数：
 
 | 参数 | 类型 | 必填 | 空值、默认与校验 |
 |---|---|---|---|
 | prompt | string | 是 | 去除首尾空白后非空，无默认；保存待提醒的原文 |
 | title | string | 是 | 去除首尾空白后非空，至多 120 字符，无默认；按原生说明填写简短名称 |
-| after_seconds | number | 此路径是 | 正的安全整数秒，无默认；和其他时间选择器互斥 |
+| rrule | string | 是 | `DTSTART` 指定未来绝对时间，下一行为 `RRULE:FREQ=DAILY;COUNT=1`；相对延迟先换算成绝对时间 |
+| target | string | 是 | `this_session` 递回当前会话 |
 
-创建工具完整名称为 schedule_create，支持 after_seconds、at、every_seconds、daily、weekly、cron 六种原生时间选择器，且必须恰好提供一种。本版验收先覆盖 after_seconds，不删改其余原生 Schema，也不把“计划系统”扩成另一套循环任务协议。
+原生 `schedule_create` 还支持循环规则及新会话目标；同一主意识提醒使用 `this_session`，不新建会话。
 
-相对创建成功返回原生记录投影：id、title、prompt、scheduledAt（ISO 时间）、state（scheduled 或 overdue）、deliveryMode（host）、kind（after）与 afterSeconds。错误返回原生 {code, message}，例如 invalid_prompt、invalid_selector、invalid_rule、subagent_session 或 internal_error。只有成功记录才表示已耐久保存；错误不能当成已设好提醒。
+成功结果含 `id`、`scheduledAt`、`scheduledAtLocal`、`target`、`status` 等。错误返回原生 `{code, message}`；错误不能当成已设好提醒。
 
 其他三个工具也原样保留，完整输入与结果 Schema 直接复用上述唯一实现：
 
-- schedule_list：无参数，返回当前 session 的活动提醒数组或原生错误。
-- schedule_delete：必填非空 id、无默认；返回 {id, deleted:true}，或 {id, deleted:false, code:"schedule_not_found"}，或原生错误。已经入箱的提醒不能被此操作撤回。删除的是调度记录，创建、更新和删除工具活动仍在原生 Session 历史中。
-- schedule_update：必填非空 id；title、prompt 及原生 at/every_seconds/daily/weekly/cron 选择器可选，缺省保留原值，时间选择器至多一种。成功返回原生提醒投影，冲突或已结束返回原生 {id, updated:false, code}。不支持 after_seconds 更新；更换相对延迟按原生契约创建新提醒，不伪装为原地更新。
+- `schedule_list`：分页列出 Host 任务，可按活动状态筛选。
+- `schedule_view`：按 `id` 查看一条 Host 任务，包括目标会话。
+- `schedule_edit`：按 `id` 更新、暂停、恢复或删除；可提供 `expectedUpdatedAt` 防止覆盖较新更改。删除不能撤回已经入箱的提醒。
 
-这四个工具自动绑定实际调用者 session，没有模型可填的任意目标 sessionId。委派子代理沿用原生拒绝规则。
+工具可见性受挂载作用域限制。原生管理接口按 Host 任务 ID 操作，不再按调用者会话分区；修改前应核对任务及其目标。委派子代理沿用原生拒绝规则。
 
 ## 接入范围
 

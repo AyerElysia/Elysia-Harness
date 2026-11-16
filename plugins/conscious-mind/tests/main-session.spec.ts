@@ -14,6 +14,7 @@ import { definePassTool } from '../src/pass.ts'
 import * as StandingPrompt from '../src/standing-prompts.ts'
 import * as CurrentTime from '../src/current-time.ts'
 import * as WebCapabilities from '../src/web-capabilities.ts'
+import * as SkillCapabilities from '../src/skill-capabilities.ts'
 
 const exec = { signal: new AbortController().signal, concludeTurn: vi.fn() } as unknown as ToolRunContext
 const testHome = mkdtempSync(join(tmpdir(), 'elysia-main-session-'))
@@ -188,6 +189,7 @@ describe('main session turn', () => {
     expect(plugin).toHaveBeenCalledWith(StandingPrompt, { ...promptConfig, timeZone: 'Asia/Shanghai' })
     expect(plugin).toHaveBeenCalledWith(CurrentTime, { timeZone: 'Asia/Shanghai' })
     expect(plugin).toHaveBeenCalledWith(WebCapabilities)
+    expect(plugin).toHaveBeenCalledWith(SkillCapabilities, { rootDir: join(workspace, 'skills') })
     expect(register).toHaveBeenCalledOnce()
     expect(register.mock.calls[0]?.[0].name).toBe('pass')
     expect(restrict).toHaveBeenCalledWith({ allow: ['send_text', 'send_voice', 'read_image'] })
@@ -211,7 +213,7 @@ describe('main session turn', () => {
     expect(followup).toHaveBeenCalledOnce()
     expect(agent.whenIdle).toHaveBeenCalledOnce()
     expect(create).not.toHaveBeenCalled()
-    expect(scoped.plugin).toHaveBeenCalledTimes(6)
+    expect(scoped.plugin).toHaveBeenCalledTimes(7)
     scoped.dispose()
   })
 
@@ -268,6 +270,7 @@ describe('main agent tool scope', () => {
     expect(plugin).toHaveBeenCalledWith(StandingPrompt, { ...promptConfig, timeZone: 'Asia/Shanghai' })
     expect(plugin).toHaveBeenCalledWith(CurrentTime, { timeZone: 'Asia/Shanghai' })
     expect(plugin).toHaveBeenCalledWith(WebCapabilities)
+    expect(plugin).toHaveBeenCalledWith(SkillCapabilities, { rootDir: join(workspace, 'skills') })
     expect(register.mock.calls[0]?.[0].name).toBe('pass')
     expect(restrict).toHaveBeenCalledWith({ allow: ['send_text', 'send_voice', 'read_image'] })
   })
@@ -277,7 +280,7 @@ describe('main agent tool scope', () => {
     const second = composeMainAgent(scoped.ctx, { ...promptConfig, files: [...promptConfig.files] })
     expect(first).toBe(second)
     await first
-    expect(scoped.plugin).toHaveBeenCalledTimes(6)
+    expect(scoped.plugin).toHaveBeenCalledTimes(7)
     expect(scoped.register).toHaveBeenCalledOnce()
     expect(scoped.restrict).toHaveBeenCalledOnce()
     await expect(composeMainAgent(scoped.ctx, { ...promptConfig, files: ['SOUL.md', 'USER.md'] }))

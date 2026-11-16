@@ -8,6 +8,12 @@ import type { Context } from '@deepseek-ai/cordis'
 import { scopeOf } from '@deepseek-ai/dsh-scope'
 import z from '@deepseek-ai/schemastery'
 import { isAbsolute, resolve } from 'node:path'
+declare module '@deepseek-ai/cordis' {
+  interface Events {
+    'elysia/main-prompt-addon'(signal: AbortSignal): string | undefined
+  }
+}
+
 import type {} from '@deepseek-ai/dsh-system-prompt'
 import { StandingPromptError, assertStandingFileName, loadStandingPrompt } from './load.ts'
 
@@ -69,6 +75,12 @@ export function apply(ctx: Context, config: Config): void {
     order: 0,
     ...(complete ? { complete: true } : {}),
     interpolate: false,
-    text: () => loadStandingPrompt(baseDir, config.files, required),
+    text: ({ signal }) => {
+      const base = loadStandingPrompt(baseDir, config.files, required)
+      // Complete prompt sections are restored after assembly; add scoped
+      // transport policy here, never by replacing the final model request.
+      const addon = signal && ctx.bail('elysia/main-prompt-addon', signal)
+      return typeof addon === 'string' && addon.trim() ? `${base}\n\n${addon.trim()}` : base
+    },
   }), 'elysia-standing-prompts.section()')
 }

@@ -20,11 +20,11 @@ import { defineTool } from '@deepseek-ai/dsh-tools'
 import TypertRegistry from '@deepseek-ai/dsh-typert-registry'
 import WebRuntime from '@deepseek-ai/dsh-web'
 import * as PlanHost from '@elysia/proactive-system/plan-host'
-import { PLAN_TOOL_GUIDANCE } from '../../proactive-system/src/plan-guidance.ts'
+import { PLAN_GUIDANCE } from '../../proactive-system/src/plan-guidance.ts'
 import { expect, it, onTestFinished, vi } from 'vitest'
 import { MAIN_SESSION_ID, composeMainAgent, createMainSessionTurn } from '../src/main-session.ts'
 
-const PLAN_TOOLS = ['schedule_create', 'schedule_delete', 'schedule_list', 'schedule_update']
+const PLAN_TOOLS = ['schedule_create', 'schedule_edit', 'schedule_list', 'schedule_view']
 
 async function waitFor(test: () => boolean | Promise<boolean>, timeout = 5000): Promise<void> {
   const deadline = Date.now() + timeout
@@ -139,14 +139,22 @@ function scheduleInputs(agent: Agent) {
 }
 
 async function createPlan(ctx: Context, agent: Agent, prompt: string): Promise<void> {
-  const result = await ctx.tools.execute({
-    callId: ToolCallId('isolated-plan-create'), name: 'schedule_create',
-    arguments: { title: 'Isolated delayed plan', prompt, after_seconds: 1 }, agent,
+  const start = new Date(Date.now() + 1800).toISOString().replace(/[-:]/g, '').replace(/\.\d{3}/, '')
+  const rrule = `DTSTART:${start}\nRRULE:FREQ=DAILY;COUNT=1`
+  const batch = await ctx.tools.execute({
+    calls: [{
+      type: 'tool-call', id: ToolCallId('isolated-plan-create'), name: 'schedule_create',
+      arguments: JSON.stringify({ title: 'Isolated delayed plan', prompt, rrule, target: 'this_session' }),
+    }],
+    agent,
     signal: new AbortController().signal,
   })
-  if (result.isError) throw new Error(JSON.stringify(result))
-  expect(result.isError).toBe(false)
-  expect(await ctx.schedule.list({ sessionId: MAIN_SESSION_ID })).toHaveLength(1)
+  const result = batch.results[0]?.result
+  expect(result).toMatchObject({
+    isError: false,
+    value: { target: { kind: 'session', sessionId: MAIN_SESSION_ID }, status: 'active' },
+  })
+  expect((await ctx.schedule.list()).items).toHaveLength(1)
 }
 
 it('composes all four real native plan tools only in the main Agent scope', async () => {
@@ -172,7 +180,7 @@ it('composes all four real native plan tools only in the main Agent scope', asyn
   expect(test.ctx.tools.schemas(ordinary.agent).map(tool => tool.name)).not.toEqual(expect.arrayContaining(PLAN_TOOLS))
 })
 
-it('delivers a real after_seconds plan durably into the busy original main Session without waiting for idle', async () => {
+it('delivers a real one-time plan durably into the busy original main Session without waiting for idle', async () => {
   const home = await temporaryHome()
   const test = await fixture(home)
   const turn = createMainSessionTurn(test.ctx, test.config)
@@ -203,19 +211,26 @@ it('delivers a real after_seconds plan durably into the busy original main Sessi
   expect(calendarText).toContain('时区 Asia/Shanghai；UTC 偏移 GMT+08:00')
   expect(calendarText).toMatch(/星期[一二三四五六日]/)
   expect(calendarText).toContain('独立采样时刻（UTC ISO）')
+  const planContext = test.adapter.requests[0]?.messages.find(message =>
+    message.role === 'user' && message.source?.kind === 'runtime-context')
+  if (planContext?.role !== 'user') throw new Error('The scoped plan guidance must reach the real model adapter')
+  expect(planContext.source).toMatchObject({
+    kind: 'runtime-context', form: 'snapshot',
+    sections: expect.arrayContaining([{ name: 'elysia:plan-guidance', text: PLAN_GUIDANCE }]),
+  })
+  expect(planContext.content).toEqual([{ type: 'text', text: expect.stringContaining(PLAN_GUIDANCE) }])
   for (const name of PLAN_TOOLS) {
-    const guidance = PLAN_TOOL_GUIDANCE.get(name)
     const sent = test.adapter.requests[0]?.tools?.find(tool => tool.name === name)
     const native = test.ctx.tools.schemas(agent).find(tool => tool.name === name)
-    if (guidance === undefined || sent === undefined || native === undefined) throw new Error('Four plan descriptions must reach the real model adapter')
-    expect(sent.description).toBe(`${native.description}\n\n${guidance}`)
-    expect(sent.parameters).toEqual(native.parameters)
+    expect(native).toBeDefined()
+    expect(sent).toEqual(native)
   }
-  const idle = vi.spyOn(agent, 'whenIdle')
   const flush = vi.spyOn(test.ctx.sessions, 'flush')
   try {
     await waitFor(async () => (await test.ctx.schedule.catalog()).some(task => task.lastDelivery !== undefined))
-    expect(idle).not.toHaveBeenCalled()
+    // The Host may observe whenIdle to release the execution slot later.
+    // The gated first request must still be busy when durable delivery succeeds.
+    expect(agent.status).not.toBe('idle')
     expect(test.adapter.requests).toHaveLength(1)
     expect(test.ctx.agents.get(MAIN_SESSION_ID)).toBe(agent)
     expect(test.resolve).toHaveBeenCalledWith(MAIN_SESSION_ID)
@@ -243,7 +258,7 @@ it('restores an overdue durable plan only after createMainSessionTurn publishes 
   await createPlan(first.ctx, firstAgent, 'Public fixture reminder retained across restart')
   expect(await first.ctx.sessions.flush(firstAgent.session)).toBe(true)
   await first.stop()
-  await new Promise(resolve => setTimeout(resolve, 1100))
+  await new Promise(resolve => setTimeout(resolve, 1900))
   const before = await readFile(join(home, 'storage', 'schedule.json'), 'utf8')
   const second = await fixture(home)
   const gate = Promise.withResolvers<void>()

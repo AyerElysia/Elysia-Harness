@@ -27,6 +27,7 @@ import * as StandingPrompt from './standing-prompts.ts'
 import type { Config as StandingPromptConfig } from './standing-prompts.ts'
 import * as FileCapabilities from './file-capabilities.ts'
 import * as WebCapabilities from './web-capabilities.ts'
+import * as SkillCapabilities from './skill-capabilities.ts'
 import * as CurrentTime from './current-time.ts'
 import { hasLocalDialogueInput, platformMessageSource } from './reply-origin.ts'
 import { installLocalSendConfirmation } from './local-send-confirmation.ts'
@@ -187,6 +188,7 @@ export function composeMainAgent(agentCtx: Context, promptConfig: MainSessionCon
     let currentTime: { dispose(): Promise<unknown> } | undefined
     let capabilities: { dispose(): Promise<unknown> } | undefined
     let web: { dispose(): Promise<unknown> } | undefined
+    let skills: { dispose(): Promise<unknown> } | undefined
     let plans: { dispose(): Promise<unknown> } | undefined
     let compaction: { dispose(): Promise<unknown> } | undefined
     let compactCommand: { dispose(): Promise<unknown> } | undefined
@@ -209,6 +211,9 @@ export function composeMainAgent(agentCtx: Context, promptConfig: MainSessionCon
         ...config.backupRetention === undefined ? {} : { backupRetention: config.backupRetention },
       })
       web = await agentCtx.plugin(WebCapabilities)
+      skills = await agentCtx.plugin(SkillCapabilities, {
+        rootDir: resolve(config.workspaceDir ?? resolve(config.baseDir, '../workspace'), 'skills'),
+      })
       if (config.scheduledPlans === true) plans = await agentCtx.plugin(PlanTools)
       // Reuse DSH's durable compaction transaction and human command. Manual
       // only: adding this entry point must not change automatic turn behavior.
@@ -231,6 +236,7 @@ export function composeMainAgent(agentCtx: Context, promptConfig: MainSessionCon
         Promise.resolve().then(() => compactCommand?.dispose()),
         Promise.resolve().then(() => compaction?.dispose()),
         Promise.resolve().then(() => plans?.dispose()),
+        Promise.resolve().then(() => skills?.dispose()),
         Promise.resolve().then(() => web?.dispose()),
         Promise.resolve().then(() => capabilities?.dispose()),
         Promise.resolve().then(() => currentTime?.dispose()),

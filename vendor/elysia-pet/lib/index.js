@@ -33,6 +33,7 @@ import { loadKit } from './frames.js'
 import { createResolver } from './animations.js'
 import { createSkin, setHostDeps, setAnimationResolver, setPngDecoder, decodeAnimation } from './skin.js'
 import { appendSkinId, appendSettingOption, activateSkin } from './register.js'
+import { ensureHostPatched, inspectHost } from './host-patch.js'
 
 export const name = 'dsh-tui-elysia-pet'
 
@@ -86,6 +87,48 @@ function resolveHostRoot() {
   return undefined
 }
 
+// ── 模块加载即注册白名单 ────────────────────────────────────────────────
+//
+// 宿主保存设置时会把 companion.skin 过一遍 normalizeCompanionSkin，白名单里
+// 没有的 id 一律回落 deepy。而插件原来的注册发生在 apply() 里 —— 那已经是
+// TUI 起来之后。结果：
+//
+//   用户在设置里点「爱莉」→ 保存 → normalize 不认识 elysia → 落回 deepy
+//   → 界面刷新后那一项变回别的，看起来「点了就没了」
+//
+// 所以白名单必须在**插件模块被 import 的那一刻**就追加。模块求值时机早于
+// 任何设置读写，注册完整之后 normalize 才认得这个 id。
+//
+// 这里只追加白名单（一个字符串进数组），不构造皮肤对象：皮肤要等 apply()
+// 拿到宿主依赖（React / ui / hooks）才能建。设置项选项表同理，要 apply()
+// 里用真实 definitions 模块追加 —— 但白名单是纯数据，越早越好。
+//
+// 失败静默：宿主结构不对时不注册，插件本身仍会在 apply() 里再试一次。
+try {
+  const __earlyRoot = resolveHostRoot()
+  if (__earlyRoot !== undefined) {
+    const __types = join(__earlyRoot, 'lib', 'types')
+
+    // ① 白名单：保存设置时的 normalize 靠它认这个 id
+    const __earlyPrefs = await import(pathToFileURL(join(__types, 'tuiDisplayPrefs.js')).href)
+    const __ids = __earlyPrefs.COMPANION_SKIN_IDS
+    if (Array.isArray(__ids) && !__ids.includes('elysia')) __ids.push('elysia')
+
+    // ② 选项表：设置界面按它决定列表里有什么、以及 cycleField 的索引基准。
+    // 少这项时，界面上看不到「爱莉」；即便通过别的方式选中，cycleField 的
+    // findIndex 也会返回 -1 → 每次点击都跳回 options[0]（deepy），表现为
+    // 「点一下就没了」。
+    const __earlyDefs = await import(pathToFileURL(join(__types, 'settings', 'definitions.js')).href)
+    const __options = __earlyDefs.SETTING_DEFINITIONS?.['companion.skin']?.options
+    if (Array.isArray(__options) && !__options.some((o) => o?.value === 'elysia')) {
+      __options.push({ value: 'elysia', label: 'Elysia', descriptions: { zh: '爱莉' } })
+    }
+  }
+} catch {
+  /* 宿主结构不符时留给 apply() 重试 */
+}
+
+
 /**
  * 挂载。
  * @param {import('@deepseek-ai/cordis').Context} ctx
@@ -97,6 +140,34 @@ export async function apply(ctx, rawConfig) {
   if (root === undefined) {
     ctx.logger?.warn?.('dsh-tui-elysia-pet: 找不到 @deepseek-harness-tui/dsh-tui，皮肤未注册')
     return
+  }
+
+  // ── 宿主补丁自愈 ──────────────────────────────────────────────────────
+  //
+  // dsh-tui 的启动顺序决定了插件没有「首帧之前」的执行机会：
+  //
+  //   await apply(...)                 // 首帧在这里就画完了
+  //   await slot.firstFrameFlushed?.()
+  //   await root.compose(...)          // 插件 apply() 在这里才开始跑
+  //
+  // 所以本次启动看到的内置宠物已经改不了了；这里能做的只是**把宿主文件补好**，
+  // 让**下次启动**干净。dsh-tui 升级会覆盖 node_modules，这块自愈就是为那之后
+  // 的第一次启动准备的 —— 补完之后第二次起就不闪。
+  //
+  // 幂等：已打过则只做一次 stat 级检查。失败不影响插件本身（皮肤照常注册，
+  // 只是下次启动还会闪一下），所以整段包在 try 里、异常只 warn。
+  try {
+    const outcome = ensureHostPatched(root)
+    if (outcome.changed) {
+      ctx.logger?.info?.(
+        'dsh-tui-elysia-pet: 已自动给宿主打补丁（' + outcome.steps.join(', ') + '）。' +
+          '本次启动仍会用内置宠物作首帧，下次启动起生效。',
+      )
+    } else if (!outcome.patched && outcome.reason !== undefined) {
+      ctx.logger?.warn?.('dsh-tui-elysia-pet: 宿主补丁未生效 —— ' + outcome.reason)
+    }
+  } catch (error) {
+    ctx.logger?.warn?.('dsh-tui-elysia-pet: 宿主补丁自愈失败 —— ' + String(error?.message ?? error))
   }
 
   const types = join(root, 'lib', 'types')

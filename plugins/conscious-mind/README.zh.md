@@ -27,8 +27,7 @@ files:
   - SOUL.md
   - USER.md
   - MEMORY.md
-  - EXISTENCE.md
-  - TOOLS.md
+  - CONSCIOUS-MIND.md
 required:
   - SOUL.md
 complete: true
@@ -40,7 +39,7 @@ complete: true
 
 加载继续复用 `ctx.systemPrompt.section()`，使用 `interpolate: false` 和同步 `text` 回调，正文中的 `{{` 保持原样。complete 模式只让当前作用域的这段文本成为整份提示词，覆盖该 agent 的 Harness 身份段，不覆盖其他 session。后续模型步骤中的提示词变化由 DSH 既有投影处理；会话闲着时修改文件本身不会触发一轮。
 
-Web profile 目前实际添加了一个 `elysia` preset，挂载同一子插件并选择上面五份文件。`elysia-core` 仍只有需求，尚无对应 preset 配置。preset 创建的 session 与平台主 session 分开；2026-11-11 已验证受控重启后可以新建并完成真实模型轮次，既有 preset session 的跨重启 resume 不在本次验收范围内。主运行层只接受作用域装配凭据完整且配置匹配的 live agent，不会自动热迁移旧的未装配实例。独立终端入口也在自己的 scope 中挂载这个子插件。
+Web profile 目前实际添加了一个 `elysia` preset，挂载同一子插件并选择上面四份文件。2026-11-14 起，原 `EXISTENCE.md` 与 `TOOLS.md` 合并为主意识专属的 `CONSCIOUS-MIND.md`；直播仍只读 `SOUL.md`、`LIVE.md`，语音仍只读 SOUL。`elysia-core` 仍只有需求，尚无对应 preset 配置。preset 创建的 session 与平台主 session 分开；2026-11-11 已验证受控重启后可以新建并完成真实模型轮次，既有 preset session 的跨重启 resume 不在本次验收范围内。主运行层只接受作用域装配凭据完整且配置匹配的 live agent，不会自动热迁移旧的未装配实例。独立终端入口也在自己的 scope 中挂载这个子插件。
 
 主体文件正文保存在本包之外，插件只读取名单，不创作或迁移正文。当前渠道和会话现场仍来自入站事件，不写进稳定前缀。
 
@@ -70,6 +69,14 @@ Web profile 目前实际添加了一个 `elysia` preset，挂载同一子插件�
 
 D1 OpenAI 适配器暂时保留用于诊断，但不再选中。历史上官方 DeepSeek 凭据返回 HTTP 401；D1 上游只返回 message，没有 `completed web_search_call`，因此此前真实搜索未通过。2026-11-12 改用 ModSearch 后，隔离会话真实执行 `web_search`，错误数为 0，并返回 Firecrawl 的 8 条来源；`web_fetch` 也重新取得 Example Domain 的 HTTP 200 正文。真实主意识工具清单未增加其他工具，服务保持健康。免注册引擎仍受配额与限流约束，失败时应查看真实 attempts，不能将工具可见或 HTTP 200 当作搜索成功。详细契约、历史排查与验收记录见 `REQUIREMENTS.zh.md` 第五阶段。
 
+## 技能能力
+
+`@elysia/conscious-mind/skill-capabilities` 在固定主意识与 Web `elysia` preset 的 agent scope 中组合 DSH 原生 `@deepseek-ai/dsh-skill-filesystem` 和 `@deepseek-ai/dsh-tool-skill`。唯一根目录是 `/home/ayerelysia/Elysia/Data/workspace/skills`；`includeDefaultRoots: false`，只读取这里的直属 `<skill-name>/SKILL.md`，不加载 DSH 默认、bundled 或开发目录。模型只新增原生 `skill({ name })` 工具，Skill 文件维护继续使用已有文件工具，没有另造管理工具。
+
+DSH 在后续模型步骤以 durable user-role `<system-reminder>` 提供技能名称和描述，不改写固定 system prompt，也不一次注入全部正文。模型按精确名称调用 `skill` 后才看到 `<skill_content>`；每次调用会重读当前 `SKILL.md`，资源基目录随结果返回。Watcher 让新增、删除和 frontmatter 变化进入后续目录投影，但文件变化本身不会唤醒空闲 Session。全局 `dsh-skill-filesystem`、`dsh-tool-skill` 保持 disabled 是预期状态，能力只存在于目标 Agent 作用域。
+
+接入 Skills 不新增 shell、脚本执行或额外文件权限，也不包含学习、审核、归档和潜意识流程。实现与真实模型验收见[主意识 Skills 实施记录](../../docs/report/2026-11-15-conscious-mind-skills.zh.md)。
+
 ## send_text
 
 > 状态：工具已实现。QQ、飞书、KOOK 的 `conversation` 格式由各自的渠道插件定义。段间停顿和主动外联仍待定。
@@ -90,7 +97,7 @@ DSH 打字和通话转写在当前会话收到回复。普通对话直接写 ass
 
 Harness 提供 `agents` 服务时，插件自动把 pending 接到主意识。主意识只有一个 agent、一条固定 id 为 `elysia-conscious-mind` 的长期 session：已有 live agent 必须具备完整且配置匹配的提示词/工具装配凭据，才可复用；没有 live agent 时尝试 resume。resume 失败后若没有兼容的并发恢复实例，当前代码仍会尝试按同一 id create，尚未区分 session 不存在与其他恢复失败。不兼容的 live 实例会明确失败，不执行 followup，入站批次留在 pending。每批事件写成一个 user message，通过 `followup()` 交给 Harness 原生 agent loop，并等待 `whenIdle()`。模型、会话历史、压缩和工具调用都由 Harness 管理，不再走独立的 chat-completions fetch。
 
-create/resume 的 setup 路径通过 `composeMainAgent` 挂载作用域前缀，并暴露 `send_text`、`send_voice`、DSH 原生的 `read`、`read_image`、`write`、`edit`、`glob`、`grep`、`web_search`、`web_fetch` 和本作用域注册的 `pass`。setup 成功后，在以 agent context 为键的进程内 WeakMap 中记录固定配置签名和完成状态，不记录正文；相同配置重复 setup 复用同一 promise，不同配置拒绝替换，scope 卸载时清除凭据。既有或竞态恢复的 live agent 只有凭据完整且匹配时才能借用；旧未装配实例需经正常作用域恢复，不改写 header 或私有历史。代码执行及其他全局工具继续屏蔽；文件工具使用下述作用域权限。`read_image` 只用于主动读取工作区内获准的本地图片，聊天图片走独立的附件入站链路。`pass` 必填 `reason`，把这一轮不说话的原因留在 session，不触碰任何渠道；成功执行时调用原生 `exec.concludeTurn()` 请求结束本轮。她可以回复一个或多个会话，也可以不说话，运行时不强迫二选一中的任何一个。已取走的事件留在长期 session 历史中。旧的 `createSendTextTurn` 仍保留给独立实验，但不是 ElyHarn 服务安装的主意识回复轮。
+create/resume 的 setup 路径通过 `composeMainAgent` 挂载作用域前缀，并暴露 `send_text`、`send_voice`、DSH 原生的 `read`、`read_image`、`write`、`edit`、`glob`、`grep`、`web_search`、`web_fetch`、`skill` 和本作用域注册的 `pass`。setup 成功后，在以 agent context 为键的进程内 WeakMap 中记录固定配置签名和完成状态，不记录正文；相同配置重复 setup 复用同一 promise，不同配置拒绝替换，scope 卸载时清除凭据。既有或竞态恢复的 live agent 只有凭据完整且匹配时才能借用；旧未装配实例需经正常作用域恢复，不改写 header 或私有历史。代码执行及其他全局工具继续屏蔽；文件工具使用下述作用域权限。`read_image` 只用于主动读取工作区内获准的本地图片，聊天图片走独立的附件入站链路。`pass` 必填 `reason`，把这一轮不说话的原因留在 session，不触碰任何渠道；成功执行时调用原生 `exec.concludeTurn()` 请求结束本轮。她可以回复一个或多个会话，也可以不说话，运行时不强迫二选一中的任何一个。已取走的事件留在长期 session 历史中。旧的 `createSendTextTurn` 仍保留给独立实验，但不是 ElyHarn 服务安装的主意识回复轮。
 
 `pass` 的成功结果先由原生工具执行链写入 `tool/result`，再按 agent loop 的收尾规则结束本轮；不能只返回 `{ passed: true }` 而让模型继续为同一选择空转。执行期间真正到达的新输入仍按原生 inbox 的待处理规则继续，不清空、丢弃或按正文去重。`time-context` 与 `elysia-calendar-context` 只是实际 `pre-step` 中附加的框架上下文，不是独立 inbox 来信或唤醒源；正确收尾后，它们不会自行开启下一步。这项修复不增加关键词触发或固定判断规则。事故与真实验收进展见[pass 轮次收尾记录](../../docs/report/2026-11-12-pass-turn-completion.md)，此处不预先声明部署验收通过。
 
@@ -308,7 +315,7 @@ parameters: {
 
 README 和需求文档本身不会进入模型上下文。`send-voice.ts` 通过 DSH `defineTool` 注册，DSH 在模型请求中下发工具的 `description` 与参数 Schema。这对应 Elysium 的 `action_description` 和 `Annotated` 参数说明，不另建提示词通道。
 
-工具描述明确固定爱莉本地音色、`text` 中的 Breeze 原生声音事件、`expression_instruction` 只控制本次表达、已有音频改用 `send_file`、QQ 角色语音不是本地 TTS。底层采样与参考音频字段不写进模型说明。`TOOLS.md` 只写使用语音表达的稳定偏好，不复制参数 Schema。完整文案与测试要求见 `REQUIREMENTS.zh.md`。
+工具描述明确固定爱莉本地音色、`text` 中的 Breeze 原生声音事件、`expression_instruction` 只控制本次表达、已有音频改用 `send_file`、QQ 角色语音不是本地 TTS。底层采样与参考音频字段不写进模型说明。`CONSCIOUS-MIND.md` 只写使用语音表达的稳定偏好，不复制参数 Schema。完整文案与测试要求见 `REQUIREMENTS.zh.md`。
 
 ## 终端入口
 

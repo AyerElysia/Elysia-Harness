@@ -9,3 +9,5 @@ allowBuilds:
   koffi: true
   node-pty: true
   protobufjs: true
+minimumReleaseAgeExclude:
+  - '@deepseek-harness-tui/dsh-tui@0.20.0'

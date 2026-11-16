@@ -14,8 +14,7 @@
           - SOUL.md
           - USER.md
           - MEMORY.md
-          - EXISTENCE.md
-          - TOOLS.md
+          - CONSCIOUS-MIND.md
 
     # Channels stay off until an adapter config exists on this host; each reads
     # an absolute Elysium path and fails loud when absent.
@@ -101,17 +100,3 @@
     splashAnimation: drag
     idleSpeed: 1
     activateOnLoad: true
-- id: dsh-ops-file
-  name: dsh-ops/file
-  config:
-    promptPolicy: true
-    required: false
-    configUpdateVersion: 2
-- id: dsh-ops-shell
-  name: dsh-ops/shell
-  config:
-    promptPolicy: true
-    publishBashTool: true
-    shellPolicy: advise
-    allowSystemShellFallback: false
-    configUpdateVersion: 2

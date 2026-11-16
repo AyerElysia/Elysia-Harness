@@ -15,6 +15,8 @@ import { createVoiceAgent, VoiceAgent, type VoiceDriverRequest } from '@elysia/v
 import { prepareVoiceSession } from '@elysia/voice-call/src/persistence.ts'
 import { acceptsCallMode, equalSecret, LIMIT, MAIN_SESSION, PREFIX, record, ROOM, SESSION, workerEvent, type InputMode, type WorkerEvent } from './bridge.ts'
 import { submitMainVoice, type MainVoiceReply } from './main-session.ts'
+import type { DesktopIngress } from './desktop-perform.ts'
+import { mountDesktopHost } from './desktop-host.ts'
 
 import { NativeTurn } from './native-turn.ts'
 
@@ -27,9 +29,10 @@ const MODEL = 'gemini-3.8-flash'
 const MAX_CALL = 630_000
 export const name = 'elysia-gemini-cascade'
 export const inject = ['sessions', 'agents', 'systemPrompt', 'sessionPersistence', 'connection', 'tools', 'workspaceRegistry']
-export interface Config { enabled?: boolean; cwd?: string; promptsDir?: string; bridgeKeyFile?: string; inputMode?: InputMode; mainSessionVoice?: boolean }
+export interface Config { enabled?: boolean; cwd?: string; promptsDir?: string; bridgeKeyFile?: string; inputMode?: InputMode; mainSessionVoice?: boolean; desktopKeyFile?: string }
 export const Config = z.object({
   enabled: z.boolean().default(false),
+  desktopKeyFile: z.string().default(''),
   mainSessionVoice: z.boolean().default(false),
   cwd: z.string().default(join(HOME, 'gemini-cascade')),
   promptsDir: z.string().default(join(HOME, 'standing-prompts')),
@@ -45,6 +48,7 @@ type PendingTurn = { input: TurnInput; reply: NativeTurn }
 type Call = {
   roomName: string; token: string; timer: ReturnType<typeof setTimeout>
   sessionId: SessionId; mainAgent?: Agent; mainReplies: Map<number, MainVoiceReply>
+  desktop?: DesktopIngress
   pending: Map<number, PendingTurn>; settled: Set<number>; closing?: Promise<void>
 }
 type Opened = { agent: VoiceAgent; close: () => Promise<void> }
@@ -276,7 +280,7 @@ export async function apply(ctx: Context, raw: Config = {}): Promise<void> {
     }
     if (pending >= 8) return fail('cascade_event_backlog', 409)
     if (mainTarget() !== agent) return fail('cascade_main_unavailable', 503)
-    call.mainReplies.set(event.turn, submitMainVoice(ctx, agent, event.text))
+    call.mainReplies.set(event.turn, submitMainVoice(ctx, agent, event.text, call.desktop))
     return { ok: true }
   }
   async function applyEvent(event: WorkerEvent): Promise<unknown> {
@@ -320,6 +324,45 @@ export async function apply(ctx: Context, raw: Config = {}): Promise<void> {
     history.length = 0
   }, 'gemini-cascade.owner')
 
+  async function startCall(sessionId: SessionId, signal: AbortSignal, desktop?: DesktopIngress) {
+    if (starting || active || (sessionId === SID && current?.agent.status === 'running')) fail('cascade_busy', 409)
+    starting = true
+    try {
+      const mainAgent = sessionId === MAIN_SID ? mainTarget() : undefined
+      if (!mainAgent && (await openSession()).agent.status === 'running') fail('cascade_busy', 409)
+      if (disposed) fail('cascade_busy', 409)
+      signal.throwIfAborted()
+      const result = await broker('start', { inputMode: config.inputMode, ...(mainAgent ? { turnMode: 'main-session' } : {}) })
+      const { roomName, serverUrl, participantToken, participantIdentity } = result
+      if (result.inputMode !== config.inputMode || typeof roomName !== 'string' || !ROOM.test(roomName) || serverUrl !== 'ws://127.0.0.1:18780'
+        || (mainAgent && result.turnMode !== 'main-session')
+        || typeof participantToken !== 'string' || participantToken.length > 8192
+        || typeof participantIdentity !== 'string' || !/^pilot-user-[a-f0-9]{24}$/u.test(participantIdentity)) {
+        if (typeof roomName === 'string' && ROOM.test(roomName)) await broker('stop', { roomName }).catch(() => undefined)
+        return fail('cascade_broker_protocol', 502)
+      }
+      const token = randomBytes(32).toString('hex')
+      const timer = setTimeout(() => { if (active?.roomName === roomName) void closeCall(active, true).catch(() => undefined) }, MAX_CALL)
+      timer.unref()
+      const call: Call = active = { roomName, token, timer, sessionId, ...(mainAgent ? { mainAgent } : {}),
+        ...(desktop ? { desktop } : {}), mainReplies: new Map(), pending: new Map(), settled: new Set() }
+      if (mainAgent && ctx.agents.get(MAIN_SID) !== mainAgent) { await closeCall(call, true); return fail('cascade_main_unavailable', 503) }
+      if (signal.aborted || disposed) { await closeCall(call, true); return fail('cascade_aborted', 409) }
+      return { sessionId, roomName, serverUrl, participantToken, participantIdentity, callToken: token, inputMode: config.inputMode }
+    } finally { starting = false }
+  }
+
+  function stopDesktop(deviceId: string, roomName: unknown, token: unknown): Promise<void> {
+    const call = active
+    if (!call?.desktop || call.desktop.deviceId !== deviceId || call.roomName !== roomName || !equalSecret(token, call.token)) {
+      return fail('cascade_call_not_found', 404)
+    }
+    return closeCall(call, true)
+  }
+  if (config.desktopKeyFile) await mountDesktopHost(ctx, config.desktopKeyFile, {
+    target: mainTarget, start: (origin, signal) => startCall(MAIN_SID, signal, origin), stop: stopDesktop,
+  })
+
   for (const action of ['open', 'start', 'stop'] as const) {
     ctx.effect(() => ctx.connection.fetch.register({
       path: PREFIX + '/' + action, methods: ['POST'], requestBody: 'streaming',
@@ -356,33 +399,7 @@ export async function apply(ctx: Context, raw: Config = {}): Promise<void> {
           }
           if (!isExact(data, ['sessionId']) && !isExact(data, ['sessionId', 'inputMode'])) fail('invalid_request', 400)
           if (!acceptsCallMode(data.inputMode, config.inputMode)) fail('cascade_input_mode_changed', 409)
-          if (starting || active || (sessionId === SID && current?.agent.status === 'running')) fail('cascade_busy', 409)
-          starting = true
-          try {
-            const mainAgent = sessionId === MAIN_SID ? mainTarget() : undefined
-            if (!mainAgent && (await openSession()).agent.status === 'running') fail('cascade_busy', 409)
-            if (disposed) fail('cascade_busy', 409)
-            request.signal.throwIfAborted()
-            const result = await broker('start', { inputMode: config.inputMode, ...(mainAgent ? { turnMode: 'main-session' } : {}) })
-            const { roomName, serverUrl, participantToken, participantIdentity } = result
-            if (result.inputMode !== config.inputMode || typeof roomName !== 'string' || !ROOM.test(roomName) || serverUrl !== 'ws://127.0.0.1:18780'
-              || (mainAgent && result.turnMode !== 'main-session')
-              || typeof participantToken !== 'string' || participantToken.length > 8192
-              || typeof participantIdentity !== 'string' || !/^pilot-user-[a-f0-9]{24}$/u.test(participantIdentity)) {
-              if (typeof roomName === 'string' && ROOM.test(roomName)) await broker('stop', { roomName }).catch(() => undefined)
-              return fail('cascade_broker_protocol', 502)
-            }
-            const token = randomBytes(32).toString('hex')
-            const timer = setTimeout(() => { if (active?.roomName === roomName) void closeCall(active, true).catch(() => undefined) }, MAX_CALL)
-            timer.unref()
-            const call: Call = active = {
-              roomName, token, timer, sessionId, ...(mainAgent ? { mainAgent } : {}),
-              mainReplies: new Map(), pending: new Map(), settled: new Set(),
-            }
-            if (mainAgent && ctx.agents.get(MAIN_SID) !== mainAgent) { await closeCall(call, true); return fail('cascade_main_unavailable', 503) }
-            if (request.signal.aborted || disposed) { await closeCall(call, true); return fail('cascade_aborted', 409) }
-            return json({ roomName, serverUrl, participantToken, participantIdentity, callToken: token, inputMode: config.inputMode })
-          } finally { starting = false }
+          return json(await startCall(sessionId, request.signal))
         } catch (error) { return errorResponse(error) }
       },
     }), 'gemini-cascade.http:' + action)

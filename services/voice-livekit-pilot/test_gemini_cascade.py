@@ -323,12 +323,21 @@ class WorkerTests(unittest.IsolatedAsyncioTestCase):
     async def test_main_barge_in_cancels_only_voice_mirror_and_never_creates_model_history(self):
         audio, events = Audio(), CallEvents()
         poll_closed = asyncio.Event()
+        candidate_started = asyncio.Event()
+        candidate_confirmed = asyncio.Event()
+        recognized = []
         native = []
         synthesized = []
 
         async def recognize(_asr, _http, body):
             self.assertIsInstance(body, bytes)
-            return "已转写"
+            recognized.append(body)
+            if len(recognized) == 1:
+                return "第一段语音"
+            self.assertEqual(len(recognized), 2, "accepted audio must not be transcribed twice")
+            candidate_started.set()
+            await candidate_confirmed.wait()
+            return "真的插话"
 
         async def native_reply(turn, transcript):
             native.append((turn, transcript))
@@ -357,18 +366,72 @@ class WorkerTests(unittest.IsolatedAsyncioTestCase):
             await asyncio.wait_for(audio.got.wait(), 1)
             for _ in range(15):
                 call.handle_audio(LOUD)
-            await asyncio.wait_for(poll_closed.wait(), 1)
-            self.assertIn(("interrupted", 1, {}), events.events)
+            self.assertFalse(poll_closed.is_set())
             for _ in range(20):
                 call.handle_audio(SILENCE)
+            await asyncio.wait_for(candidate_started.wait(), 1)
+            self.assertEqual(call.turn, 1, "unconfirmed ASR may not supersede the current browser turn")
+            self.assertFalse(poll_closed.is_set())
+            self.assertFalse(any(kind == "interrupted" for kind, _, _ in events.events))
+            candidate_confirmed.set()
+            await asyncio.wait_for(poll_closed.wait(), 1)
+            self.assertIn(("interrupted", 1, {}), events.events)
             audio.drain.set()
             await asyncio.wait_for(events.finished.wait(), 1)
             provider.assert_not_called()
         self.assertEqual(len(call.history), 0)
-        self.assertEqual(native, [(1, "已转写"), (2, "已转写")])
+        self.assertEqual(len(recognized), 2)
+        self.assertEqual(native, [(1, "第一段语音"), (2, "真的插话")])
         self.assertEqual(synthesized, ["正在朗读。", "接下来的回复。"])
         self.assertEqual([turn for kind, turn, _ in events.events if kind == "done"], [2])
         await call.aclose()
+
+    async def test_main_unrecognized_sound_does_not_stop_a_pending_reply(self):
+        for rejection in ("asr_no_speech", "asr_timeout", "blank"):
+            with self.subTest(rejection=rejection):
+                audio, events = Audio(), CallEvents()
+                entered = asyncio.Event()
+                release_reply = asyncio.Event()
+                attempts = []
+                native = []
+
+                async def recognize(*_args):
+                    attempts.append(True)
+                    if len(attempts) == 1:
+                        return "已经识别的提问"
+                    if rejection == "blank":
+                        return "  "
+                    raise GeminiError(rejection)
+
+                async def answer(turn, transcript):
+                    native.append((turn, transcript))
+                    entered.set()
+                    await release_reply.wait()
+                    yield "原来的回复。"
+
+                async def tts(*_args, **_kwargs):
+                    yield b"\0" * 960
+
+                events.native_reply = answer
+                call = Conversation(audio, events, None, None, SimpleNamespace(max_text_length=90), object(), "",
+                                    asr=AsrConfig(ASR_ENDPOINT, "a" * 64), turn_mode="main-session")
+                with patch("gemini_worker.transcribe", recognize), patch("gemini_worker.iter_pcm", tts):
+                    try:
+                        call._submit("voice", LOUD * 12)
+                        await asyncio.wait_for(entered.wait(), 1)
+                        for frame in [LOUD] * 15 + [SILENCE] * 20:
+                            call.handle_audio(frame)
+                        await asyncio.wait_for(call.candidate, 1)
+                        self.assertEqual(call.turn, 1)
+                        self.assertEqual(audio.clears, 0, "discarding noise must not clear queued audio")
+                        self.assertFalse(any(kind in {"error", "interrupted"} for kind, _, _ in events.events))
+                        release_reply.set()
+                        audio.drain.set()
+                        await asyncio.wait_for(events.finished.wait(), 1)
+                        self.assertEqual(audio.count, 1)
+                        self.assertEqual(native, [(1, "已经识别的提问")])
+                    finally:
+                        await call.aclose()
 
     async def test_main_silent_native_turn_is_not_a_failure(self):
         audio, events = Audio(), CallEvents()
@@ -388,6 +451,7 @@ class WorkerTests(unittest.IsolatedAsyncioTestCase):
             "gemini_worker.iter_pcm", side_effect=AssertionError("Silent turn must not reach Breeze"),
         ) as breeze:
             call._submit("voice", LOUD * 12)
+            await asyncio.wait_for(call.candidate, 1)
             await asyncio.wait_for(call.active, 1)
             breeze.assert_not_called()
         self.assertIn(("state", 1, {"state": "listening"}), events.events)

@@ -173,7 +173,7 @@ class Events:
         self._delta_timer = None
         self._pump_delta()
 
-    def send(self, kind: str, turn: int, **fields) -> None:
+    def send(self, kind: str, turn: int, *, browser_only: bool = False, **fields) -> None:
         obj = {"type": kind, "turn": turn, **fields}
         if self.browser.full() and kind != "delta":
             # A final result carries the complete string even if a delta was dropped.
@@ -181,7 +181,7 @@ class Events:
             self.browser.task_done()
         if not self.browser.full():
             self.browser.put_nowait(obj)
-        if self.sink is None or self.journal_failed:
+        if browser_only or self.sink is None or self.journal_failed:
             return
         if self.turn_mode == MAIN_TURN_MODE:
             # The ASR submission is sent by native_reply before polling;
@@ -358,6 +358,7 @@ class Conversation:
         self.history: deque[tuple[dict, dict]] = deque(maxlen=8)
         self.turn = 0
         self.active: asyncio.Task | None = None
+        self.candidate: asyncio.Task | None = None
         self.settled = 0
         self.user_announced = False
         self.tasks: set[asyncio.Task] = set()
@@ -384,7 +385,7 @@ class Conversation:
         if self.closed:
             return
         started, complete = self.detector.feed(pcm, playback=self.playing)
-        if started:
+        if started and self.turn_mode != MAIN_TURN_MODE:
             self._stop_active(announce=True)
         if complete is not None:
             self._submit("voice", complete)
@@ -406,6 +407,53 @@ class Conversation:
             self.events.send("user", self.turn, input=kind, text=text)
 
     def _submit(self, kind: str, value: bytes | str) -> None:
+        if self.closed:
+            return
+        if self.turn_mode == MAIN_TURN_MODE:
+            # One bounded candidate at a time. Until ASR verifies a new user
+            # message, this candidate cannot clear any queued or playing reply.
+            if kind != "voice" or not isinstance(value, bytes) or self.asr is None or self.candidate is not None:
+                return
+            self.candidate = asyncio.create_task(self._recognize_candidate(self.asr, value))
+            self.candidate.add_done_callback(self._candidate_done)
+            return
+        self._start_reply(kind, value)
+
+    def _candidate_done(self, task: asyncio.Task) -> None:
+        if self.candidate is task:
+            self.candidate = None
+
+    async def _recognize_candidate(self, asr: AsrConfig, pcm: bytes) -> None:
+        owner = asyncio.current_task()
+        already_replying = self.turn > self.settled
+        if not already_replying:
+            self.events.send("state", self.turn, state="transcribing")
+        try:
+            transcript = (await transcribe(asr, self.breeze_http, pcm)).strip()
+            pcm = b""
+            if not transcript:
+                raise GeminiError("asr_no_speech")
+        except Exception as error:
+            if not already_replying and not self.closed and self.candidate is owner:
+                # This is not a new native turn. Never journal an interruption
+                # for an earlier, successfully delivered utterance.
+                code = error.code if isinstance(error, GeminiError) else "asr_failed"
+                self.events.send("error", self.turn, code=code, browser_only=True)
+                self.events.send("state", self.turn, state="listening")
+            return
+        if not self.closed and self.candidate is owner and owner is not None and not owner.cancelling():
+            self._start_reply("voice", transcript)
+
+    def reset_capture(self) -> asyncio.Task | None:
+        self.detector.reset()
+        candidate = self.candidate
+        if candidate is not None and not candidate.done():
+            candidate.cancel()
+            if not self.closed and self.turn == self.settled:
+                self.events.send("state", self.turn, state="listening")
+        return candidate
+
+    def _start_reply(self, kind: str, value: bytes | str) -> None:
         if self.turn >= MAX_TURNS:
             self.events.send("error", self.turn, code="voice_turn_limit")
             self.events.ended.set()
@@ -413,7 +461,7 @@ class Conversation:
         self._stop_active(announce=True)
         self.turn += 1
         self.user_announced = False
-        if kind == "voice" and self.asr is not None:
+        if kind == "voice" and isinstance(value, bytes) and self.asr is not None:
             self.events.send("state", self.turn, state="transcribing")
         else:
             self._announce_user(kind, value if isinstance(value, str) else None)
@@ -483,7 +531,11 @@ class Conversation:
                 await asyncio.shield(asyncio.gather(*prior, return_exceptions=True))
                 self.source.clear_queue()
             require_current()
-            if kind == "voice":
+            if native:
+                if kind != "voice" or not isinstance(value, str) or not value:
+                    raise GeminiError("voice_main_turn_failed")
+                transcript = value
+            elif kind == "voice":
                 if not isinstance(value, bytes):
                     raise GeminiError("asr_failed" if self.asr is not None else "gemini_invalid_audio")
                 if self.asr is not None:
@@ -544,8 +596,10 @@ class Conversation:
 
     async def aclose(self) -> None:
         self.closed = True
-        self.detector.reset()
+        candidate = self.reset_capture()
         self._stop_active(announce=True)
+        if candidate is not None:
+            await asyncio.gather(candidate, return_exceptions=True)
         if self.tasks:
             await asyncio.gather(*self.tasks, return_exceptions=True)
         self.source.clear_queue()
@@ -613,7 +667,7 @@ async def run(ctx: JobContext) -> None:
 
     def on_muted(publication: rtc.RemoteTrackPublication, participant: rtc.RemoteParticipant) -> None:
         if call is not None and participant.identity == identity and publication.source == rtc.TrackSource.SOURCE_MICROPHONE:
-            call.detector.reset()
+            call.reset_capture()
 
     async def capture() -> None:
         assert stream is not None and call is not None

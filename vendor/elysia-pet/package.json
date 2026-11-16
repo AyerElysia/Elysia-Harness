@@ -12,14 +12,15 @@
     "./package.json": "./package.json"
   },
   "engines": {
-    "node": "^22.19 || >=24"
+    "node": ">=20.0.0"
   },
   "files": [
     "lib",
     "assets",
     "cordis.patch.yml",
     "README.md",
-    "LICENSE"
+    "LICENSE",
+    "scripts"
   ],
   "dsh": {
     "bundle": {
@@ -30,11 +31,13 @@
     "build": "node scripts/build-frames.mjs",
     "test": "node test/run.mjs",
     "render:actions": "node scripts/render-action-table.mjs",
-    "render:notifications": "node scripts/render-notification-table.mjs"
+    "render:notifications": "node scripts/render-notification-table.mjs",
+    "postinstall": "node scripts/install.mjs",
+    "patch:host": "node scripts/install.mjs"
   },
   "dependencies": {},
   "peerDependencies": {
-    "@deepseek-ai/cordis": "^4.0.1",
+    "@deepseek-ai/cordis": ">=4.0.0",
     "@deepseek-harness-tui/dsh-tui": ">=0.13.0"
   },
   "keywords": [
@@ -57,5 +60,13 @@
   "homepage": "https://github.com/TriSeTide/dsh-tui-elysia-pet#readme",
   "bugs": {
     "url": "https://github.com/TriSeTide/dsh-tui-elysia-pet/issues"
+  },
+  "peerDependenciesMeta": {
+    "@deepseek-ai/cordis": {
+      "optional": true
+    },
+    "@deepseek-harness-tui/dsh-tui": {
+      "optional": true
+    }
   }
 }

@@ -22,7 +22,7 @@ import type { SessionId } from '@deepseek-ai/dsh-session'
 const PROMPTS = process.env.ELYSIA_PROMPTS_DIR
   ?? join(process.env.ELYSIA_ROOT ?? '/home/ayerelysia/Elysia', 'Data/standing-prompts')
 const MODELS_TOML = resolve(dirname(fileURLToPath(import.meta.url)), '../../../../../config/models.toml')
-const FILES = ['SOUL.md', 'USER.md', 'MEMORY.md', 'EXISTENCE.md', 'TOOLS.md']
+const FILES = ['SOUL.md', 'USER.md', 'MEMORY.md', 'CONSCIOUS-MIND.md']
 
 interface ChatConfig {
   baseURL: string

@@ -27,6 +27,10 @@
       "types": "./src/web-capabilities.ts",
       "default": "./src/web-capabilities.ts"
     },
+    "./skill-capabilities": {
+      "types": "./src/skill-capabilities.ts",
+      "default": "./src/skill-capabilities.ts"
+    },
     "./d1-search": {
       "types": "./src/d1-search.ts",
       "default": "./src/d1-search.ts"
@@ -67,12 +71,15 @@
     "@deepseek-ai/dsh-llm": "workspace:*",
     "@deepseek-ai/dsh-scope": "workspace:*",
     "@deepseek-ai/dsh-session": "workspace:*",
+    "@deepseek-ai/dsh-skill": "workspace:*",
+    "@deepseek-ai/dsh-skill-filesystem": "workspace:*",
     "@deepseek-ai/dsh-system-prompt": "workspace:*",
     "@deepseek-ai/dsh-time-context": "workspace:*",
     "@deepseek-ai/dsh-tools": "workspace:*",
     "@deepseek-ai/dsh-working-directory": "workspace:*",
     "@deepseek-ai/dsh-tool-fs": "workspace:*",
     "@deepseek-ai/dsh-tool-fs-search": "workspace:*",
+    "@deepseek-ai/dsh-tool-skill": "workspace:*",
     "@deepseek-ai/dsh-tool-web": "workspace:*",
     "@deepseek-ai/dsh-web": "workspace:*",
     "@elysia/proactive-system": "workspace:*"
@@ -100,10 +107,15 @@
     "@deepseek-ai/dsh-scope": "workspace:*",
     "@deepseek-ai/dsh-session": "workspace:*",
     "@deepseek-ai/dsh-session-projection": "workspace:*",
+    "@deepseek-ai/dsh-skill": "workspace:*",
+    "@deepseek-ai/dsh-skill-filesystem": "workspace:*",
     "@deepseek-ai/dsh-system-prompt": "workspace:*",
     "@deepseek-ai/dsh-time-context": "workspace:*",
     "@deepseek-ai/dsh-token-meter": "workspace:*",
+    "@deepseek-ai/dsh-tool-executor-native": "workspace:*",
     "@deepseek-ai/dsh-tool-fs": "workspace:*",
+    "@deepseek-ai/dsh-tool-skill": "workspace:*",
+    "@deepseek-ai/dsh-tool-testkit": "workspace:*",
     "@deepseek-ai/dsh-tools": "workspace:*",
     "@deepseek-ai/dsh-working-directory": "workspace:*",
     "@deepseek-ai/dsh-tool-fs-search": "workspace:*",

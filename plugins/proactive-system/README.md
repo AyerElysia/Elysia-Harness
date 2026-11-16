@@ -4,11 +4,11 @@
 
 本轮分层建议：保存具体“事项”的内容、当初来由、她写的补充材料与再呈现条件；统一调度在条件满足时产生一次“机会”递给她。事项可以持续存在，某次机会被看见或 pass 不代表事项已经完成。完整字段和时机决定方式仍在讨论。
 
-当前先接入最简单的计划：爱莉调用原生 schedule_create，写 prompt、title 和 after_seconds；到时把提醒递回同一主意识，由她自己决定接下来做什么。scope 内同时复用原生查看、修改、删除工具，默认插件入口仍无行为。
+当前先接入最简单的计划：得到明确授权后，爱莉调用原生 `schedule_create`，填写 `prompt`、`title`、`rrule` 和 `target: "this_session"`；到时把提醒递回同一主意识，由她自己决定接下来做什么。同一作用域同时复用原生 `schedule_list`、`schedule_view` 和 `schedule_edit`，默认插件入口仍无行为。
 
 完整使用方式、原生参数 Schema、运行边界与验收见 [第一版简单计划](PLAN-V1.zh.md)。plan-tools 装配作用域工具并补充模型组装时的中文用法；plan-host 只在正确主意识 ready 后挂载原生 Host，避免重启逾期提醒抢先采用默认 preset。没有新增调度器、计划数据库或定时器。
 
-获批的六类中文案例保存在 [src/plan-guidance.ts](src/plan-guidance.ts)。[plan-tools](src/plan-tools.ts) 在 system-prompt/assemble waterfall 中先 await next，再仅为精确 owner scope 的四个计划工具追加 description。原生参数、校验、返回值和执行保持不变；ctx.tools.schemas 仍是原英文定义，实际模型 assembly 的工具说明带中文。complete:true 的主体提示词正文保持不变，不修改 SOUL.md、USER.md 或 MEMORY.md。案例不是关键词触发器或固定调度规则，是否创建计划、写什么与何时提醒仍由她决定。真实对话验收已获授权，结果另见 [计划工具说明验收记录](../../docs/report/2026-11-12-plan-tool-guidance.md)。
+六类中文案例保存在 [src/plan-guidance.ts](src/plan-guidance.ts)。[plan-tools](src/plan-tools.ts) 仅在主意识的原生工具可用时提供独立的模型运行上下文，不修改工具定义、主体提示词正文或 SOUL.md、USER.md、MEMORY.md。案例不是关键词触发器、固定调度规则或授权；仍遵循原生的明确授权要求。[计划工具说明验收记录](../../docs/report/2026-11-12-plan-tool-guidance.md) 描述旧版接入。
 
 完整目标、认知与工程边界、内部记录草案及未来验收条件见 [REQUIREMENTS.zh.md](REQUIREMENTS.zh.md)。
 
@@ -16,10 +16,10 @@
 
 已确认的唤起条件：只有存在可追溯的具体线索时才唤起主意识。线索可以来自已有事项或她自己留下的问题，不必等待新消息；空闲、长时间无人说话或周期 tick 本身不产生自由活动机会。具体线索约束入口，不限制她被唤起后的思考方向或沉默选择。
 
-从 `dsh` 工作区运行隔离测试：
+从 Harness 根目录运行隔离测试：
 
 ```sh
-pnpm --filter @elysia/proactive-system test
+node dsh/node_modules/vitest/vitest.mjs run --config plugins/proactive-system/vitest.config.mjs
 ```
 
 默认入口的用例验证无行为插件可以挂载和卸载；计划子插件的隔离用例验证原生计划接入与工具说明装配。这些检查不代表尚未实施的完整主动能力，也不替代正式会话的真实对话验收。

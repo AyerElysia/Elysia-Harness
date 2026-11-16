@@ -46,8 +46,8 @@ sha256sum /home/ayerelysia/AI/models/breeze-tts-2-elysia-cpp/*.gguf
 
 ## 3. C++ 源码、镜像与构建
 
-- C++ 源码：`Breeze-TTS-2.cpp/`
-- 原始源码包：`breeze-tts-2-cpp-source.tar.gz`
+- C++ 源码：`Breeze-TTS-2.cpp/`（上游 HoppouAI/Breeze-TTS-2.cpp，`git clone --recursive` 取得）
+- 原始源码包：`breeze-tts-2-cpp-source.tar.gz`，`sha256:3374d57fac08b3e05f6180129ab1a901e39dfe97470ab9667111ece84b4a8ed9`。解开后与 `Breeze-TTS-2.cpp/` 逐字节一致（`diff -r` 无输出），只需删掉 `third_party/{ggml,shine}/.git` 两个悬空 submodule 指针。树本身不进 Git，tarball 留作唯一精确 pin（见仓库 `.gitignore`）
 - 构建产物：`Breeze-TTS-2.cpp/build-cuda-full/breeze-server` 与 `breeze-quantize`
 - 固定 Docker 镜像：`sha256:30d6ea28f36ed09b262eeb2eac0f9e1ca4081166179a24bd32b5c87308ef880a`
 - 转换辅助：`FindCUDAToolkit.cmake`

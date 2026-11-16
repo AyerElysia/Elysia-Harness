@@ -12,8 +12,8 @@ set -euo pipefail
 
 ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 
-# The system node is 18; DSH requires ^22.19.
-export PATH="$HOME/.local/share/node-v22/bin:$PATH"
+# Prefer Node 24 for the current DSH runtime, with Node 22 available for the prior release.
+export PATH="$HOME/.local/share/node-v24/bin:$HOME/.local/share/node-v22/bin:$PATH"
 export DSH_HOME="$ROOT/homes/web"
 export DSH_AGENTS_HOME="$ROOT/homes/web/agents"
 

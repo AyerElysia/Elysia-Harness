@@ -5,8 +5,9 @@ import { createScope, type Scope } from '@deepseek-ai/dsh-scope'
 import { SessionId } from '@deepseek-ai/dsh-session'
 import SystemPrompt from '@deepseek-ai/dsh-system-prompt'
 import ToolRuntime, { defineTool } from '@deepseek-ai/dsh-tools'
-import { createAfterScheduleRecord, ScheduleId } from '@deepseek-ai/dsh-schedule'
+import { ScheduleId, type ScheduleCatalogEntry } from '@deepseek-ai/dsh-schedule'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
+import * as NativeToolExecutor from '../../../dsh/packages/core/tool-executor-native/src/index.ts'
 import * as PlanTools from '../src/plan-tools.ts'
 import * as PlanHost from '../src/plan-host.ts'
 
@@ -63,15 +64,17 @@ describe('scoped native plan capabilities', () => {
   it('rejects global mounting without changing global tools', async () => {
     const ctx = context()
     await ctx.plugin(SystemPrompt)
-    await ctx.plugin(ToolRuntime, { mode: 'native' })
+    await ctx.plugin(ToolRuntime)
+    await ctx.plugin(NativeToolExecutor)
     await expect(ctx.plugin(PlanTools)).rejects.toThrow('Agent-scoped')
     expect(ctx.tools.schemas()).toEqual([])
   })
 
-  it('keeps all four native tools scoped, bound to the caller session and disposable', async () => {
+  it('keeps all four native tools scoped and disposable, with reminders targeting the caller session', async () => {
     const ctx = context()
     await ctx.plugin(SystemPrompt)
-    await ctx.plugin(ToolRuntime, { mode: 'native' })
+    await ctx.plugin(ToolRuntime)
+    await ctx.plugin(NativeToolExecutor)
     ctx.tools.register(defineTool({
       name: 'ordinary', description: 'fixture capability', parameters: {},
       output: { schema: { type: 'string' }, render: () => [] },
@@ -93,34 +96,51 @@ describe('scoped native plan capabilities', () => {
     Object.assign(owner, { ctx: scope.ctx })
     Object.assign(foreign, { ctx: foreignScope.ctx })
     scope.ctx.tools.restrict({ allow: ['ordinary'] })
-    const record = createAfterScheduleRecord(ScheduleId('fixture-plan'), 'fixture instruction', 60, Date.now(), 'fixture title')
-    const schedule: Pick<Context['schedule'], 'create' | 'list' | 'delete' | 'update' | 'catalog'> = {
+    const rrule = 'DTSTART:20991114T160000Z\nRRULE:FREQ=DAILY;COUNT=1'
+    const target = { kind: 'session', sessionId: owner.session.id } as const
+    const record: ScheduleCatalogEntry = {
+      id: ScheduleId('fixture-plan'), title: 'fixture title', prompt: 'fixture instruction',
+      kind: 'rrule', rrule, scheduledAt: '2099-11-14T16:00:00.000Z',
+      target, involvedSessionIds: [owner.session.id], status: 'active',
+    }
+    const schedule: Pick<Context['schedule'], 'create' | 'list' | 'view' | 'edit' | 'deliveryLimits'> = {
       create: vi.fn<Context['schedule']['create']>(async () => record),
-      list: vi.fn<Context['schedule']['list']>(async () => [record]),
-      delete: vi.fn<Context['schedule']['delete']>(async request => ({ id: request.id, deleted: true })),
-      update: vi.fn<Context['schedule']['update']>(async request => ({ id: request.id, updated: true, record })),
-      catalog: vi.fn<Context['schedule']['catalog']>(async () => []),
+      list: vi.fn<Context['schedule']['list']>(async () => ({ items: [record], shown: 1, total: 1, limit: 20, offset: 0 })),
+      view: vi.fn<Context['schedule']['view']>(async () => record),
+      edit: vi.fn<Context['schedule']['edit']>(async request => request.action === 'delete'
+        ? { id: request.id, deleted: true }
+        : { ...record, title: request.patch.title ?? record.title }),
+      deliveryLimits: () => ({ newSessionIntervalSeconds: 60 }),
     }
     ctx.provide('schedule', schedule as Context['schedule'])
     const child = await scope.ctx.plugin(PlanTools)
-    const names = ['schedule_create', 'schedule_delete', 'schedule_list', 'schedule_update']
+    const names = ['schedule_create', 'schedule_edit', 'schedule_list', 'schedule_view']
     expect(ctx.tools.schemas(owner).map(tool => tool.name).sort()).toEqual(['ordinary', ...names].sort())
     expect(ctx.tools.schemas().map(tool => tool.name).sort()).toEqual(['ordinary', 'other_global'])
     expect(ctx.tools.schemas(foreign).map(tool => tool.name).sort()).toEqual(['ordinary', 'other_global'])
-    const run = (name: string, args: unknown) => ctx.tools.execute({
-      callId: ToolCallId('fixture-call'), name, arguments: args, agent: owner,
-      signal: new AbortController().signal,
-    })
-    const created = await run('schedule_create', { title: 'fixture title', prompt: 'fixture instruction', after_seconds: 60 })
+    const run = async (name: string, args: object) => {
+      const batch = await ctx.tools.execute({
+        calls: [{ type: 'tool-call', id: ToolCallId('fixture-call'), name, arguments: JSON.stringify(args) }],
+        agent: owner, signal: new AbortController().signal,
+      })
+      expect(batch.results).toHaveLength(1)
+      return batch.results[0]!.result
+    }
+    const created = await run('schedule_create', { title: record.title, prompt: record.prompt, rrule, target: 'this_session' })
     if (created.isError) throw new Error(JSON.stringify(created))
     expect(created.isError).toBe(false)
-    expect(schedule.create).toHaveBeenCalledWith(owner.session.id, expect.any(Object), expect.any(AbortSignal))
+    expect(created.value).toMatchObject({ id: record.id, target })
+    expect(schedule.create).toHaveBeenCalledWith({
+      title: record.title, prompt: record.prompt, timing: { kind: 'rrule', rrule }, target,
+    }, owner.session.id, expect.any(AbortSignal))
     expect((await run('schedule_list', {})).isError).toBe(false)
-    expect(schedule.list).toHaveBeenCalledWith({ sessionId: owner.session.id })
-    expect((await run('schedule_update', { id: record.id, title: 'changed fixture title' })).isError).toBe(false)
-    expect(schedule.update).toHaveBeenCalledWith(expect.objectContaining({ sessionId: owner.session.id, id: record.id }), expect.any(AbortSignal))
-    expect((await run('schedule_delete', { id: record.id })).isError).toBe(false)
-    expect(schedule.delete).toHaveBeenCalledWith({ sessionId: owner.session.id, id: record.id }, expect.any(AbortSignal))
+    expect(schedule.list).toHaveBeenCalledWith({})
+    expect((await run('schedule_view', { id: record.id })).isError).toBe(false)
+    expect(schedule.view).toHaveBeenCalledExactlyOnceWith({ id: record.id })
+    expect((await run('schedule_edit', { id: record.id, action: 'update', title: 'changed fixture title' })).isError).toBe(false)
+    expect(schedule.edit).toHaveBeenCalledWith({ id: record.id, action: 'update', patch: { title: 'changed fixture title' } }, owner.session.id, expect.any(AbortSignal))
+    expect((await run('schedule_edit', { id: record.id, action: 'delete' })).isError).toBe(false)
+    expect(schedule.edit).toHaveBeenCalledWith({ id: record.id, action: 'delete' }, owner.session.id, expect.any(AbortSignal))
     await child.dispose()
     expect(ctx.tools.schemas(owner).map(tool => tool.name)).toEqual(['ordinary'])
     expect(ctx.tools.schemas().map(tool => tool.name).sort()).toEqual(['ordinary', 'other_global'])

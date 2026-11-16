@@ -1,0 +1,20 @@
+{
+  "service": "http://127.0.0.1:7865",
+  "implementation": "plugins/voice-call/src/breeze-stream.ts",
+  "settingsSource": "/home/ayerelysia/Elysia/Elysium/config/plugins/tts_voice_plugin/config.toml",
+  "firstChunkMs": 207.637,
+  "firstChunkBytes": 7680,
+  "interruptedAfterAdditionalMs": 500,
+  "cancellationObserved": true,
+  "cancellationNote": "Caller AbortSignal and response-body cancellation were observed. HTTP has no separate server cancellation acknowledgement.",
+  "recoveryAcceptedMs": 222.08,
+  "recoveryTotalMs": 1333.129,
+  "recoveryAttempts": 2,
+  "retryStatuses": [
+    409
+  ],
+  "recoveryBytes": 107520,
+  "recoveryDurationMs": 2240,
+  "sampleRate": 24000,
+  "output": "/home/ayerelysia/Elysia/Elysium/Elysia-Harness/plugins/breeze-realtime-review/results/plugin-q8-interruption.wav"
+}

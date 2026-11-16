@@ -111,23 +111,22 @@ describe('agent-scoped standing prompts', () => {
     }
   })
 
-  it('joins all five main-session files into the same complete prompt as before', async () => {
+  it('joins all four main-session files into the same complete prompt', async () => {
     const base = directory()
     writeFileSync(join(base, 'SOUL.md'), '# SOUL.md')
     writeFileSync(join(base, 'USER.md'), '# USER.md')
     writeFileSync(join(base, 'MEMORY.md'), '# MEMORY.md')
-    writeFileSync(join(base, 'EXISTENCE.md'), '# EXISTENCE.md')
-    writeFileSync(join(base, 'TOOLS.md'), '# TOOLS.md')
+    writeFileSync(join(base, 'CONSCIOUS-MIND.md'), '# CONSCIOUS-MIND.md')
     const ctx = new Context()
     try {
       await ctx.plugin(SystemPrompt, { includeHarnessIdentity: true })
       const key = agent(MAIN_SESSION_ID)
       await createScope(ctx, key).ctx.plugin(StandingPrompt, {
         baseDir: base,
-        files: ['SOUL.md', 'USER.md', 'MEMORY.md', 'EXISTENCE.md', 'TOOLS.md'],
+        files: ['SOUL.md', 'USER.md', 'MEMORY.md', 'CONSCIOUS-MIND.md'],
       })
       const rendered = renderPrompt(await ctx.systemPrompt.assemble({ scope: key }))
-      expect(rendered).toBe('# SOUL.md\n\n# USER.md\n\n# MEMORY.md\n\n# EXISTENCE.md\n\n# TOOLS.md')
+      expect(rendered).toBe('# SOUL.md\n\n# USER.md\n\n# MEMORY.md\n\n# CONSCIOUS-MIND.md')
       expect(rendered).not.toContain('You are an AI agent powered by DeepSeek Harness.')
     } finally {
       await ctx.fiber.dispose()

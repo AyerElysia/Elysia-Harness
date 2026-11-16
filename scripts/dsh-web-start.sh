@@ -11,7 +11,7 @@ mkdir -p "$LOG_DIR"
 
 if ss -tlnp 2>/dev/null | grep -q ':3299 '; then
   echo "[跳过] web 已在运行"
-  grep -ohE 'http://127.0.0.1:3299/\?token=[A-Za-z0-9_-]+' "$LOG" 2>/dev/null | tail -1
+  grep -aohE 'http://127.0.0.1:3299/\?token=[A-Za-z0-9_-]+' "$LOG" 2>/dev/null | tail -1
   exit 0
 fi
 
@@ -25,4 +25,4 @@ if ! ss -tlnp 2>/dev/null | grep -q ':3299 '; then
   tail -20 "$LOG"
   exit 1
 fi
-grep -ohE 'http://127.0.0.1:3299/\?token=[A-Za-z0-9_-]+' "$LOG" 2>/dev/null | tail -1
+grep -aohE 'http://127.0.0.1:3299/\?token=[A-Za-z0-9_-]+' "$LOG" 2>/dev/null | tail -1

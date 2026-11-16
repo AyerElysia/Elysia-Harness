@@ -20,6 +20,10 @@ plugins/*/lib/
 dsh/apps/web/dist/
 dsh/.dsh-build/
 dsh/.dsh-report/
+# The plugins are importers in dsh/pnpm-lock.yaml, so that workspace lockfile
+# already pins them. One written inside a plugin is the leftover of running
+# `pnpm install` in the wrong directory, not a second source of truth.
+plugins/*/pnpm-lock.yaml
 
 # ── Per-surface harness homes ───────────────────────────────────────────────
 # Everything a surface writes at runtime.
@@ -115,18 +119,65 @@ homes/*/dsh-livestream/
 # Local Ayla login and refresh state.
 homes/*/ayla-app/
 
-# Accidental compiler emit beside vendored agent-loop TypeScript sources.
-dsh/packages/core/agent-loop/src/agent.js*
-dsh/packages/core/agent-loop/src/agent.d.ts*
-dsh/packages/core/agent-loop/src/assistant-stream.js*
-dsh/packages/core/agent-loop/src/assistant-stream.d.ts*
-dsh/packages/core/agent-loop/src/constants.js*
-dsh/packages/core/agent-loop/src/constants.d.ts*
-dsh/packages/core/agent-loop/src/inbox.js*
-dsh/packages/core/agent-loop/src/inbox.d.ts*
-dsh/packages/core/agent-loop/src/index.js*
-dsh/packages/core/agent-loop/src/index.d.ts*
-dsh/packages/core/agent-loop/src/runtime-context.js*
-dsh/packages/core/agent-loop/src/runtime-context.d.ts*
-dsh/packages/core/agent-loop/src/tool-calls.js*
-dsh/packages/core/agent-loop/src/tool-calls.d.ts*
+# ── TypeScript emit beside the vendored sources ─────────────────────────────
+# Several packages under dsh/ compile in place: `tsc -b` writes x.js,
+# x.js.map, x.d.ts and x.d.ts.map next to x.ts, and a single full build left
+# ~300 of them untracked. Only those four shapes are ignored here. The
+# hand-written ambient declarations are real source, so each one is re-included
+# by name — a new ambient declaration belongs on this list.
+dsh/**/src/**/*.js
+dsh/**/src/**/*.js.map
+dsh/**/src/**/*.d.ts
+dsh/**/src/**/*.d.ts.map
+!dsh/**/src/**/asset-imports.d.ts
+!dsh/**/src/**/assets.d.ts
+!dsh/**/src/**/css-modules.d.ts
+!dsh/**/src/**/ripgrep.d.ts
+!dsh/**/src/**/styles.d.ts
+!dsh/**/src/**/turndown-plugin-gfm.d.ts
+!dsh/**/src/**/use-sync-external-store.d.ts
+!dsh/**/src/**/vite-env.d.ts
+
+# ── Breeze C++ review ───────────────────────────────────────────────────────
+# The unpacked checkout is ignored; the tarball beside it is deliberately not.
+# 5.9 MB once buys the only exact pin there is: the tarball carries no git
+# metadata, so nothing else records which upstream snapshot was benchmarked.
+#
+# The checkout itself cannot be tracked either file-by-file or as submodules.
+# Breeze-TTS-2.cpp declares ggml and shine as submodules, and their .git
+# pointers address `.git/modules/...` of a standalone clone; inside this
+# repository those pointers dangle, git falls back to reporting all ~2 400
+# vendored files as ordinary untracked ones, and the build-cuda* trees add
+# another 154 MB on top.
+#
+# Unpack and de-submodule where a build needs the tree (`diff -r` against the
+# tarball is the check that the checkout is still the pinned one):
+#   tar xzf breeze-realtime-review/breeze-tts-2-cpp-source.tar.gz \
+#     -C breeze-realtime-review/
+#   rm -f breeze-realtime-review/Breeze-TTS-2.cpp/third_party/{ggml,shine}/.git
+breeze-realtime-review/Breeze-TTS-2.cpp/
+
+# ── One machine's listening and measurement output ──────────────────────────
+# A .wav only proves something was played; the .capture.json beside it carries
+# the text, seed and duration, and that is what a later comparison reads, so the
+# JSON stays tracked. The benchmark runner's raw per-chunk results and the
+# scratch from unpacking a third-party package are the same kind of leftover:
+# conclusions belong in docs/report/, not in history.
+breeze-realtime-review/**/*.wav
+breeze-realtime-benchmark/
+modsearch-review/
+
+# Ad-hoc scripts that poke one host's request archive; they hardcode that host's
+# absolute paths. A diagnostic that outlives its run belongs in scripts/ with the
+# paths taken from the environment.
+homes/*/*.mjs
+
+# ── Build scratch and one-off backups ───────────────────────────────────────
+# A CMake module copied beside the project that used it is build scratch, not
+# source. Same for the hand-made .bak files left behind when a profile was
+# edited in place: the commit history is the real backup.
+breeze-realtime-review/FindCUDAToolkit.cmake
+breeze-realtime-review/results/
+*.bak-*
+*.bak
+.backup-*/

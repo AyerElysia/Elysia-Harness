@@ -13,8 +13,7 @@
           - SOUL.md
           - USER.md
           - MEMORY.md
-          - EXISTENCE.md
-          - TOOLS.md
+          - CONSCIOUS-MIND.md
 
     # Channels stay off until an adapter config exists on this host; each reads
     # an absolute Elysium path and fails loud when it is absent, which would take

@@ -21,8 +21,7 @@
                 - SOUL.md
                 - USER.md
                 - MEMORY.md
-                - EXISTENCE.md
-                - TOOLS.md
+                - CONSCIOUS-MIND.md
               required:
                 - SOUL.md
               complete: true
@@ -35,8 +34,7 @@
                 - SOUL.md
                 - USER.md
                 - MEMORY.md
-                - EXISTENCE.md
-                - TOOLS.md
+                - CONSCIOUS-MIND.md
               required:
                 - SOUL.md
               workspaceDir: /home/ayerelysia/Elysia/Data/workspace
@@ -45,6 +43,10 @@
               backupRetention: 20
           - id: elysia-web-capabilities
             name: '@elysia/conscious-mind/web-capabilities'
+          - id: elysia-skill-capabilities
+            name: '@elysia/conscious-mind/skill-capabilities'
+            config:
+              rootDir: /home/ayerelysia/Elysia/Data/workspace/skills
           - id: elysia-current-time
             name: '@elysia/conscious-mind/current-time'
             config:
@@ -61,8 +63,7 @@
           - SOUL.md
           - USER.md
           - MEMORY.md
-          - EXISTENCE.md
-          - TOOLS.md
+          - CONSCIOUS-MIND.md
 
     # Channels stay off until an adapter config exists on this host; each reads
     # an absolute Elysium path and fails loud when it is absent, which would take
@@ -185,6 +186,7 @@
     openaiProxyUrl: http://127.0.0.1:17878
 
 # Native conversation voice, bound to the existing loopback-only ASR worker.
+# Keep the paired desktop on the native main session; receipt errors stay local.
 - id: elysia-gemini-cascade
   name: '@elysia/gemini-cascade'
   config:
@@ -192,3 +194,4 @@
     mainSessionVoice: true
     inputMode: local-asr
     bridgeKeyFile: /home/ayerelysia/Elysia/DataInfra/voice-cascade/bridge.key
+    desktopKeyFile: /home/ayerelysia/Elysia/DataInfra/voice-cascade/desktop-owner.key

@@ -1,0 +1,2 @@
+minimumReleaseAgeExclude:
+  - '@deepseek-harness-tui/dsh-tui@0.20.0'

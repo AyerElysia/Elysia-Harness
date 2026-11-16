@@ -22,7 +22,6 @@
       "bundles": [
         "@deepseek-ai/dsh-base",
         "@deepseek-ai/dsh-web-app",
-        "@elysia/conscious-mind",
         "@elysia/ayla-app",
         "@elysia/qq-napcat",
         "@elysia/feishu-app",
@@ -35,7 +34,8 @@
         "dshmarket",
         "@liustack/modsearch",
         "@elysia/voice-call",
-        "@elysia/gemini-cascade"
+        "@elysia/gemini-cascade",
+        "@elysia/conscious-mind"
       ]
     }
   }
