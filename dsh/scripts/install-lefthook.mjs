@@ -229,23 +229,6 @@ function assertSupportedGit(root) {
   }
 }
 
-/**
- * Whether this checkout is a git submodule. A submodule's `core.worktree` lives in its common
- * config because the gitdir is outside the worktree; that is the standard submodule layout, not
- * a user setting the worktree-config extension would relocate.
- *
- * @param {string} root - the working tree root.
- * @returns {boolean} true when a superproject owns this checkout.
- */
-function isSubmoduleCheckout(root) {
-  const probe = spawnSync('git', ['rev-parse', '--show-superproject-working-tree'], {
-    cwd: root,
-    encoding: 'utf8',
-    env: process.env,
-  })
-  return probe.status === 0 && stripGitLineTerminator(probe.stdout).length > 0
-}
-
 function planWorktreeConfigMigration(root, commonConfigPath) {
   const versions = directFileConfigValues(root, commonConfigPath, 'core.repositoryFormatVersion')
   const versionText = assertSingle(versions, 'core.repositoryFormatVersion')
@@ -274,10 +257,7 @@ function planWorktreeConfigMigration(root, commonConfigPath) {
     directFileConfigValues(root, commonConfigPath, 'core.worktree'),
     'core.worktree',
   )
-  // A submodule keeps core.worktree in its common config by construction: the gitdir lives
-  // outside the worktree, so git needs that pointer and moving it to a worktree config would
-  // break the checkout. Only a superproject-owned worktree can relocate it.
-  if (worktreeText !== undefined && !isSubmoduleCheckout(root)) {
+  if (worktreeText !== undefined) {
     throw new Error(
       `cannot enable extensions.worktreeConfig while core.worktree is in the common config `
       + `(file:${commonConfigPath}: ${JSON.stringify(worktreeText)}); `

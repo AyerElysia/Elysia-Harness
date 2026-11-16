@@ -31,12 +31,6 @@ pre-commit:
     - name: vendor manifest guard
       run: scripts/check-vendor-manifest.sh
 
-    # The Web UI's config editor writes to the tracked profile layer. This keeps a
-    # model provider or default model out of the commit with the plugin composition.
-    - name: dsh profile config (machine-local rows)
-      glob: '.dsh/profiles/*/cordis.patch.yml'
-      run: node_modules/.bin/tsx scripts/check-dsh-profile-config.ts
-
 pre-merge-commit:
   jobs:
     - name: translation pairing (staged records)

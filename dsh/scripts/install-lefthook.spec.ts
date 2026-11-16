@@ -155,55 +155,6 @@ function createFixture(names: { main?: string; linked?: string } = {}): Fixture 
   return fixture
 }
 
-/**
- * Create a superproject with one real submodule and return a fixture whose `main` is the
- * submodule's working tree.
- *
- * A real submodule is the only way to reproduce the layout under test: git puts the submodule's
- * gitdir under `<super>/.git/modules/<name>` and records `core.worktree` in that gitdir's common
- * config, because the gitdir no longer sits inside the worktree. `git worktree add` produces a
- * linked worktree instead and never writes `core.worktree`.
- *
- * @returns a fixture whose `main` and `linked` are the same submodule worktree.
- */
-function createSubmoduleFixture(): Fixture {
-  const container = mkdtempSync(join(tmpdir(), 'dsh-lefthook-submodule-'))
-  fixtures.push(container)
-  const env: NodeJS.ProcessEnv = {
-    ...process.env,
-    CI: 'false',
-    GITHUB_ACTIONS: 'false',
-    GIT_AUTHOR_EMAIL: 'hooks@example.test',
-    GIT_AUTHOR_NAME: 'Hooks Test',
-    GIT_COMMITTER_EMAIL: 'hooks@example.test',
-    GIT_COMMITTER_NAME: 'Hooks Test',
-    GIT_CONFIG_GLOBAL: join(container, 'global.gitconfig'),
-    GIT_CONFIG_NOSYSTEM: '1',
-    HOME: container,
-    XDG_CONFIG_HOME: join(container, '.config'),
-  }
-  const superproject = join(container, 'super')
-  const source = join(container, 'source')
-  mkdirSync(superproject)
-  mkdirSync(source)
-  git({ container, env, main: source, linked: source }, source, ['init'])
-  write(join(source, 'README.md'), '# submodule source\n')
-  git({ container, env, main: source, linked: source }, source, ['add', 'README.md'])
-  git({ container, env, main: source, linked: source }, source, ['commit', '-m', 'source'])
-  git({ container, env, main: superproject, linked: superproject }, container, ['init', superproject])
-  write(join(superproject, 'README.md'), '# superproject\n')
-  git({ container, env, main: superproject, linked: superproject }, superproject, ['add', 'README.md'])
-  git({ container, env, main: superproject, linked: superproject }, superproject, ['commit', '-m', 'superproject'])
-  // file-protocol submodules are refused by default; this fixture never leaves the temp directory.
-  git({ container, env, main: superproject, linked: superproject }, superproject, [
-    '-c', 'protocol.file.allow=always', 'submodule', 'add', source, 'module',
-  ])
-  const main = join(superproject, 'module')
-  write(join(main, 'lefthook.yml'), 'submodule-worktree-config\n')
-  installFakeLefthook(main)
-  return { container, env, linked: main, main }
-}
-
 function gitDirectory(fixture: Fixture, root: string): string {
   return git(fixture, root, ['rev-parse', '--absolute-git-dir'])
 }
@@ -590,23 +541,6 @@ syncBuiltinESMExports()
     expect(result.stderr).toContain('core.worktree is in the common config')
     expect(gitResult(fixture, fixture.main, ['config', '--get', 'extensions.worktreeConfig']).status).toBe(1)
     expect(existsSync(hooksPath(fixture, fixture.main))).toBe(false)
-  })
-
-  it('accepts the core.worktree a submodule keeps in its common config', async () => {
-    const fixture = createSubmoduleFixture()
-    const commonConfig = join(commonDirectory(fixture), 'config')
-    // Guard the premise: the submodule layout is what puts core.worktree there, not this test.
-    expect(git(fixture, fixture.main, ['config', '--file', commonConfig, '--get', 'core.worktree']).length)
-      .toBeGreaterThan(0)
-    expect(git(fixture, fixture.main, ['rev-parse', '--show-superproject-working-tree']).length)
-      .toBeGreaterThan(0)
-
-    const result = await runInstaller(fixture, fixture.main)
-
-    expect(result.stderr).not.toContain('core.worktree is in the common config')
-    expect(result.status).toBe(0)
-    expect(git(fixture, fixture.main, ['config', '--get', 'extensions.worktreeConfig'])).toBe('true')
-    expect(existsSync(hooksPath(fixture, fixture.main))).toBe(true)
   })
 
   it.skipIf(process.platform === 'win32')('refuses a symlinked common repository config before writing through it', async () => {
