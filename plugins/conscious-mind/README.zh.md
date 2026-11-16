@@ -45,11 +45,11 @@ Web profile 目前实际添加了一个 `elysia` preset，挂载同一子插件�
 
 ## 当前时间
 
-固定主意识与 Web 的 `elysia` preset 都通过 `@elysia/conscious-mind/current-time` 复用 DSH 原生 `@deepseek-ai/dsh-time-context`。它在每个实际执行的 `agent/pre-step` 采样当前时钟；`refreshIntervalMs: 0` 不跳过步骤，也不启动 tick、定时唤醒或额外模型请求。主运行层默认时区、Web preset 显式配置的 fallback 均为 `Asia/Shanghai`。Web `user-rpc` 本轮携带唯一有效的 `clientTimeZone` 时，按原生逻辑优先使用浏览器时区；IM 或计划提醒没有浏览器时区时，当前时钟采样使用上海时区。原生对缺失或混合浏览器时区的提示仍保留，不把时钟 fallback 冒充用户已明确选择的时区。
+固定主意识与 Web 的 `elysia` preset 只挂载 `@elysia/conscious-mind/current-time`，不再为这两个作用域挂载原生 `@deepseek-ai/dsh-time-context`。每一轮第一次实际执行的 `agent/pre-step` 只追加一条 `source.kind: 'elysia-calendar-context'` 的独立时间输入，正文严格为 `YYYY/MM/DD HH:mm`，例如 `2026/11/16 23:49`。部署固定使用 `Asia/Shanghai`；浏览器时区不再改变这条时间，也不显示星期、秒、UTC、时区说明或距上条消息的时间。
 
-首次真实报时的日期、时间和时区已正确，但模型额外猜错了原生时钟未提供的星期。`current-time.ts` 因而保留原生时钟，另以 `source.kind: 'elysia-calendar-context'` 追加独立日历事实：每次补充只取一次 `Date.now()`，由 `Intl` 按配置时区、`zh-CN`、公历 `gregory` 和数字 `latn` 生成完整日期、星期、时分秒及 GMT 偏移，并附同一次采样的 UTC ISO。只有 `agent === owner` 的精确作用域步骤才追加；它不解析或覆盖原生输入，也不改变原生浏览器时区优先规则。浏览器选择其他时区时，这份日历仍明确按当前配置的 `Asia/Shanghai` 计算，两份输入各自独立采样。第二次真实验收结果仍由北京时间上下文报告记录，不在此预先声明通过。
+挂载时，旧的 `time-context` 与 `elysia-calendar-context` 可见快照都会通过空 surface replacement 退出模型上下文。同一轮后续工具步骤复用已注入的时间，不再追加快照或空 replacement；下一轮第一次步骤才替换上一条可见时钟并加入当前极简时间。原始事件、旧详细文本和来源引用仍留在耐久日志中，空 replacement 不会被重复清理。卸载时同样清理当前可见时钟。时间不写入 `complete: true` 的 standing 正文，不启动 timer，也不会自行唤醒空闲 Session。
 
-时间作为 `source.kind: 'time-context'` 的独立、可追溯输入进入当前请求与耐久会话，不追加到 `complete: true` 的 standing 正文，也不修改主体文件。主意识上下文隔离只排除 `agent-instructions` 与 `runtime-context`，因此保留这份原生时钟输入。既有 UTC ISO 时间戳的存储格式不变；时间末尾 `Z` 表示 UTC，不表示主机时钟错误，查看北京时间时需加八小时。接入与真实验收进展见[北京时间上下文记录](../../docs/report/2026-11-12-beijing-time-context.md)，此处不预先声明验收通过。
+2026-11-16 的真实请求验收确认只有一条 `elysia-calendar-context`，文本为 `2026/11/16 23:49`，没有原生 `time-context` 或旧详细日历残留。实现与验收证据见[北京时间上下文记录](../../docs/report/2026-11-12-beijing-time-context.md)。
 
 ## 文件能力
 
@@ -71,7 +71,9 @@ D1 OpenAI 适配器暂时保留用于诊断，但不再选中。历史上官方 
 
 ## 技能能力
 
-`@elysia/conscious-mind/skill-capabilities` 在固定主意识与 Web `elysia` preset 的 agent scope 中组合 DSH 原生 `@deepseek-ai/dsh-skill-filesystem` 和 `@deepseek-ai/dsh-tool-skill`。唯一根目录是 `/home/ayerelysia/Elysia/Data/workspace/skills`；`includeDefaultRoots: false`，只读取这里的直属 `<skill-name>/SKILL.md`，不加载 DSH 默认、bundled 或开发目录。模型只新增原生 `skill({ name })` 工具，Skill 文件维护继续使用已有文件工具，没有另造管理工具。
+`@elysia/conscious-mind/skill-capabilities` 在固定主意识与 Web `elysia` preset 的 agent scope 中组合 DSH 原生 `@deepseek-ai/dsh-skill-filesystem` 和 `@deepseek-ai/dsh-tool-skill`。唯一文件系统根目录是 `/home/ayerelysia/Elysia/Data/workspace/skills`；`includeDefaultRoots: false` 只约束这个 filesystem provider，使它不加载项目、用户、DSH 默认、bundled 或开发目录，并不屏蔽其他全局 provider。模型只新增原生 `skill({ name })` 工具，Skill 文件维护继续使用已有文件工具，没有另造管理工具。
+
+DSH 的全局 Office provider 另行贡献 `office`、`office-docx`、`office-pptx`、`office-xlsx`。爱莉不需要这四个工程技能，因此子插件通过原生近作用域同名 runtime 定义遮蔽它们，并设置 `modelInvocable: false`、`userInvocable: false`：目录不显示，`skill` 和 `/name` 都不能加载。屏蔽只存在于主意识与该 preset，不修改或禁用全局 Office provider，其他 Agent 不受影响；卸载此装配会恢复继承定义。
 
 DSH 在后续模型步骤以 durable user-role `<system-reminder>` 提供技能名称和描述，不改写固定 system prompt，也不一次注入全部正文。模型按精确名称调用 `skill` 后才看到 `<skill_content>`；每次调用会重读当前 `SKILL.md`，资源基目录随结果返回。Watcher 让新增、删除和 frontmatter 变化进入后续目录投影，但文件变化本身不会唤醒空闲 Session。全局 `dsh-skill-filesystem`、`dsh-tool-skill` 保持 disabled 是预期状态，能力只存在于目标 Agent 作用域。
 
@@ -99,7 +101,7 @@ Harness 提供 `agents` 服务时，插件自动把 pending 接到主意识。�
 
 create/resume 的 setup 路径通过 `composeMainAgent` 挂载作用域前缀，并暴露 `send_text`、`send_voice`、DSH 原生的 `read`、`read_image`、`write`、`edit`、`glob`、`grep`、`web_search`、`web_fetch`、`skill` 和本作用域注册的 `pass`。setup 成功后，在以 agent context 为键的进程内 WeakMap 中记录固定配置签名和完成状态，不记录正文；相同配置重复 setup 复用同一 promise，不同配置拒绝替换，scope 卸载时清除凭据。既有或竞态恢复的 live agent 只有凭据完整且匹配时才能借用；旧未装配实例需经正常作用域恢复，不改写 header 或私有历史。代码执行及其他全局工具继续屏蔽；文件工具使用下述作用域权限。`read_image` 只用于主动读取工作区内获准的本地图片，聊天图片走独立的附件入站链路。`pass` 必填 `reason`，把这一轮不说话的原因留在 session，不触碰任何渠道；成功执行时调用原生 `exec.concludeTurn()` 请求结束本轮。她可以回复一个或多个会话，也可以不说话，运行时不强迫二选一中的任何一个。已取走的事件留在长期 session 历史中。旧的 `createSendTextTurn` 仍保留给独立实验，但不是 ElyHarn 服务安装的主意识回复轮。
 
-`pass` 的成功结果先由原生工具执行链写入 `tool/result`，再按 agent loop 的收尾规则结束本轮；不能只返回 `{ passed: true }` 而让模型继续为同一选择空转。执行期间真正到达的新输入仍按原生 inbox 的待处理规则继续，不清空、丢弃或按正文去重。`time-context` 与 `elysia-calendar-context` 只是实际 `pre-step` 中附加的框架上下文，不是独立 inbox 来信或唤醒源；正确收尾后，它们不会自行开启下一步。这项修复不增加关键词触发或固定判断规则。事故与真实验收进展见[pass 轮次收尾记录](../../docs/report/2026-11-12-pass-turn-completion.md)，此处不预先声明部署验收通过。
+`pass` 的成功结果先由原生工具执行链写入 `tool/result`，再按 agent loop 的收尾规则结束本轮；不能只返回 `{ passed: true }` 而让模型继续为同一选择空转。执行期间真正到达的新输入仍按原生 inbox 的待处理规则继续，不清空、丢弃或按正文去重。`elysia-calendar-context` 只是实际 `pre-step` 中附加的框架上下文，不是独立 inbox 来信或唤醒源；正确收尾后，它不会自行开启下一步。这项修复不增加关键词触发或固定判断规则。事故与真实验收进展见[pass 轮次收尾记录](../../docs/report/2026-11-12-pass-turn-completion.md)，此处不预先声明部署验收通过。
 
 ## 主意识上下文隔离
 

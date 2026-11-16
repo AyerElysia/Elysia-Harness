@@ -135,11 +135,9 @@ Web profile 当前只添加 `elysia` preset，配置五份文件并挂载同一 
 
 ### 6.1.2 当前时间上下文
 
-主意识和 Web `elysia` preset 在自己的 scope 内挂载 `@elysia/conscious-mind/current-time`，复用原生 `@deepseek-ai/dsh-time-context`；每个实际执行的 `agent/pre-step` 采样一次，`refreshIntervalMs: 0` 不跳过步骤，不另建 tick 或自动唤醒。主运行层默认时区和 Web 显式 fallback 为 `Asia/Shanghai`。本轮 Web `user-rpc` 有唯一有效的 `clientTimeZone` 时，原生浏览器时区优先；IM、计划提醒没有浏览器时区时，采样时钟使用上海时区。缺失或混合浏览器时区的原生提示仍保留，时钟 fallback 不等于用户已明确指定时区。
+固定主意识和 Web `elysia` preset 在各自的 agent scope 挂载 `@elysia/conscious-mind/current-time`。每轮第一个实际执行的 `agent/pre-step` 按 `Asia/Shanghai` 采样一次，正文格式为 `YYYY/MM/DD HH:mm`。浏览器消息、IM 和计划提醒使用同一时区。同一轮的后续工具步骤复用该读数。
 
-首次真实报时正确给出了日期、时间和时区，但模型自行补充的星期有误，原生时钟未提供该字段。`current-time.ts` 另追加 `source.kind: 'elysia-calendar-context'` 的独立日历输入：对每次补充使用单次 `Date.now()`，以 `Intl` 的 `zh-CN`、公历 `gregory`、数字 `latn` 和配置时区生成完整日期、星期、时分秒、GMT 偏移及该次采样的 UTC ISO；仅在 `agent === owner` 时追加。此输入与原生时钟各自独立采样，不解析、覆盖原生结果或改变其浏览器时区优先逻辑；即使浏览器使用其他时区，日历仍标明按当前配置的 `Asia/Shanghai` 计算。第二次真实验收另见报告，此处不预判结果。
-
-采样结果以 `source.kind: 'time-context'` 独立进入可追溯的模型输入与耐久日志，不改 `complete: true` 的 standing 正文或主体文件；现有按来源排除 `agent-instructions`、`runtime-context` 的上下文隔离不会删除它。UTC ISO 存储格式保持不变，`Z` 明确表示 UTC；它与北京时间相差八小时不意味着主机时钟错误。真实验收结果由[北京时间上下文记录](report/2026-11-12-beijing-time-context.md)单独记录，不以配置或源码接入冒充已经验证。
+时钟以 `source.kind: 'elysia-calendar-context'` 的独立快照进入模型输入和耐久日志。插件挂载、下一轮采样和卸载时，从可见上下文移除旧时钟，耐久日志保留原始事件。历史原生 `time-context` 快照也适用这条清理规则。定向测试与真实模型验收见[北京时间上下文记录](report/2026-11-12-beijing-time-context.md)。
 
 ### 6.2 入站元信息与图片
 
@@ -243,7 +241,7 @@ agentCtx.tools.restrict({ allow: ['send_text', 'send_voice', 'read_image'] })
 
 按 `composeMainAgent` 装配后的主 agent 暴露 `send_text`、`send_voice`、`read`、`read_image`、`write`、`edit`、`glob`、`grep` 和本作用域注册的 `pass`；只有装配凭据完整且配置匹配的 live agent 才可借用。文本文件与搜索工具只由文件能力子插件在目标 agent scope 注册，不在 host plane 全局开启；standard、minimal 的既有工具与权限不变。文件能力子插件只开放配置工作区（排除 `.migration`）与精确选中的提示词文件，`read_image` 仅可读取工作区图片。备份、名单外文件、符号链接逃逸与可检测硬链接被阻断；搜索检查完整 canonical result，不能只依赖截断后的显示 metadata。提示词修改前保存逐字节运维备份，检查必需文件非空与最终 UTF-8 字节上限；原生 DSH 继续负责已读观察、陈旧版本、字面编辑及原子写入。装配后期失败会回收提示词与文件守卫两个子插件，不遗留半套能力。代码执行仍未开放，聊天图片继续使用独立附件入站链路。原 session cwd header 保持不变，实际工作目录由 working-directory 服务设为工作区。
 
-`pass` 是明确的不外发选择，成功时调用 `exec.concludeTurn()` 请求本轮收尾；原生执行链先将其成功结果写入 `tool/result`，agent loop 再依待处理 inbox 决定结束或继续处理真正的新输入。返回 `{ passed: true }` 本身不等于已经结束轮次。`time-context` 和 `elysia-calendar-context` 只在实际 `pre-step` 附加框架输入，不占用外部 inbox，不是独立唤醒源，不能在正常终止后自行再触发一轮。修复不以新用户消息去重、关键词规则或清空待处理输入来掩盖重复 `pass`。事故与真实验收另见[pass 轮次收尾记录](report/2026-11-12-pass-turn-completion.md)，不由源码修改预判部署验收结果。
+`pass` 是明确的不外发选择，成功时调用 `exec.concludeTurn()` 请求本轮收尾；原生执行链先将其成功结果写入 `tool/result`，agent loop 再依待处理 inbox 决定结束或继续处理真正的新输入。返回 `{ passed: true }` 本身不等于已经结束轮次。`elysia-calendar-context` 由每轮首个实际 `pre-step` 加入模型上下文，与外部 inbox 和唤醒机制相互独立。修复不以新用户消息去重、关键词规则或清空待处理输入来掩盖重复 `pass`。事故与真实验收另见[pass 轮次收尾记录](report/2026-11-12-pass-turn-completion.md)，不由源码修改预判部署验收结果。
 
 `send_voice` 经 BreezeTTS 合成固定本地音色，再交给渠道语音 sender。当前 KOOK 已实现上传与原生语音发送，平台明确拒绝该类型时才退为音频文件消息；状态未知不自动重发。QQ、飞书语音仍待接入。统一 `send_file(channel, conversation, path)`、共享文件检查与 `OutboundFile` 以及渠道投递仍只有需求，不能据此宣称已有文件发送可用。
 

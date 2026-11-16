@@ -111,6 +111,12 @@ describe('elysia skill capabilities', () => {
     await writeSkill(join(home, '.dsh/skills'), 'project-secret', 'Must not be discovered', 'Project body.')
     await writeSkill(root, 'journal-helper', 'Help with journal entries', 'First body.')
     const ctx = await setup(home)
+    for (const name of ['office', 'office-docx', 'office-pptx', 'office-xlsx']) {
+      ctx.skills.register({
+        name, description: `Packaged ${name}`, content: `${name} body.`,
+        source: 'bundled', provider: 'skill-office',
+      })
+    }
     const target = agentForCwd(home, 'skill-target')
     const other = agentForCwd(home, 'skill-other')
     const targetScope = await agentScope(ctx, target)
@@ -129,8 +135,21 @@ describe('elysia skill capabilities', () => {
     const catalogText = JSON.stringify(catalogs(target.session)[0]?.data.content)
     expect(catalogText).toContain('journal-helper')
     expect(catalogText).not.toContain('project-secret')
+    expect(catalogText).not.toContain('office-docx')
     expect(catalogText).toContain('<system-reminder>')
     expect(catalogText).toContain('<available_skills>')
+
+    const targetOffice = (await ctx.skills.list({ scope: target })).find(skill => skill.name === 'office-docx')
+    const otherOffice = (await ctx.skills.list({ scope: other })).find(skill => skill.name === 'office-docx')
+    expect(targetOffice).toMatchObject({
+      provider: 'elysia-office-exclusion',
+      invocation: { modelInvocable: false, userInvocable: false },
+    })
+    expect(otherOffice).toMatchObject({
+      provider: 'skill-office',
+      invocation: { modelInvocable: true, userInvocable: true },
+    })
+    expect((await loadSkill(ctx, target, 'office-docx')).isError).toBe(true)
 
     const loaded = await loadSkill(ctx, target, 'journal-helper')
     expect(loaded.isError).toBe(false)
@@ -156,6 +175,9 @@ describe('elysia skill capabilities', () => {
 
     await fiber.dispose()
     expect(ctx.tools.get('skill', target)).toBeUndefined()
+    expect((await ctx.skills.list({ scope: target })).find(skill => skill.name === 'office-docx')).toMatchObject({
+      provider: 'skill-office', invocation: { modelInvocable: true, userInvocable: true },
+    })
     await fireStep(ctx, target, 1, 4)
     expect(catalogs(target.session)).toHaveLength(1)
   })

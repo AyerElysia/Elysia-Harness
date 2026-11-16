@@ -65,3 +65,41 @@ source与安装副本的index/main-session逐项SHA相同，未改其副本；�
 profile安装的conscious-mind采用逐文件硬链副本；新增src/current-time.ts不会自动出现，source manifest已与安装副本断硬链。受控停止Web后须精确刷新安装副本manifest与新增模块，并核对index/main-session字节；不需要全仓安装或构建。受支持DSH CLI的installation resolver已经供应原生time-context包，不能以副本裸Node缺少peer链接推断正常profile不可启动。
 
 恢复只逆向本任务的接线、说明、依赖元数据与精确安装副本变更，并在重新核对生命周期owner后重载；不改系统时钟、主体文件、原始历史或其它线程改动。
+
+## 2026-11-16：合并为单一极简时间
+
+### 需求与实现
+
+主意识每次收到新消息后，原生 `time-context` 与自定义 `elysia-calendar-context` 曾分别注入一条时间，内容也包含星期、秒、UTC 和时区等冗余信息。本次将主意识与 Web `elysia` preset 的时间输入收束为一条自定义时钟，不再为这两个作用域挂载原生 `dsh-time-context`。固定配置时区为 `Asia/Shanghai`，不再按浏览器时区分支；正文严格为 `YYYY/MM/DD HH:mm`，不包含其他说明。
+
+`current-time.ts` 在挂载时清理所有仍可见的旧原生/自定义时钟，在每个精确 owner 的实际 `agent/pre-step` 中先清理上一条可见时钟，再加入本次极简时间；卸载时也清理当前可见时钟。清理使用空 surface replacement，原始事件、详细旧文本与来源引用继续保存在耐久日志中。没有 timer、额外唤醒或 standing prompt 正文修改。
+
+### 第一版真实验收暴露的问题
+
+第一版仅清理原生 `time-context`，requestId=`2026-11-16T15-39-27-169Z-a755ded8` 中，新时间已经简化为 `2026/11/16 23:37`、`2026/11/16 23:39`，但旧详细 `elysia-calendar-context` 仍留在可见投影，因此该版不能视为完成。第二版把旧自定义快照也纳入相同的 surface replacement 清理，并新增对应回归断言；验证脚本只统计正文非空的可见时钟，避免把空 replacement 误报为第二条时间。
+
+### 测试、部署与真实验收
+
+第二版定向回归通过：3 个文件、30/30 项（`current-time.spec.ts`、`main-session.spec.ts`、`standing-prompt.spec.ts`）。覆盖跨分钟/跨午夜替换、可见上下文始终只有一条、卸载后为零、浏览器与计划入口使用同一固定时区、原生与自定义旧详细时钟退出可见投影但保留历史、普通及 descendant Agent 隔离，以及主意识装配与固定提示词回归。
+
+重载前主意识 `agentAvailable=true`、`running=false`，LiveKit `activeCallRooms=0`、`occupied=false`；随后执行既有 `scripts/dsh-web-restart.sh` 受控重载。没有重启旧 Python Elysium，也没有向 QQ、KOOK 或飞书发送测试消息。
+
+第二版真实主意识 Web 自检的 requestId=`2026-11-16T15-49-48-328Z-371b274a`。请求中正文非空的可见时钟数量为 1，来源仅为 `elysia-calendar-context`，文本严格为 `2026/11/16 23:49`；本次新增非空时钟事件数量也为 1。模型回复“极简时间检查完成”，`toolEvents=[]`，没有工具调用或外部渠道投递。验证以当前真实模型请求的可见投影为准，不要求整个等待窗口没有其他主意识活动。
+
+验收后主意识与 `@elysia/gemini-cascade` 均为 enabled/active，主 Agent `agentAvailable=true`、`running=false`；LiveKit 仍为 `activeCallRooms=0`、`occupied=false`。四个 Office Skills 的作用域屏蔽保持原状，本次未回退 Skills 相关实现。
+
+## 2026-11-17：同一轮的工具步骤不再重复注入
+
+### 截图诊断与语义修正
+
+用户截图显示 `2026/11/16 23:39` 的上下文注入、一次 `send_text · kook` 工具调用，随后又有 `2026/11/16 23:40` 的上下文注入。两者不是同一模型请求里同时可见的两条时钟，而是同一轮的两个模型步骤各注入了一次。空 surface replacement 虽然保证后续请求只有一条可见时钟，但界面仍保留两次注入事件，不符合“每轮只注入一次”的要求。
+
+`current-time.ts` 因而记录本次已经成功附加时钟的 `turn`。同一轮后续 `agent/pre-step` 直接复用已注入的快照，不再清理旧时钟、追加空 replacement 或生成新时间；只有新 `turn` 的第一次实际步骤才采样并替换旧快照。挂载和卸载时的历史清理规则不变。
+
+定向回归仍为 3 个文件、30/30 项通过。更新后的用例明确验证：同一轮第 2 步返回的新增时钟数为 0，耐久日志没有新增时钟或空 replacement，可见时间保持第 1 步读数；跨午夜后的新 turn 才更新读数。真实部署验收使用一次本地 `read` 工具调用制造后续模型步骤，不以无工具的单步请求代替该场景。
+
+### 部署与真实验收
+
+等待已有主意识回复自然结束，确认 `running=false` 且 LiveKit `activeCallRooms=0` 后执行受控重载。真实 Web 自检 requestId=`2026-11-16T16-19-39-780Z-2d42c051`，本轮明确调用一次本地 `read`，最终请求记录为 step 2。整轮正文非空的新增时钟事件只有 1 条，来源为 `elysia-calendar-context`，文本为 `2026/11/17 00:18`；最终模型请求中的可见时钟也只有这一条。工具事件仅为 `read` 的 call/result，回复为“每轮单次时间检查完成”，没有调用任何外部渠道工具。
+
+验收后主意识与语音插件保持 enabled/active，主 Agent `agentAvailable=true`、`running=false`，LiveKit `activeCallRooms=0`、`occupied=false`。

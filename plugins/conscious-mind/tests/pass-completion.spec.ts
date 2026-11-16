@@ -100,7 +100,7 @@ function input(text: string) {
 it.each([
   { entry: 'platform', source: platformMessageSource, expectedSends: 1 },
   { entry: 'DSH', source: { kind: 'user', rpcId: 'local-fixture' } as const, expectedSends: 0 },
-])('checks send_text in a $entry turn, then pass finishes with both clock contexts mounted', async ({ source, expectedSends }) => {
+])('checks send_text in a $entry turn, then pass finishes with one clock across both model steps', async ({ source, expectedSends }) => {
   const { ctx, agent, adapter, sendText } = await fixture([
     call('fixture-send', 'send_text', { text: 'public fixture reply' }),
     call('fixture-pass', 'pass', { reason: '  fixture finished  ' }),
@@ -119,11 +119,17 @@ it.each([
   })
   const end = events.findLast(event => event.type === 'turn/end')
   expect(end?.type === 'turn/end' && end.data.reason).toEqual({ kind: 'completed' })
-  for (const kind of ['time-context', 'elysia-calendar-context']) {
-    expect(events.filter(event => event.type === 'user/message' && event.data.source.kind === kind)).toHaveLength(2)
-    for (const request of adapter.requests) {
-      expect(request.messages.some(message => message.role === 'user' && message.source?.kind === kind)).toBe(true)
-    }
+  const clockEvents = events.flatMap(event => event.type === 'user/message'
+    && (event.data.source.kind === 'time-context' || event.data.source.kind === 'elysia-calendar-context')
+    ? [event.data] : [])
+  expect(clockEvents).toEqual([expect.objectContaining({
+    source: expect.objectContaining({ kind: 'elysia-calendar-context', form: 'snapshot' }),
+    content: [{ type: 'text', text: expect.stringMatching(/^\d{4}\/\d{2}\/\d{2} \d{2}:\d{2}$/) }],
+  })])
+  for (const request of adapter.requests) {
+    const clocks = request.messages.filter(message => message.role === 'user'
+      && (message.source?.kind === 'time-context' || message.source?.kind === 'elysia-calendar-context'))
+    expect(clocks).toEqual(clockEvents)
   }
   await ctx.sessions.flush(agent.session)
   const reader = await ctx.sessionPersistence.open(MAIN_SESSION_ID, 'read')

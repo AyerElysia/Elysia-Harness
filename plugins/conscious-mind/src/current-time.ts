@@ -1,9 +1,9 @@
-/** Scoped native clock plus independently sampled calendar facts. */
+/** One minimal configured-zone clock for each of Elysia's actual turns. */
 import type { Context } from '@deepseek-ai/cordis'
 import z from '@deepseek-ai/schemastery'
+import type { Agent } from '@deepseek-ai/dsh-agent'
 import { createUserMessage, type ContextFormed } from '@deepseek-ai/dsh-llm'
 import { scopeOf } from '@deepseek-ai/dsh-scope'
-import * as NativeTimeContext from '@deepseek-ai/dsh-time-context'
 
 declare module '@deepseek-ai/dsh-llm' {
   interface MessageSourceMap {
@@ -12,36 +12,56 @@ declare module '@deepseek-ai/dsh-llm' {
 }
 
 export const name = 'elysia-current-time'
-export const inject = ['agents', 'sessionProjections']
+export const inject = ['agents']
 
-/** Explicit fallback zone; the native plugin validates the IANA identifier. */
+/** The single IANA zone used for Elysia's minimal clock. */
 export interface Config {
   timeZone: string
 }
 
 export const Config: z<Config> = z.object({ timeZone: z.string().required() })
 
-/** Sample each actual step; no timer and no change to native browser-zone selection. */
-export async function apply(ctx: Context, config: Config): Promise<void> {
+/** Retire all earlier Elysia/native clocks from the visible surface, preserving history. */
+function clearVisibleClocks(agent: Agent): void {
+  for (const seq of [...agent.session.surface.nodes]) {
+    const event = agent.session.eventAt(seq)
+    if (event?.type !== 'user/message'
+      || !['time-context', 'elysia-calendar-context'].includes(event.data.source.kind)
+      || event.data.content.length === 0) continue
+    agent.session.append('user/message', createUserMessage({
+      content: [], source: event.data.source,
+    }), {
+      surfaceOp: { op: 'replace', startSeq: seq, endSeq: seq },
+      sourceEventSeqs: [seq],
+    })
+  }
+}
+
+/** Sample once per actual turn; tool steps reuse it without another injection. */
+export function apply(ctx: Context, config: Config): void {
   const owner = scopeOf(ctx)
   if (owner === undefined) throw new Error('elysia-current-time requires an Agent-scoped context')
-  await ctx.plugin(NativeTimeContext, { timeZone: config.timeZone, refreshIntervalMs: 0 })
-  const calendar = new Intl.DateTimeFormat('zh-CN', {
-    timeZone: config.timeZone, calendar: 'gregory', numberingSystem: 'latn',
-    year: 'numeric', month: '2-digit', day: '2-digit', weekday: 'long',
-    hour: '2-digit', minute: '2-digit', second: '2-digit', hourCycle: 'h23',
-    timeZoneName: 'longOffset',
-  })
-  const timeZone = calendar.resolvedOptions().timeZone
-  ctx.on('agent/pre-step', async ({ agent, signal }, next) => {
+  let calendar: Intl.DateTimeFormat
+  try {
+    calendar = new Intl.DateTimeFormat('zh-CN', {
+      timeZone: config.timeZone, calendar: 'gregory', numberingSystem: 'latn',
+      year: 'numeric', month: '2-digit', day: '2-digit',
+      hour: '2-digit', minute: '2-digit', hourCycle: 'h23',
+    })
+  } catch (error) {
+    throw new Error(`invalid IANA timeZone: ${config.timeZone}`, { cause: error })
+  }
+  let injectedTurn: number | undefined
+  clearVisibleClocks(owner)
+  ctx.effect(() => () => clearVisibleClocks(owner))
+  ctx.on('agent/pre-step', async ({ agent, turn, signal }, next) => {
     const decision = await next()
-    // Scoped events also reach ancestor listeners; this supplement belongs only to its exact owner.
-    if (agent !== owner || decision.kind === 'reject' || signal.aborted) return decision
-    const sampledAt = Date.now()
-    const parts = new Map(calendar.formatToParts(sampledAt).map(part => [part.type, part.value]))
-    const text = `配置时区的系统日历事实：日期 ${parts.get('year')}-${parts.get('month')}-${parts.get('day')}；${parts.get('weekday')}；时间 ${parts.get('hour')}:${parts.get('minute')}:${parts.get('second')}；时区 ${timeZone}；UTC 偏移 ${parts.get('timeZoneName')}。\n`
-      + `本条日历事实的独立采样时刻（UTC ISO）：${new Date(sampledAt).toISOString()}。\n`
-      + '本条按配置时区计算，与原生 time-context 各自独立采样；不改变原生浏览器时区选择。'
+    // Scoped events also reach ancestor listeners; this clock belongs only to its exact owner.
+    if (agent !== owner || decision.kind === 'reject' || signal.aborted || injectedTurn === turn) return decision
+    clearVisibleClocks(agent)
+    const parts = new Map(calendar.formatToParts(Date.now()).map(part => [part.type, part.value]))
+    const text = `${parts.get('year')}/${parts.get('month')}/${parts.get('day')} ${parts.get('hour')}:${parts.get('minute')}`
+    injectedTurn = turn
     return {
       ...decision,
       messages: [...decision.messages, createUserMessage({

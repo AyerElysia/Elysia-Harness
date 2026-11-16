@@ -24,10 +24,29 @@ export const Config: z<Config> = z.object({
 export const name = 'elysia-skill-capabilities'
 export const inject = ['skills']
 
+/** Packaged Office skills are useful in engineering sessions, not in Elysia's persona sessions. */
+const PACKAGED_OFFICE_SKILLS = ['office', 'office-docx', 'office-pptx', 'office-xlsx'] as const
+
 /** Mount only DSH's native skill provider and `skill` tool in this Agent scope. */
 export async function apply(ctx: Context, config: Config): Promise<void> {
   if (scopeOf(ctx) === undefined) throw new Error('elysia skill capabilities must be mounted in an agent scope')
   if (!isAbsolute(config.rootDir)) throw new Error('elysia skill rootDir must be an absolute path')
+
+  // The packaged Office provider is global, so includeDefaultRoots cannot hide
+  // its contributions. Native nearest-scope runtime entries shadow those names
+  // for this Agent alone and deny both model and direct-user invocation. Disposing
+  // this composition restores the inherited definitions without touching them.
+  for (const name of PACKAGED_OFFICE_SKILLS) {
+    ctx.skills.register({
+      name,
+      description: 'Disabled packaged Office skill for Elysia.',
+      content: '',
+      source: 'custom',
+      provider: 'elysia-office-exclusion',
+      invocation: { modelInvocable: false, userInvocable: false },
+    })
+  }
+
   const provider = await ctx.plugin(SkillFilesystem, {
     includeDefaultRoots: false,
     customSkillDirs: [config.rootDir],

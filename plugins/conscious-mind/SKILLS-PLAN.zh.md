@@ -4,6 +4,8 @@
 
 定向测试 3 个文件、28 项全部通过；固定主意识和 preset 的真实模型轮次均实际发现目录、调用 `skill` 并读到探针正文。完整插件套件仍有与新增 Skills 无关的既存失败，不能表述为全绿。详细修改、运行重载、真实 requestId、失败清单和遗留项见[实施与验收报告](../../docs/report/2026-11-15-conscious-mind-skills.zh.md)。
 
+2026-11-16 追加验收：DSH 全局 Office provider 独立贡献的四个 Skill 已通过爱莉作用域同名 runtime 定义遮蔽，模型与 `/name` 调用均禁用；定向测试仍为 28/28 通过。安全重载后，固定主意识真实轮次 `2026-11-16T15-16-43-885Z-1e5ff989` 收到空的替换目录，回答“当前技能目录中没有可用技能。”，没有调用工具。详见报告第 8 节。
+
 以下保留原设计与核对依据，作为已实现契约的说明；不再扩张为学习系统。
 
 ## 1. 本阶段只做什么
@@ -40,7 +42,7 @@
 @elysia/conscious-mind/skill-capabilities
 ```
 
-它只做两件事：按给定根目录挂载 DSH filesystem provider，再挂载 DSH `skill` 工具。以下两处复用同一个子插件和同一份目录配置：
+它只有三项装配职责：用原生近作用域定义屏蔽四个 Office 名称，按给定根目录挂载 DSH filesystem provider，再挂载 DSH `skill` 工具。以下两处复用同一个子插件和同一份目录配置：
 
 - `composeMainAgent()`：覆盖固定主意识长期 Session。
 - Web `preset-elysia`：覆盖从该 preset 新建的 Session。
@@ -83,7 +85,8 @@ description: 一句话说明这个技能适用于什么任务。
 - 本阶段约定目录名与 frontmatter 的 `name` 相同，便于维护；DSH 原生解析器并不强制二者一致，所以这是一层我们的管理约定，不要误写成原生校验。
 - DSH 只发现根目录直属的 `<name>/SKILL.md` 或 `<name>.md`，不递归发现更深的 `**/SKILL.md`；本阶段不使用平铺文件。
 - 不在 `skills/` 根目录放 README、索引或普通笔记，避免被当成平铺 Skill 解析。
-- `includeDefaultRoots: false`：不加载项目、用户、DSH 开发或 bundled 默认来源，只看上述工作区目录。
+- `includeDefaultRoots: false`：只约束爱莉的 filesystem provider，不加载项目、用户、DSH 开发或 bundled 默认文件来源，只看上述工作区目录。
+- 该开关不屏蔽其他全局 Skill provider。DSH 全局 Office provider 会另行贡献 `office`、`office-docx`、`office-pptx`、`office-xlsx`；2026-11-16 起，子插件以爱莉作用域中的同名 runtime 定义遮蔽这四个名称，并同时设置 `modelInvocable: false`、`userInvocable: false`，使目录、`skill` 和 `/name` 均不可使用它们。其他 Agent 的全局定义不变。
 - `scripts/` 只是资源目录，不因接入 Skills 而新增 shell 或代码执行能力。
 
 可选 frontmatter：

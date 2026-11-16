@@ -137,3 +137,35 @@ Web 服务于 3299 端口恢复；`@elysia/conscious-mind` 与 `@elysia/gemini-c
 - 目录和正文仍占用模型上下文，具体投影与压缩继续交给 DSH。
 - 空闲时修改 Skill 不会主动唤醒主意识。
 - 没有实施自动学习、记忆提炼、技能评价或审核流程。
+
+## 8. 2026-11-16：排除四个内置 Office Skills
+
+真实询问发现，工作区根目录为空时，主意识仍能看到 `office`、`office-docx`、`office-pptx`、`office-xlsx`。工具轨迹确认它们来自全局 Office provider，资源基目录位于 `dsh/packages/skill/skill-office/assets/`，并非工作区文件。此前只检查工作区目录便判断“没有任何 Skill”是不完整的；`includeDefaultRoots: false` 只约束 filesystem provider，并不屏蔽独立的全局 provider。
+
+本次在 `skill-capabilities.ts` 中通过 DSH 原生近作用域同名 runtime 定义遮蔽这四个名称，设置：
+
+```ts
+invocation: { modelInvocable: false, userInvocable: false }
+```
+
+因此它们不进入爱莉的模型目录，`skill` 和 `/name` 均不能加载。屏蔽只挂在固定主意识与 Web `elysia` preset，不修改 vendored DSH、不删除 Office 资源、不禁用全局 Office provider；其他 Agent 继续继承原定义，卸载爱莉装配会恢复继承。
+
+测试在全局注册四个模拟 Office 定义，再验证：
+
+- 爱莉目录只包含工作区 Skill，不包含 Office 名称。
+- 爱莉作用域中的 Office 定义不可由模型或用户调用，实际 `skill` 加载被拒绝。
+- 其他 Agent 仍看到原 Office provider 和允许调用的定义。
+- 卸载后爱莉作用域重新继承原 Office 定义。
+- 原工作区 Skill 的正文加载、重读、Watcher 和工具隔离保持通过。
+
+定向结果仍为 **3 个文件、28/28 项通过**。
+
+部署前等待主意识自然空闲，并确认 `activeCallRooms: 0`、`occupied: false`，再执行项目重载脚本。真实验收 requestId 为 `2026-11-16T15-16-43-885Z-1e5ff989`：
+
+- 原生 `skill` 工具仍然下发。
+- 最新替换目录为 `<available_skills></available_skills>`，明确说明没有可用技能，不得沿用旧目录名称。
+- 四个 Office 名称均不在最新目录中。
+- 主意识回答：“当前技能目录中没有可用技能。”
+- 本轮没有工具调用，也没有外部渠道发送。
+
+当前准确状态是：**爱莉保留 Skills 能力，但可用目录为空；四个内置 Office Skills 已在她的作用域排除。**

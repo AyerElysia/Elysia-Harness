@@ -198,19 +198,12 @@ it('delivers a real one-time plan durably into the busy original main Session wi
   onTestFinished(() => { gate.resolve() })
   agent.followup(createUserMessage({ content: [{ type: 'text', text: 'public fixture: keep the first request busy' }], source: { kind: 'user' } }))
   await waitFor(() => test.adapter.requests.length === 1)
-  const clock = test.adapter.requests[0]?.messages.find(message => message.role === 'user' && message.source?.kind === 'time-context')
-  if (clock?.role !== 'user') throw new Error('The scoped clock must reach the real model adapter')
-  expect(clock.source).toMatchObject({ kind: 'time-context', form: 'snapshot' })
-  const clockText = clock.content.flatMap(block => block.type === 'text' ? [block.text] : []).join('\n')
-  expect(clockText).toMatch(/\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}\+08:00\[Asia\/Shanghai\]/)
-  expect(clockText).toContain('Browser time zone for this request: unavailable.')
-  const calendar = test.adapter.requests[0]?.messages.find(message => message.role === 'user' && message.source?.kind === 'elysia-calendar-context')
-  if (calendar?.role !== 'user') throw new Error('The scoped calendar facts must reach the real model adapter')
-  expect(calendar.source).toMatchObject({ kind: 'elysia-calendar-context', form: 'snapshot' })
-  const calendarText = calendar.content.flatMap(block => block.type === 'text' ? [block.text] : []).join('\n')
-  expect(calendarText).toContain('时区 Asia/Shanghai；UTC 偏移 GMT+08:00')
-  expect(calendarText).toMatch(/星期[一二三四五六日]/)
-  expect(calendarText).toContain('独立采样时刻（UTC ISO）')
+  const clocks = test.adapter.requests[0]?.messages.filter(message => message.role === 'user'
+    && (message.source?.kind === 'time-context' || message.source?.kind === 'elysia-calendar-context'))
+  expect(clocks).toEqual([expect.objectContaining({
+    source: expect.objectContaining({ kind: 'elysia-calendar-context', form: 'snapshot' }),
+    content: [{ type: 'text', text: expect.stringMatching(/^\d{4}\/\d{2}\/\d{2} \d{2}:\d{2}$/) }],
+  })])
   const planContext = test.adapter.requests[0]?.messages.find(message =>
     message.role === 'user' && message.source?.kind === 'runtime-context')
   if (planContext?.role !== 'user') throw new Error('The scoped plan guidance must reach the real model adapter')

@@ -43,6 +43,12 @@ The Web profile currently adds one `elysia` preset, mounting the same scoped sub
 
 The subject's prompt bodies live outside this package. This plugin reads the selected files; it does not author or migrate their text. Channel/conversation setting stays in inbound events rather than being written into the stable prefix.
 
+## Current time
+
+The fixed conscious mind and Web `elysia` preset mount only `@elysia/conscious-mind/current-time`, not the native `dsh-time-context`, in their scopes. The first actual `agent/pre-step` of each turn contributes one `elysia-calendar-context` snapshot whose entire text is `YYYY/MM/DD HH:mm`, such as `2026/11/16 23:49`. The deployment uses `Asia/Shanghai` regardless of browser timezone. Weekdays, seconds, UTC offsets, timezone explanations, and elapsed time are omitted.
+
+Mounting retires previously visible native and Elysia clocks through empty surface replacements. Later tool steps in the same turn reuse that clock without adding a snapshot or an empty replacement. Only the next turn replaces the preceding visible clock and adds the current one; disposal clears it as well. Original events and detailed legacy text remain in the durable log. The clock does not modify the complete standing prompt, start a timer, or wake an idle Session. The 2026-11-16 live request contained exactly one minimal clock; see the [time-context report](../../docs/report/2026-11-12-beijing-time-context.md).
+
 ## File capabilities
 
 `@elysia/conscious-mind/file-capabilities` mounts DSH's native filesystem/search plugins as children of the target agent scope. Text/search tools are not enabled on the host plane: ordinary standard and minimal sessions retain their previous tool catalog and native filesystem policy. The main session mounts it with the standing-prompt selection; Web presets can mount the same plugin independently. `workspaceDir` is the recursive read/write root. `baseDir` grants access only to the exact names in `files`, and `read_image` remains workspace-only. `.migration`, backup paths, unlisted prompt files, paths escaping through symlinks, and detectable hard links are denied. The immutable session cwd header stays unchanged; the working-directory service sets this agent's effective directory to the workspace. An omitted search path is checked against that actual effective directory.
@@ -53,7 +59,9 @@ Search admission checks the complete canonical result as well as its displayed m
 
 ## Skill capabilities
 
-`@elysia/conscious-mind/skill-capabilities` composes DSH's native `@deepseek-ai/dsh-skill-filesystem` and `@deepseek-ai/dsh-tool-skill` inside the fixed conscious mind and Web `elysia` preset agent scopes. The only root is `/home/ayerelysia/Elysia/Data/workspace/skills`. With `includeDefaultRoots: false`, discovery reads only immediate `<skill-name>/SKILL.md` packages there, not DSH's default, bundled, or development roots. The only new model tool is native `skill({ name })`; existing file tools maintain Skill files, with no separate management tools.
+`@elysia/conscious-mind/skill-capabilities` composes DSH's native `@deepseek-ai/dsh-skill-filesystem` and `@deepseek-ai/dsh-tool-skill` inside the fixed conscious mind and Web `elysia` preset agent scopes. The only filesystem root is `/home/ayerelysia/Elysia/Data/workspace/skills`. `includeDefaultRoots: false` constrains that filesystem provider alone: it excludes project, user, DSH default, bundled, and development roots, but does not mask other global providers. The only new model tool is native `skill({ name })`; existing file tools maintain Skill files, with no separate management tools.
+
+DSH's separate global Office provider contributes `office`, `office-docx`, `office-pptx`, and `office-xlsx`. Elysia does not need these engineering skills, so the subplugin shadows their names with native nearest-scope runtime definitions carrying `modelInvocable: false` and `userInvocable: false`. They appear neither in her catalog nor through `skill` or `/name`. The masks affect only the conscious mind and this preset; they do not modify or disable the global Office provider or other Agents, and disposal restores the inherited definitions.
 
 DSH supplies names and descriptions as durable user-role `<system-reminder>` catalog messages on later model steps rather than rewriting the stable system prompt or injecting every body. Loading by exact name returns `<skill_content>` and re-reads the current `SKILL.md`. The watcher refreshes catalog projections after additions, removals, and frontmatter changes, but file changes do not wake an idle session. The global filesystem and tool-skill plugins intentionally remain disabled: this capability exists only in the target agent scopes.
 
