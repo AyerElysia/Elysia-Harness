@@ -1,13 +1,13 @@
-<!doctype html><html lang="zh-CN"><head><meta charset="utf-8"><style>html,body{margin:0;padding:0;background:#fff}svg{display:block}</style></head><body><svg xmlns="http://www.w3.org/2000/svg" width="1500" height="2512" viewBox="0 0 1500 2512">
+<!doctype html><html lang="zh-CN"><head><meta charset="utf-8"><style>html,body{margin:0;padding:0;background:#fff}svg{display:block}</style></head><body><svg xmlns="http://www.w3.org/2000/svg" width="1500" height="2348" viewBox="0 0 1500 2348">
 <defs><marker id="mr" markerWidth="9" markerHeight="9" refX="8" refY="4.5" orient="auto"><path d="M0,1 L8,4.5 L0,8 z" fill="#2563eb"/></marker>
 <marker id="mw" markerWidth="9" markerHeight="9" refX="8" refY="4.5" orient="auto"><path d="M0,1 L8,4.5 L0,8 z" fill="#d97706"/></marker>
 <filter id="sh" x="-20%" y="-20%" width="140%" height="140%"><feDropShadow dx="0" dy="2" stdDeviation="4" flood-color="#0f172a" flood-opacity="0.10"/></filter></defs>
-<rect x="0" y="0" width="1500" height="2512" fill="#ffffff"/>
-<text x="34" y="50" font-size="32" font-weight="700" fill="#0b1220">ElyH 目标架构 · 实现状态</text>
+<rect x="0" y="0" width="1500" height="2348" fill="#ffffff"/>
+<text x="34" y="50" font-size="32" font-weight="700" fill="#0b1220">ElyH 目标架构 · 六个用例 / 两类意识</text>
 <text x="34" y="82" font-size="16" fill="#475569"><tspan fill="#059669" font-weight="700">✓</tspan> 已实现　<tspan fill="#b45309" font-weight="700">◐</tspan> 部分实现　<tspan fill="#475569" font-weight="700">○</tspan> 未实现　｜　左箭头入 = 读取，右箭头出 = 输出</text>
 <rect x="14" y="120" width="1472" height="1216" rx="22" fill="#f8fbff" stroke="#cfe0f9" stroke-width="1.8"/>
 <rect x="34" y="168" width="1432" height="360" rx="16" fill="#ffffff" stroke="#e9eff8"/>
-<rect x="540" y="188" width="420" height="332" rx="16" fill="#eff6ff" stroke="#60a5fa" stroke-width="2.2"  filter="url(#sh)"/>
+<rect x="540" y="188" width="420" height="332" rx="16" fill="#eff6ff" stroke="#60a5fa" stroke-width="2.2" filter="url(#sh)"/>
 <text x="750" y="352" font-size="24" font-weight="700" text-anchor="middle" fill="#1e3a8a">聊天</text>
 <text x="750" y="377" font-size="13" text-anchor="middle" fill="#5b6779">沉默用 pass 表达</text>
 <rect x="40" y="205" width="430" height="38" rx="9" fill="#f6faff" stroke="#c7dbfb" stroke-width="1.2"/>
@@ -41,7 +41,7 @@
 <text x="1044" y="386" font-size="16" fill="#6b2d0b"><tspan fill="#475569" font-weight="700">○</tspan><tspan dx="7">派工 → Worker</tspan></text>
 <line x1="963" y1="380" x2="1027" y2="380" stroke="#d97706" stroke-width="1.9" marker-end="url(#mw)"/>
 <rect x="34" y="540" width="1432" height="308" rx="16" fill="#ffffff" stroke="#e9eff8"/>
-<rect x="540" y="560" width="420" height="280" rx="16" fill="#ecfdf5" stroke="#34d399" stroke-width="2.2"  filter="url(#sh)"/>
+<rect x="540" y="560" width="420" height="280" rx="16" fill="#ecfdf5" stroke="#34d399" stroke-width="2.2" filter="url(#sh)"/>
 <text x="750" y="698" font-size="24" font-weight="700" text-anchor="middle" fill="#064e3b">通话</text>
 <text x="750" y="723" font-size="13" text-anchor="middle" fill="#5b6779">实时语音，工具少而快</text>
 <rect x="40" y="577" width="430" height="38" rx="9" fill="#f6faff" stroke="#c7dbfb" stroke-width="1.2"/>
@@ -69,7 +69,7 @@
 <text x="1044" y="706" font-size="16" fill="#6b2d0b"><tspan fill="#475569" font-weight="700">○</tspan><tspan dx="7">派工 → Worker（异步）</tspan></text>
 <line x1="963" y1="700" x2="1027" y2="700" stroke="#d97706" stroke-width="1.9" marker-end="url(#mw)"/>
 <rect x="34" y="860" width="1432" height="464" rx="16" fill="#ffffff" stroke="#e9eff8"/>
-<rect x="540" y="880" width="420" height="436" rx="16" fill="#fff7ed" stroke="#fb923c" stroke-width="2.2"  filter="url(#sh)"/>
+<rect x="540" y="880" width="420" height="436" rx="16" fill="#fff7ed" stroke="#fb923c" stroke-width="2.2" filter="url(#sh)"/>
 <text x="750" y="1096" font-size="24" font-weight="700" text-anchor="middle" fill="#7c2d12">直播</text>
 <text x="750" y="1121" font-size="13" text-anchor="middle" fill="#5b6779">公开表达，写操作逐项白名单</text>
 <rect x="40" y="897" width="430" height="38" rx="9" fill="#f6faff" stroke="#c7dbfb" stroke-width="1.2"/>
@@ -117,11 +117,11 @@
 <rect x="34" y="130" width="166" height="30" rx="15" fill="#1d4ed8"/>
 <text x="117" y="151" font-size="16" font-weight="700" text-anchor="middle" fill="#ffffff">① 主意识 ×3</text>
 <text x="212" y="151" font-size="14.5" fill="#475569">同一主体的三个面 · 唯一可对外表达</text>
-<rect x="14" y="1354" width="1472" height="584" rx="22" fill="#fbf8ff" stroke="#ddd0fb" stroke-width="1.8"/>
-<rect x="34" y="1402" width="1432" height="256" rx="16" fill="#ffffff" stroke="#e9eff8"/>
-<rect x="540" y="1422" width="420" height="228" rx="16" fill="#f5f3ff" stroke="#a78bfa" stroke-width="2.2"  filter="url(#sh)"/>
-<text x="750" y="1534" font-size="24" font-weight="700" text-anchor="middle" fill="#4c1d95">中枢 Router</text>
-<text x="750" y="1559" font-size="13" text-anchor="middle" fill="#5b6779">统一接待、派工与提议</text>
+<rect x="14" y="1354" width="1472" height="420" rx="22" fill="#fbf8ff" stroke="#ddd0fb" stroke-width="1.8"/>
+<rect x="34" y="1402" width="1432" height="360" rx="16" fill="#ffffff" stroke="#e9eff8"/>
+<rect x="540" y="1422" width="420" height="332" rx="16" fill="#f5f3ff" stroke="#a78bfa" stroke-width="2.2" filter="url(#sh)"/>
+<text x="750" y="1586" font-size="24" font-weight="700" text-anchor="middle" fill="#4c1d95">中枢 Router</text>
+<text x="750" y="1611" font-size="13" text-anchor="middle" fill="#5b6779">忽略 · 延期 · 派工 · 提议</text>
 <rect x="40" y="1439" width="430" height="38" rx="9" fill="#f6faff" stroke="#c7dbfb" stroke-width="1.2"/>
 <text x="54" y="1464" font-size="16" fill="#16294a"><tspan fill="#059669" font-weight="700">✓</tspan><tspan dx="7">全量表界观察</tspan></text>
 <line x1="470" y1="1458" x2="537" y2="1458" stroke="#2563eb" stroke-width="1.9" marker-end="url(#mr)"/>
@@ -132,8 +132,14 @@
 <text x="54" y="1568" font-size="16" fill="#16294a"><tspan fill="#059669" font-weight="700">✓</tspan><tspan dx="7">观察游标与批次</tspan></text>
 <line x1="470" y1="1562" x2="537" y2="1562" stroke="#2563eb" stroke-width="1.9" marker-end="url(#mr)"/>
 <rect x="40" y="1595" width="430" height="38" rx="9" fill="#f6faff" stroke="#c7dbfb" stroke-width="1.2"/>
-<text x="54" y="1620" font-size="16" fill="#16294a"><tspan fill="#475569" font-weight="700">○</tspan><tspan dx="7">主意识当前状态（直播 / 通话中）</tspan></text>
+<text x="54" y="1620" font-size="16" fill="#16294a"><tspan fill="#059669" font-weight="700">✓</tspan><tspan dx="7">自己的决定与任务历史</tspan></text>
 <line x1="470" y1="1614" x2="537" y2="1614" stroke="#2563eb" stroke-width="1.9" marker-end="url(#mr)"/>
+<rect x="40" y="1647" width="430" height="38" rx="9" fill="#f6faff" stroke="#c7dbfb" stroke-width="1.2"/>
+<text x="54" y="1672" font-size="16" fill="#16294a"><tspan fill="#475569" font-weight="700">○</tspan><tspan dx="7">主意识当前状态（直播 / 通话中）</tspan></text>
+<line x1="470" y1="1666" x2="537" y2="1666" stroke="#2563eb" stroke-width="1.9" marker-end="url(#mr)"/>
+<rect x="40" y="1699" width="430" height="38" rx="9" fill="#f6faff" stroke="#c7dbfb" stroke-width="1.2"/>
+<text x="54" y="1724" font-size="16" fill="#16294a"><tspan fill="#475569" font-weight="700">○</tspan><tspan dx="7">心跳唤醒 / awake · resting</tspan></text>
+<line x1="470" y1="1718" x2="537" y2="1718" stroke="#2563eb" stroke-width="1.9" marker-end="url(#mr)"/>
 <rect x="1030" y="1439" width="430" height="38" rx="9" fill="#fffaf1" stroke="#f6d9a8" stroke-width="1.2"/>
 <text x="1044" y="1464" font-size="16" fill="#6b2d0b"><tspan fill="#059669" font-weight="700">✓</tspan><tspan dx="7">决定记录 ignore / defer</tspan></text>
 <line x1="963" y1="1458" x2="1027" y2="1458" stroke="#d97706" stroke-width="1.9" marker-end="url(#mw)"/>
@@ -146,82 +152,57 @@
 <rect x="1030" y="1595" width="430" height="38" rx="9" fill="#fffaf1" stroke="#f6d9a8" stroke-width="1.2"/>
 <text x="1044" y="1620" font-size="16" fill="#6b2d0b"><tspan fill="#475569" font-weight="700">○</tspan><tspan dx="7">提议主动表达</tspan></text>
 <line x1="963" y1="1614" x2="1027" y2="1614" stroke="#d97706" stroke-width="1.9" marker-end="url(#mw)"/>
-<rect x="34" y="1670" width="1432" height="256" rx="16" fill="#ffffff" stroke="#e9eff8"/>
-<rect x="540" y="1690" width="420" height="228" rx="16" fill="#fdf4ff" stroke="#e879f9" stroke-width="2.2" stroke-dasharray="7 5" filter="url(#sh)"/>
-<text x="750" y="1802" font-size="24" font-weight="700" text-anchor="middle" fill="#701a75">心跳潜意识</text>
-<text x="750" y="1827" font-size="13" text-anchor="middle" fill="#5b6779">心跳唤醒 · 知中枢全部上下文</text>
-<rect x="40" y="1707" width="430" height="38" rx="9" fill="#f6faff" stroke="#c7dbfb" stroke-width="1.2"/>
-<text x="54" y="1732" font-size="16" fill="#16294a"><tspan fill="#475569" font-weight="700">○</tspan><tspan dx="7">中枢完整上下文（输入 + 输出 + 决定）</tspan></text>
-<line x1="470" y1="1726" x2="537" y2="1726" stroke="#2563eb" stroke-width="1.9" marker-end="url(#mr)"/>
-<rect x="40" y="1759" width="430" height="38" rx="9" fill="#f6faff" stroke="#c7dbfb" stroke-width="1.2"/>
-<text x="54" y="1784" font-size="16" fill="#16294a"><tspan fill="#475569" font-weight="700">○</tspan><tspan dx="7">仅新增部分（增量注入）</tspan></text>
-<line x1="470" y1="1778" x2="537" y2="1778" stroke="#2563eb" stroke-width="1.9" marker-end="url(#mr)"/>
-<rect x="40" y="1811" width="430" height="38" rx="9" fill="#f6faff" stroke="#c7dbfb" stroke-width="1.2"/>
-<text x="54" y="1836" font-size="16" fill="#16294a"><tspan fill="#475569" font-weight="700">○</tspan><tspan dx="7">心跳唤醒</tspan></text>
-<line x1="470" y1="1830" x2="537" y2="1830" stroke="#2563eb" stroke-width="1.9" marker-end="url(#mr)"/>
-<rect x="40" y="1863" width="430" height="38" rx="9" fill="#f6faff" stroke="#c7dbfb" stroke-width="1.2"/>
-<text x="54" y="1888" font-size="16" fill="#16294a"><tspan fill="#475569" font-weight="700">○</tspan><tspan dx="7">awake / resting 状态</tspan></text>
-<line x1="470" y1="1882" x2="537" y2="1882" stroke="#2563eb" stroke-width="1.9" marker-end="url(#mr)"/>
-<rect x="1030" y="1707" width="430" height="38" rx="9" fill="#fffaf1" stroke="#f6d9a8" stroke-width="1.2"/>
-<text x="1044" y="1732" font-size="16" fill="#6b2d0b"><tspan fill="#475569" font-weight="700">○</tspan><tspan dx="7">提议主动行为 → 指定对话</tspan></text>
-<line x1="963" y1="1726" x2="1027" y2="1726" stroke="#d97706" stroke-width="1.9" marker-end="url(#mw)"/>
-<rect x="1030" y="1759" width="430" height="38" rx="9" fill="#fffaf1" stroke="#f6d9a8" stroke-width="1.2"/>
-<text x="1044" y="1784" font-size="16" fill="#6b2d0b"><tspan fill="#475569" font-weight="700">○</tspan><tspan dx="7">提议开播 / 提议通话</tspan></text>
-<line x1="963" y1="1778" x2="1027" y2="1778" stroke="#d97706" stroke-width="1.9" marker-end="url(#mw)"/>
-<rect x="1030" y="1811" width="430" height="38" rx="9" fill="#fffaf1" stroke="#f6d9a8" stroke-width="1.2"/>
-<text x="1044" y="1836" font-size="16" fill="#6b2d0b"><tspan fill="#475569" font-weight="700">○</tspan><tspan dx="7">任务 + 权限 → worker</tspan></text>
-<line x1="963" y1="1830" x2="1027" y2="1830" stroke="#d97706" stroke-width="1.9" marker-end="url(#mw)"/>
-<rect x="1030" y="1863" width="430" height="38" rx="9" fill="#fffaf1" stroke="#f6d9a8" stroke-width="1.2"/>
-<text x="1044" y="1888" font-size="16" fill="#6b2d0b"><tspan fill="#475569" font-weight="700">○</tspan><tspan dx="7">本次心跳 pass / 进入休息</tspan></text>
-<line x1="963" y1="1882" x2="1027" y2="1882" stroke="#d97706" stroke-width="1.9" marker-end="url(#mw)"/>
+<rect x="1030" y="1647" width="430" height="38" rx="9" fill="#fffaf1" stroke="#f6d9a8" stroke-width="1.2"/>
+<text x="1044" y="1672" font-size="16" fill="#6b2d0b"><tspan fill="#475569" font-weight="700">○</tspan><tspan dx="7">本次心跳 pass / 进入休息</tspan></text>
+<line x1="963" y1="1666" x2="1027" y2="1666" stroke="#d97706" stroke-width="1.9" marker-end="url(#mw)"/>
 <rect x="34" y="1364" width="166" height="30" rx="15" fill="#7c3aed"/>
-<text x="117" y="1385" font-size="16" font-weight="700" text-anchor="middle" fill="#ffffff">② 潜意识 ×2</text>
-<text x="212" y="1385" font-size="14.5" fill="#475569">中枢看全量表界 · 心跳知中枢全部上下文</text>
-<rect x="14" y="1956" width="1472" height="532" rx="22" fill="#f9fafb" stroke="#dbe3ec" stroke-width="1.8"/>
-<rect x="34" y="2004" width="1432" height="204" rx="16" fill="#ffffff" stroke="#e9eff8"/>
-<rect x="540" y="2024" width="420" height="176" rx="16" fill="#f1f5f9" stroke="#94a3b8" stroke-width="2.2" stroke-dasharray="7 5" filter="url(#sh)"/>
-<text x="750" y="2110" font-size="24" font-weight="700" text-anchor="middle" fill="#1e293b">通用 worker</text>
-<text x="750" y="2135" font-size="13" text-anchor="middle" fill="#5b6779">执行器 · 一任务一派工</text>
-<rect x="40" y="2041" width="430" height="38" rx="9" fill="#f6faff" stroke="#c7dbfb" stroke-width="1.2"/>
-<text x="54" y="2066" font-size="16" fill="#16294a"><tspan fill="#475569" font-weight="700">○</tspan><tspan dx="7">派工材料</tspan></text>
-<line x1="470" y1="2060" x2="537" y2="2060" stroke="#2563eb" stroke-width="1.9" marker-end="url(#mr)"/>
+<text x="117" y="1385" font-size="16" font-weight="700" text-anchor="middle" fill="#ffffff">② 潜意识 ×1</text>
+<text x="212" y="1385" font-size="14.5" fill="#475569">看全量表界 · 心跳是它的第二种触发</text>
+<rect x="14" y="1792" width="1472" height="532" rx="22" fill="#f9fafb" stroke="#dbe3ec" stroke-width="1.8"/>
+<rect x="34" y="1840" width="1432" height="204" rx="16" fill="#ffffff" stroke="#e9eff8"/>
+<rect x="540" y="1860" width="420" height="176" rx="16" fill="#f1f5f9" stroke="#94a3b8" stroke-width="2.2" filter="url(#sh)"/>
+<text x="750" y="1946" font-size="24" font-weight="700" text-anchor="middle" fill="#1e293b">通用 worker</text>
+<text x="750" y="1971" font-size="13" text-anchor="middle" fill="#5b6779">执行器 · 一任务一派工</text>
+<rect x="40" y="1877" width="430" height="38" rx="9" fill="#f6faff" stroke="#c7dbfb" stroke-width="1.2"/>
+<text x="54" y="1902" font-size="16" fill="#16294a"><tspan fill="#475569" font-weight="700">○</tspan><tspan dx="7">派工材料</tspan></text>
+<line x1="470" y1="1896" x2="537" y2="1896" stroke="#2563eb" stroke-width="1.9" marker-end="url(#mr)"/>
+<rect x="40" y="1929" width="430" height="38" rx="9" fill="#f6faff" stroke="#c7dbfb" stroke-width="1.2"/>
+<text x="54" y="1954" font-size="16" fill="#16294a"><tspan fill="#475569" font-weight="700">○</tspan><tspan dx="7">工作区文件</tspan></text>
+<line x1="470" y1="1948" x2="537" y2="1948" stroke="#2563eb" stroke-width="1.9" marker-end="url(#mr)"/>
+<rect x="40" y="1981" width="430" height="38" rx="9" fill="#f6faff" stroke="#c7dbfb" stroke-width="1.2"/>
+<text x="54" y="2006" font-size="16" fill="#16294a"><tspan fill="#475569" font-weight="700">○</tspan><tspan dx="7">网络 / MCP / 技能</tspan></text>
+<line x1="470" y1="2000" x2="537" y2="2000" stroke="#2563eb" stroke-width="1.9" marker-end="url(#mr)"/>
+<rect x="1030" y="1877" width="430" height="38" rx="9" fill="#fffaf1" stroke="#f6d9a8" stroke-width="1.2"/>
+<text x="1044" y="1902" font-size="16" fill="#6b2d0b"><tspan fill="#475569" font-weight="700">○</tspan><tspan dx="7">结果 → 派工方</tspan></text>
+<line x1="963" y1="1896" x2="1027" y2="1896" stroke="#d97706" stroke-width="1.9" marker-end="url(#mw)"/>
+<rect x="1030" y="1929" width="430" height="38" rx="9" fill="#fffaf1" stroke="#f6d9a8" stroke-width="1.2"/>
+<text x="1044" y="1954" font-size="16" fill="#6b2d0b"><tspan fill="#475569" font-weight="700">○</tspan><tspan dx="7">工作区文件 / 代码产物</tspan></text>
+<line x1="963" y1="1948" x2="1027" y2="1948" stroke="#d97706" stroke-width="1.9" marker-end="url(#mw)"/>
+<rect x="1030" y="1981" width="430" height="38" rx="9" fill="#fffaf1" stroke="#f6d9a8" stroke-width="1.2"/>
+<text x="1044" y="2006" font-size="16" fill="#6b2d0b"><tspan fill="#475569" font-weight="700">○</tspan><tspan dx="7">终端命令与脚本</tspan></text>
+<line x1="963" y1="2000" x2="1027" y2="2000" stroke="#d97706" stroke-width="1.9" marker-end="url(#mw)"/>
+<rect x="34" y="2056" width="1432" height="256" rx="16" fill="#ffffff" stroke="#e9eff8"/>
+<rect x="540" y="2076" width="420" height="228" rx="16" fill="#f0fdfa" stroke="#2dd4bf" stroke-width="2.2" filter="url(#sh)"/>
+<text x="750" y="2188" font-size="24" font-weight="700" text-anchor="middle" fill="#134e4a">记忆 worker</text>
+<text x="750" y="2213" font-size="13" text-anchor="middle" fill="#5b6779">注入记忆 skill · 唯一可写长期记忆</text>
 <rect x="40" y="2093" width="430" height="38" rx="9" fill="#f6faff" stroke="#c7dbfb" stroke-width="1.2"/>
-<text x="54" y="2118" font-size="16" fill="#16294a"><tspan fill="#475569" font-weight="700">○</tspan><tspan dx="7">工作区文件</tspan></text>
+<text x="54" y="2118" font-size="16" fill="#16294a"><tspan fill="#475569" font-weight="700">○</tspan><tspan dx="7">派工材料</tspan></text>
 <line x1="470" y1="2112" x2="537" y2="2112" stroke="#2563eb" stroke-width="1.9" marker-end="url(#mr)"/>
 <rect x="40" y="2145" width="430" height="38" rx="9" fill="#f6faff" stroke="#c7dbfb" stroke-width="1.2"/>
-<text x="54" y="2170" font-size="16" fill="#16294a"><tspan fill="#475569" font-weight="700">○</tspan><tspan dx="7">网络 / MCP / 技能</tspan></text>
+<text x="54" y="2170" font-size="16" fill="#16294a"><tspan fill="#475569" font-weight="700">○</tspan><tspan dx="7">记忆 skill（注入）</tspan></text>
 <line x1="470" y1="2164" x2="537" y2="2164" stroke="#2563eb" stroke-width="1.9" marker-end="url(#mr)"/>
-<rect x="1030" y="2041" width="430" height="38" rx="9" fill="#fffaf1" stroke="#f6d9a8" stroke-width="1.2"/>
-<text x="1044" y="2066" font-size="16" fill="#6b2d0b"><tspan fill="#475569" font-weight="700">○</tspan><tspan dx="7">结果 → 派工方</tspan></text>
-<line x1="963" y1="2060" x2="1027" y2="2060" stroke="#d97706" stroke-width="1.9" marker-end="url(#mw)"/>
+<rect x="40" y="2197" width="430" height="38" rx="9" fill="#f6faff" stroke="#c7dbfb" stroke-width="1.2"/>
+<text x="54" y="2222" font-size="16" fill="#16294a"><tspan fill="#475569" font-weight="700">○</tspan><tspan dx="7">长期记忆（查重与合并）</tspan></text>
+<line x1="470" y1="2216" x2="537" y2="2216" stroke="#2563eb" stroke-width="1.9" marker-end="url(#mr)"/>
+<rect x="40" y="2249" width="430" height="38" rx="9" fill="#f6faff" stroke="#c7dbfb" stroke-width="1.2"/>
+<text x="54" y="2274" font-size="16" fill="#16294a"><tspan fill="#475569" font-weight="700">○</tspan><tspan dx="7">工作区文件</tspan></text>
+<line x1="470" y1="2268" x2="537" y2="2268" stroke="#2563eb" stroke-width="1.9" marker-end="url(#mr)"/>
 <rect x="1030" y="2093" width="430" height="38" rx="9" fill="#fffaf1" stroke="#f6d9a8" stroke-width="1.2"/>
-<text x="1044" y="2118" font-size="16" fill="#6b2d0b"><tspan fill="#475569" font-weight="700">○</tspan><tspan dx="7">工作区文件 / 代码产物</tspan></text>
+<text x="1044" y="2118" font-size="16" fill="#6b2d0b"><tspan fill="#475569" font-weight="700">○</tspan><tspan dx="7">记忆写入（日记 / 记忆库 / 索引）</tspan></text>
 <line x1="963" y1="2112" x2="1027" y2="2112" stroke="#d97706" stroke-width="1.9" marker-end="url(#mw)"/>
 <rect x="1030" y="2145" width="430" height="38" rx="9" fill="#fffaf1" stroke="#f6d9a8" stroke-width="1.2"/>
-<text x="1044" y="2170" font-size="16" fill="#6b2d0b"><tspan fill="#475569" font-weight="700">○</tspan><tspan dx="7">终端命令与脚本</tspan></text>
+<text x="1044" y="2170" font-size="16" fill="#6b2d0b"><tspan fill="#475569" font-weight="700">○</tspan><tspan dx="7">TaskReport → 派工方</tspan></text>
 <line x1="963" y1="2164" x2="1027" y2="2164" stroke="#d97706" stroke-width="1.9" marker-end="url(#mw)"/>
-<rect x="34" y="2220" width="1432" height="256" rx="16" fill="#ffffff" stroke="#e9eff8"/>
-<rect x="540" y="2240" width="420" height="228" rx="16" fill="#f0fdfa" stroke="#2dd4bf" stroke-width="2.2" stroke-dasharray="7 5" filter="url(#sh)"/>
-<text x="750" y="2352" font-size="24" font-weight="700" text-anchor="middle" fill="#134e4a">记忆 worker</text>
-<text x="750" y="2377" font-size="13" text-anchor="middle" fill="#5b6779">注入记忆 skill · 唯一可写长期记忆</text>
-<rect x="40" y="2257" width="430" height="38" rx="9" fill="#f6faff" stroke="#c7dbfb" stroke-width="1.2"/>
-<text x="54" y="2282" font-size="16" fill="#16294a"><tspan fill="#475569" font-weight="700">○</tspan><tspan dx="7">派工材料</tspan></text>
-<line x1="470" y1="2276" x2="537" y2="2276" stroke="#2563eb" stroke-width="1.9" marker-end="url(#mr)"/>
-<rect x="40" y="2309" width="430" height="38" rx="9" fill="#f6faff" stroke="#c7dbfb" stroke-width="1.2"/>
-<text x="54" y="2334" font-size="16" fill="#16294a"><tspan fill="#475569" font-weight="700">○</tspan><tspan dx="7">记忆 skill（注入）</tspan></text>
-<line x1="470" y1="2328" x2="537" y2="2328" stroke="#2563eb" stroke-width="1.9" marker-end="url(#mr)"/>
-<rect x="40" y="2361" width="430" height="38" rx="9" fill="#f6faff" stroke="#c7dbfb" stroke-width="1.2"/>
-<text x="54" y="2386" font-size="16" fill="#16294a"><tspan fill="#475569" font-weight="700">○</tspan><tspan dx="7">长期记忆（查重与合并）</tspan></text>
-<line x1="470" y1="2380" x2="537" y2="2380" stroke="#2563eb" stroke-width="1.9" marker-end="url(#mr)"/>
-<rect x="40" y="2413" width="430" height="38" rx="9" fill="#f6faff" stroke="#c7dbfb" stroke-width="1.2"/>
-<text x="54" y="2438" font-size="16" fill="#16294a"><tspan fill="#475569" font-weight="700">○</tspan><tspan dx="7">工作区文件</tspan></text>
-<line x1="470" y1="2432" x2="537" y2="2432" stroke="#2563eb" stroke-width="1.9" marker-end="url(#mr)"/>
-<rect x="1030" y="2257" width="430" height="38" rx="9" fill="#fffaf1" stroke="#f6d9a8" stroke-width="1.2"/>
-<text x="1044" y="2282" font-size="16" fill="#6b2d0b"><tspan fill="#475569" font-weight="700">○</tspan><tspan dx="7">记忆写入（日记 / 记忆库 / 索引）</tspan></text>
-<line x1="963" y1="2276" x2="1027" y2="2276" stroke="#d97706" stroke-width="1.9" marker-end="url(#mw)"/>
-<rect x="1030" y="2309" width="430" height="38" rx="9" fill="#fffaf1" stroke="#f6d9a8" stroke-width="1.2"/>
-<text x="1044" y="2334" font-size="16" fill="#6b2d0b"><tspan fill="#475569" font-weight="700">○</tspan><tspan dx="7">TaskReport → 派工方</tspan></text>
-<line x1="963" y1="2328" x2="1027" y2="2328" stroke="#d97706" stroke-width="1.9" marker-end="url(#mw)"/>
-<rect x="34" y="1966" width="217" height="30" rx="15" fill="#334155"/>
-<text x="142.5" y="1987" font-size="16" font-weight="700" text-anchor="middle" fill="#ffffff">③ Worker ×2</text>
-<text x="263" y="1987" font-size="14.5" fill="#475569">每次任务新建 · 用完回收 · 一律不可外发</text></body></html>
+<rect x="34" y="1802" width="217" height="30" rx="15" fill="#334155"/>
+<text x="142.5" y="1823" font-size="16" font-weight="700" text-anchor="middle" fill="#ffffff">③ Worker ×2</text>
+<text x="263" y="1823" font-size="14.5" fill="#475569">每次任务新建 · 用完回收 · 一律不可外发</text></body></html>
