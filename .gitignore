@@ -185,3 +185,9 @@ breeze-realtime-review/results/
 *.bak-*
 *.bak
 .backup-*/
+
+# ── Browser-automation run artifacts ────────────────────────────────────────
+# A Playwright MCP session started from the repo root drops its console log and
+# page snapshot here. They describe one run of one page, not anything the build
+# reads, so they stay out of history.
+.playwright-mcp/
