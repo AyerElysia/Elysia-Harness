@@ -1,4 +1,17 @@
-# Placeholder only: mounting this entry currently has no runtime behavior.
+# Durable observation of the conscious Session plus the isolated Router Session.
+# The host delivers observations to the Router as ordinary session input.
 - insert:
     - id: elysia-subconscious
       name: '@elysia/subconscious'
+      config:
+        provider: nexus-a6-gemini
+        model: gemini-3.8-flash
+        baseDir: !!js process.env.ELYSIA_PROMPTS_DIR ?? 'Data/standing-prompts'
+        files:
+          - SOUL.md
+          - USER.md
+          - MEMORY.md
+          - SUBCONSCIOUS-ROUTER.md
+        required:
+          - SOUL.md
+          - SUBCONSCIOUS-ROUTER.md

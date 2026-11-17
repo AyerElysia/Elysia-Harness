@@ -52,6 +52,39 @@
             config:
               timeZone: Asia/Shanghai
 
+    - id: preset-elysia-subconscious-memory
+      name: '@deepseek-ai/dsh-agent-preset'
+      config:
+        id: elysia-subconscious-memory
+        name: 爱莉 · 记忆潜意识
+        description: 回顾经历，查找并整理日记和记忆笔记
+        plugins:
+          - id: elysia-memory-standing-prompts
+            name: '@elysia/conscious-mind/standing-prompts'
+            config:
+              baseDir: !!js process.env.ELYSIA_PROMPTS_DIR ?? process.env.DSH_HOME +
+                '/standing-prompts'
+              files:
+                - SOUL.md
+                - USER.md
+                - SUBCONSCIOUS-MEMORY.md
+              required:
+                - SOUL.md
+                - SUBCONSCIOUS-MEMORY.md
+              complete: true
+          - id: elysia-memory-file-capabilities
+            name: '@elysia/conscious-mind/file-capabilities'
+            config:
+              baseDir: !!js process.env.ELYSIA_PROMPTS_DIR ?? process.env.DSH_HOME +
+                '/standing-prompts'
+              files:
+                - MEMORY.md
+              required: []
+              workspaceDir: /home/ayerelysia/Elysia/Data/workspace/subconscious/memory
+              backupDir: /home/ayerelysia/Elysia/Data/subconscious/memory/standing-prompt-backups
+              allowPromptWrites: false
+              restrictInheritedTools: true
+
     - id: elysia-conscious-mind
       name: '@elysia/conscious-mind'
       config:
@@ -64,6 +97,33 @@
           - USER.md
           - MEMORY.md
           - CONSCIOUS-MIND.md
+
+    # Observe the main Session's admitted surface events. Router has its own
+    # scoped workspace/tools and no channel-sending capability.
+    - id: elysia-subconscious
+      name: '@elysia/subconscious'
+      config:
+        provider: nexus-a6-gemini
+        model: gemini-3.8-flash
+        baseDir: !!js process.env.ELYSIA_PROMPTS_DIR ?? process.env.DSH_HOME +
+          '/standing-prompts'
+        files:
+          - SOUL.md
+          - USER.md
+          - MEMORY.md
+          - SUBCONSCIOUS-ROUTER.md
+        required:
+          - SOUL.md
+          - SUBCONSCIOUS-ROUTER.md
+        stateDir: /home/ayerelysia/Elysia/Data/subconscious/router
+        workspaceDir: /home/ayerelysia/Elysia/Data/workspace/subconscious/router
+        skillsDir: /home/ayerelysia/Elysia/Data/workspace/skills
+        backupDir: /home/ayerelysia/Elysia/Data/subconscious/router/standing-prompt-backups
+        maxBackgroundJobs: 4
+        maxJobAgeMs: 1800000
+        jobSweepMs: 30000
+        shellTimeoutMs: 120000
+        shellMaxTimeoutMs: 600000
 
     # Channels stay off until an adapter config exists on this host; each reads
     # an absolute Elysium path and fails loud when it is absent, which would take
@@ -195,3 +255,8 @@
     inputMode: local-asr
     bridgeKeyFile: /home/ayerelysia/Elysia/DataInfra/voice-cascade/bridge.key
     desktopKeyFile: /home/ayerelysia/Elysia/DataInfra/voice-cascade/desktop-owner.key
+- id: agent-default-model
+  name: "@deepseek-ai/dsh-agent-default-model"
+  config:
+    provider: d1api
+    model: deepseek-v4.1-flash

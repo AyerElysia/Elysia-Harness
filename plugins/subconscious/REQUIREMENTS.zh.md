@@ -1,22 +1,14 @@
 # 潜意识系统需求
 
-状态：**仅建立中枢 Router、多潜意识 session 与记忆 session 的需求占位，尚未实施。**
-
-本文替代此前“一个潜意识 session、一次心跳处理所有潜意识任务”的旧草案，也把此前“记忆 session 直接消费主意识投影”的最小路径调整为：**所有表界信息先进入潜意识中枢 Router，再由 Router 派发给明确的潜意识任务。**主意识固定提示词与 `MEMORY.md` 仍不被自动改写。
+状态：**多来源 Observation、Router 接收线与 17 个通用工具已实现；真实文件、Schedule 与 Shell 已验收，Web Search 上游仍超时；专业派工和主动系统仍是后续设计。**
 
 ## 当前交付边界
 
-当前 `@elysia/subconscious` 只是无行为的 Cordis 插件骨架：
+`@elysia/subconscious` 采集主意识真实输入、可见输出、工具调用和工具结果，以来源身份独立去重并保存完整 Observation。宿主形成有界 Batch，投递到长期 Router Session，分别记录 Session 接收、模型呈现与原生轮次完成。正常完成的 DSH 轮次即关闭当前批次，不要求额外的模型决定或收尾工具。
 
-- 不创建或恢复 Router、记忆或其他潜意识 session。
-- 不注册心跳、定时器、后台模型轮或事件订阅。
-- 不读取主意识历史、固定提示词、工作区或渠道数据。
-- 不保存表界观察，不派发任务，不调用模型，不发送消息。
-- 不写日记、不学习、不验证技能、不制定或执行计划。
-- 不注册模型工具，不持有运行状态、任务队列或持久游标。
-- 不修改 vendored `dsh/`，也不加入当前 Web profile。
+旧 `subconscious_read` 与 `subconscious_route` 已移除。当前批次由宿主直接放入 Router 上下文；历史材料如确有工作需要，未来由宿主重新呈现。真正的路由、延期与派工语义另行审定。
 
-`sessions/memory/` 当前只有需求文档，不是已注册的运行实例。本文新增的 Router、任务、工具与 Schema 都是设计草案，不表示已经存在。
+通用独立 Source 入口和 17 个通用工具已经具备；真实邮件适配器、专业派工、专业记忆写入和主动机会仍属后续范围。当前实现与工具清单见 [README.md](README.md)，权限与验收契约见 [TOOLS.zh.md](TOOLS.zh.md)，接收线契约见 [INTAKE.zh.md](INTAKE.zh.md)。
 
 ## 1. 核心目标
 
@@ -27,7 +19,7 @@
 它必须同时满足：
 
 1. **完整接收**：进入主意识的外部信息和主意识产生的表界活动，都进入潜意识中枢，不抽样、不按关键词预过滤。
-2. **中枢派发**：Router 负责理解批次、决定忽略、延期、派发或提出主意识机会，不让每个潜意识 session 各自重复接待外界。
+2. **中枢派发**：Router 理解宿主送达的观察，未来有合适的工作时负责派工或形成机会候选。专业 session 从各自获准的任务接收材料。
 3. **专业执行**：记忆、学习、技能验证、计划等由不同长期 session 承担，不把全部任务塞进同一次唤醒。
 4. **有迹可循**：观察、Router 研判、任务授权、实际执行、文件结果、主意识呈现与外部结果可以沿稳定引用互相追溯。
 5. **不阻塞表界**：潜意识接收、模型调用或存储故障不得卡住主意识正常接收和回复。
@@ -52,7 +44,7 @@
 ### 2.2 不照搬的部分
 
 - 不引入 GitHub 工单、PR、代码仓库或团队协作语义。
-- 不让 Router 获得 shell、代码执行、渠道发送或任意文件权限。
+- Router 可以按 [TOOLS.zh.md](TOOLS.zh.md) 获得文件、网络、Skills、Shell 与后台任务等通用能力；权限由宿主显式配置，不照搬 SA 的执行授权，也不把中枢写死成无能分类器。
 - 不把 SA 的“团队规则允许就自动执行”直接变成爱莉的主动行为授权。
 - 不为每项任务随意创建无人格约束的新 Agent；专业 session 是同一持续主体的不同意识窗口。
 - 不用自动重要性评分、情绪分数或关键词规则代替 Router 的实际研判。
@@ -88,32 +80,30 @@
 
 Router 是一个独立、长期、明确注册的 DSH session，是潜意识的统一接待与派工入口。
 
-建议工程身份：
+当前固定会话使用以下身份：
 
 ```text
 逻辑 ID：router
 DSH session ID：elysia-subconscious-router
-提示词 preset：elysia-subconscious-router
 工作目录：/home/ayerelysia/Elysia/Data/workspace/subconscious/router
 ```
 
-这些位置是未来实施建议，本次没有创建。
+当前 Router 随输入运行。下面的专业派工、报告和机会候选是长期目标。
 
 Router 负责：
 
 - 接收按顺序持久化的观察批次、任务报告和明确人工请求。
-- 阅读当前获准的来源材料、相关任务和既往 Router 历史。
-- 决定 `ignore`、`defer`、`dispatch` 或 `propose`。
-- 把任务分给已注册的专业 session，而不是自己写日记、学习或验证技能。
+- 通过宿主直接投递的内容了解来源材料，同时保有自身会话历史。
+- 使用获准的通用工具阅读、调查、写作和验证；持续性记忆、学习、技能验证、计划等专业工作原则上分给已注册的专业 session。
 - 把希望主意识考虑的事项整理成有来源的机会候选，交给主动系统。
 - 根据专业 session 的真实报告继续、修正、关闭或升级任务。
-- 留下自身真实 request / turn / tool call 与每项决定的关系。
+- 未来的任务和机会候选可以追溯到实际来源与 Router 的原生会话事件。
 
 Router 不负责：
 
 - 直接对外回复或调用渠道。
 - 替主意识接受主动消息、计划或表达意图。
-- 亲自完成专业任务，避免中枢重新变成“什么都在一次唤醒里做”的旧形态。
+- 把所有持续性专业工作都塞进自己的一次唤醒，避免中枢重新变成旧形态；这不禁止它直接完成简单工作。
 - 任意创造任务类型、扩大专业 session 权限或读取未授权来源。
 - 用无限等待、轮询等待或持续空调用占据模型资源。
 
@@ -144,16 +134,14 @@ Router 不负责：
 外界输入 / 主意识输出 / 工具与平台结果
   → 表界采集适配器
   → SurfaceObservation（不可变、去重、持久化）
-  → Router 批次与游标
-  → Router 实际研判
-       ├─ ignore：记录理由，不制造工作
-       ├─ defer：保留批次，等待明确时机
-       ├─ dispatch：生成 Task + Mandate
+  → 宿主分批投递正文并记录原生轮次结果
+  → Router 在独立会话中接收材料
+       ├─ 未来专业派工：生成 Task + Mandate
        │     → Assignment
        │     → 专业潜意识 session
        │     → 文件、笔记或其他授权结果
        │     → TaskReport 回到 Router
-       └─ propose：生成 ConsciousProposal 候选
+       └─ 未来主动机会：形成 ConsciousProposal 候选
              → 主动系统持久化与空闲调度
              → 明确呈现给主意识
              → 主意识行动／搁置／拒绝／pass
@@ -173,44 +161,39 @@ Router 不负责：
 ### 5.2 不抽样、不预筛选
 
 - 所有属于表界范围的事件都先进入权威观察存储。
-- Router 可以选择忽略，但“被忽略”必须由有记录的 Router 决定或明确工程规则产生，不能在采集层静默丢弃。
+- 权威观察在采集时持久化，与 Router 之后是否形成工作无关。
 - 不因为某条消息没有触发主意识回复，就从潜意识观察中删掉它。
 - 不因为主意识选择 `pass`，就当作这段经历不存在。
-- 不用摘要替代权威原文；上下文预算只能产生明确标记的部分投影和续读引用。
+- 不用摘要替代权威原文；上下文预算只能产生明确标记的部分投影和重新呈现引用。
 
 ### 5.3 模态与完整性
 
 - 文字保留原文、作者、会话、消息 ID、发生时间和可信来源。
-- 图片、语音和文件保留实际附件引用、模态、大小、准入状态及授权续读方式。
+- 图片、语音和文件保留实际附件引用、模态、大小、准入状态及授权重新呈现方式。
 - 如果某轮只向模型提供附件元信息，就只能记录“模型获得元信息”，不能声称它已经看过图片或听过语音。
-- 部分投影必须带 `complete: false`、缺失范围与续读位置；不能把节选冒充完整经历。
+- 部分投影必须带 `complete: false`、缺失范围与重新呈现位置；不能把节选冒充完整经历。
 
 ### 5.4 不阻塞主意识
 
 采集应异步、耐久、可恢复。潜意识模型不可用、Router 休息或任务队列拥塞时，主意识仍按原链路工作。若观察存储本身失败，必须暴露明确缺口和健康错误，并依靠权威来源日志恢复；不得返回“已同步”或把游标跳到最新位置。
 
-## 6. Router 研判与批次
+## 6. Router 会话与批次
 
 ### 6.1 批次
 
-Router 接收有界批次，而不是每条事件都强制产生一次空调用。批次可以包含连续观察、相关任务报告或明确人工请求，必须保持原始顺序和来源。
+宿主按原始顺序与来源形成有界批次，并把实际内容直接送入 Router 会话。未来输入可包含任务报告或明确的人工请求。
 
 批次至少记录：
 
 - 稳定 `batchId` 与观察 ID 列表。
 - 来源范围、最早与最晚发生时间。
-- 投影哈希、完整性与续读位置。
+- 投影哈希、完整性与重新呈现位置。
 - 形成批次的机械规则与配置版本。
 - 实际呈现给 Router 的 request / turn / delivery 证据。
 
-### 6.2 四种决定
+### 6.2 轮次结果
 
-- `ignore`：Router 看过以后认为无需产生后续工作；必须留下简洁理由。
-- `defer`：保留材料到以后处理；可带 `notBefore`，缺失时按宿主配置的下一检查时机，不等于永久遗忘。
-- `dispatch`：产生一个或多个明确的潜意识任务。
-- `propose`：只产生希望主意识考虑的机会候选，不创建专业任务。
-
-一次决定只选择一个动作。`dispatch` 可以同时附带机会候选；其他组合是否允许在实施前另行审定，第一版不做含糊的多动作事务。
+批次是宿主投递、恢复和重试的单位。Router 在普通会话中接收材料，可以自然结束。宿主只根据原生事件记录实际交付和轮次结果。未来如果形成任务或机会候选，关联其具体来源。
 
 ### 6.3 形成轨迹
 
@@ -248,7 +231,7 @@ Router 接收有界批次，而不是每条事件都强制产生一次空调用�
 
 - 稳定 `taskId`、revision、任务类型与去重键。
 - 标题、具体指令和来源引用。
-- 形成轨迹与创建它的 Router 决定。
+- 形成轨迹与创建它的 Router 会话事件。
 - 不可变 `TaskMandate`：允许读取的范围、允许产生的结果、目标专业类型、权限版本和资源预算。
 - 可见性范围，禁止私聊、群聊或不同授权域因统一队列而串用。
 - 当前工程状态、到期条件和关闭原因。
@@ -313,7 +296,7 @@ Router 或专业 session 可以形成“希望主意识考虑主动问好、继�
 
 Router 与各专业 session 分别选择显式文件组合和 required 列表。建议 Router 至少加载共享主体文件与专属 `SUBCONSCIOUS-ROUTER.md`；实际清单在实施前审定，不由工程 agent 冒充爱莉创作第一人称人格内容。
 
-稳定规则放在固定提示词，观察、任务和报告事件只携带当前事实与续读引用，避免每批重复大段操作手册。提示词文件热重读不等于唤醒，也不能自动扩大工具权限。
+稳定规则放在固定提示词，观察、任务和报告事件只携带当前事实与重新呈现引用，避免每批重复大段操作手册。提示词文件热重读不等于唤醒，也不能自动扩大工具权限。
 
 ## 10. 心跳、唤醒与休息
 
@@ -321,16 +304,16 @@ Router 与各专业 session 分别选择显式文件组合和 required 列表。
 
 Router 和各专业 session 拥有独立心跳配置。心跳可以只检查持久状态，没有待处理工作时不调用模型。
 
-- Router 因新观察批次、任务报告、延期到期或明确人工请求而唤醒。
+- Router 因新观察批次而运行。任务报告与明确人工请求是未来的输入来源。
 - 专业 session 主要因 Assignment 和后续输入唤醒，不要求各自扫描全量观察流。
 - 同一 session 不重入；运行期间新到材料进入后续批次。
-- 心跳、延期和恢复任务必须错开并受全局预算限制，不能形成模型风暴。
+- 心跳和恢复受全局预算限制。
 
 ### 10.2 休息
 
 Router 与每个专业 session 分别具有持久、可观测的 `awake` / `resting` 状态。
 
-- 休息期间继续持久化表界观察，不丢弃、不推进语义处理游标。
+- 休息期间继续持久化表界观察，待投递批次保留。
 - Router 休息时暂停新研判和派发；专业 session 休息时暂停自己的新 Assignment。
 - 已在运行的工作按明确取消或优雅结束规则处理，不制造第二个实例。
 - 人工唤醒记录 actor、原因和时间；恢复后按原游标逐批继续。
@@ -342,7 +325,7 @@ Router 与每个专业 session 分别具有持久、可观测的 `awake` / `rest
 
 1. **采集游标**：来源事件已经完整、持久地写入观察存储后推进。
 2. **Router 呈现游标**：批次实际进入 Router 模型请求并取得可靠曝光证据后推进。
-3. **Router 决定游标**：对应有效 Decision 已持久化后推进；仅看见但未决定不能算路由完成。
+3. **Router 轮次结果**：以 DSH 原生会话事件确认，用于宿主处理、恢复和重试。
 4. **Assignment 输入回执**：任务材料实际进入专业 session，并按报告或轮次结束规则确认读取。
 5. **主动机会呈现游标**：由主动系统独立管理，不与潜意识游标混用。
 
@@ -419,174 +402,18 @@ interface ConsciousProposal {
 
 `accepted_by_proactive` 只表示主动系统接受候选进入自己的机会流程，不表示主意识已经接受或发送。
 
-## 13. 模型工具 Schema 草案
+## 13. 会话工具与权限
 
-状态：**尚未注册。**实现前必须按 DSH 真实 `defineTool` 能力复核并补测试。任何未列出的新工具都不得先行加入模型上下文。
+当前 Router 直接收到宿主交付的观察正文，只具有文件、图像、网络、Skills、Shell、后台 Job 和 Schedule 共 17 个通用工具，没有潜意识专用读取、收尾或路由工具。能力按 Router Agent 作用域显式组合，权限、归属和边界见 [TOOLS.zh.md](TOOLS.zh.md)；Router 没有渠道发送工具。
 
-共同约定：
-
-- 所有 ID 和引用必须非空且在当前 actor 的可读范围内。
-- `source_refs`、`output_refs` 等数组必须显式出现；允许空数组的字段会明确说明。
-- 时间使用 ISO 8601 字符串；省略可选时间时由宿主规则处理，不接受自然语言模糊时间。
-- `reason`、`instruction`、`summary` 等主体文本不得由宿主回填。
-- 所有写入先持久化，再触发后续派发或通知；失败返回结构化错误，不伪造成功。
-
-### 13.1 `subconscious_read`
-
-Router 和专业 session 读取自己获准的观察、批次、任务、Assignment 与报告。不同 role 的资源白名单不同，专业 session 默认不能借它读取全量表界流。
-
-```ts
-parameters: {
-  resource: {
-    type: 'string', required: true,
-    description: '获准资源，例如 observation/<id>、batch/<id>、task/<id> 或 task/<id>/reports。',
-  },
-  offset: {
-    type: 'integer',
-    description: '分页偏移，默认 0，必须大于等于 0。',
-  },
-  limit: {
-    type: 'integer',
-    description: '分页数量，默认 20，范围 1～50。',
-  },
-}
-```
-
-输出：
-
-```ts
-{
-  resource: string
-  value: unknown
-  complete: boolean
-  next_offset?: number
-  continuation?: string
-}
-```
-
-资源不存在、越权或引用格式错误必须失败。`complete: false` 必须给出可用续读位置。
-
-### 13.2 `subconscious_route`
-
-仅供 Router session 使用，对一个批次作出一次原子决定。
-
-```ts
-parameters: {
-  batch_id: { type: 'string', required: true, description: '当前实际呈现给 Router 的批次 ID。' },
-  action: {
-    type: 'string', required: true,
-    enum: ['ignore', 'defer', 'dispatch', 'propose'],
-    description: '忽略、延期、派发专业任务，或只提交主意识机会候选。',
-  },
-  reason: { type: 'string', required: true, description: 'Router 本人对本次决定的非空理由。' },
-  not_before: { type: 'string', description: '仅 defer 可用；ISO 时间，省略时按宿主延期规则。' },
-  tasks: {
-    type: 'array',
-    description: 'dispatch 时至少一项；其他动作必须省略。',
-    items: {
-      type: 'object',
-      properties: {
-        kind: { type: 'string', required: true, description: '已注册任务类型，不是任意 session ID。' },
-        title: { type: 'string', required: true, description: '简洁任务标题。' },
-        instruction: { type: 'string', required: true, description: '具体、非空的任务指令。' },
-        source_refs: { type: 'array', required: true, items: { type: 'string' }, description: '至少一项，必须属于本批次或当前获准关联材料。' },
-        dedupe_key: { type: 'string', required: true, description: '同一 Router、任务类型内的稳定去重键。' },
-        not_before: { type: 'string', description: '可选 ISO 开始时间。' },
-        expires_at: { type: 'string', description: '可选 ISO 过期时间，必须晚于开始时间。' },
-      },
-    },
-  },
-  proposals: {
-    type: 'array',
-    description: 'propose 时至少一项；dispatch 可附带；ignore/defer 必须省略。',
-    items: { $ref: 'ConsciousProposalInput' },
-  },
-}
-```
-
-`ConsciousProposalInput`：
-
-```ts
-{
-  kind: string                 // 必填，已注册候选类型，例如 proactive_message
-  reason: string               // 必填、非空
-  source_refs: string[]        // 必填、至少一项
-  draft?: string               // 可选草稿，不是已批准发送的正文
-  target?: {
-    channel: string            // 必填
-    conversation: string       // 必填，照抄可信来源，不由宿主猜测
-  }
-  available_at?: string        // ISO 时间
-  expires_at?: string          // ISO 时间，必须晚于可呈现时间
-  dedupe_key: string           // 必填、稳定
-}
-```
-
-输出：
-
-```ts
-{
-  decision_id: string
-  batch_id: string
-  action: 'ignore' | 'defer' | 'dispatch' | 'propose'
-  task_ids: string[]
-  proposal_ids: string[]
-}
-```
-
-整个决定校验失败时不创建部分任务或候选。重复提交相同批次与相同决定应幂等返回原结果；同批次不同内容必须报冲突。
-
-### 13.3 `subconscious_report`
-
-仅供正在执行对应 Assignment 的专业 session 使用。
-
-```ts
-parameters: {
-  task_id: { type: 'string', required: true, description: '当前任务 ID。' },
-  assignment_id: { type: 'string', required: true, description: '当前实际 Assignment ID。' },
-  status: {
-    type: 'string', required: true,
-    enum: ['progress', 'waiting', 'completed', 'blocked', 'failed', 'dropped'],
-    description: '本次真实工程结果，不描述猜测的心理状态。',
-  },
-  summary: { type: 'string', required: true, description: '专业 session 本人提交的非空结果说明。' },
-  output_refs: {
-    type: 'array', required: true,
-    items: { type: 'string' },
-    description: '实际产物与工具结果引用；没有产物时传空数组。',
-  },
-  proposals: {
-    type: 'array',
-    description: '可选主意识机会候选，结构同 ConsciousProposalInput；没有时省略或传空数组。',
-    items: { $ref: 'ConsciousProposalInput' },
-  },
-}
-```
-
-输出：
-
-```ts
-{
-  report_id: string
-  task_id: string
-  assignment_id: string
-  accepted_status: string
-  proposal_ids: string[]
-}
-```
-
-宿主必须验证该 session 确实拥有此 Assignment。`completed` 还需通过任务类型自己的结果检查；报告已保存但通知 Router 失败时，重试通知而不是重跑任务。
-
-### 13.4 明确不新增的能力
-
-本设计不给 Router 或专业 session 新增 `send_text`、`send_voice`、渠道控制、任意任务创建、任意权限修改或通用 shell 工具。文件、搜索、`read_image` 等原生能力按各专业 session 的需求单独开放，不因为出现在 Router 工具草案里就共享权限。
+专业会话仅获得完成获准任务所需的 DSH 能力，文件、搜索、执行等权限按各自需求单独开放，不继承 Router 的全部权限。未来 TaskReport 的传递方式在对应专业会话实施时确定。
 
 ## 14. 存储、故障与恢复
 
 - 优先复用 DSH 已有持久化、事务和生命周期能力；无法满足领域事务时，在插件层定义最小 Store，不修改 vendored `dsh/`。
-- 观察、决定、任务、Mandate、Assignment、报告、机会候选各有明确权威写者。
+- 观察、交付结果、任务、Mandate、Assignment、报告、机会候选各有明确权威写者。
 - 先提交记录，再执行模型唤醒、Assignment 投递、报告通知或机会提交等副作用。
-- 进程重启后能够区分未呈现、呈现未知、已呈现未决定、已派发未读取、执行中断和结果未知。
+- 进程重启后根据持久交付和轮次记录恢复。未来专业派工使用自己的输入与执行回执。
 - 短暂模型、网络或存储失败使用有界退避；重复失败聚合到健康状态，不每个心跳刷完整错误。
 - 重试不能改变原始形成轨迹，也不能重复产生外部副作用。
 - 观察存储故障必须形成可恢复缺口；不能靠跳过来源维持表面“健康”。
@@ -597,9 +424,9 @@ parameters: {
 ## 15. 权限与隐私
 
 - Router 可以接收全量表界观察，不等于每个专业 session 都可以读取全量观察。
-- 任务只携带完成工作所需的来源引用和可见性授权；续读时再次检查权限。
+- 任务只携带完成工作所需的来源引用和可见性授权；重新呈现时再次检查权限。
 - 私聊、群聊、不同用户和不同来源的资料保持原有边界。
-- 潜意识默认无渠道发送、shell、代码执行、模型训练或主意识提示词修改权限。
+- 潜意识默认无渠道发送、模型训练或主意识提示词修改权限；Shell 与代码执行按 [TOOLS.zh.md](TOOLS.zh.md) 的沙箱、环境和资源策略显式开放，不再一律禁止。
 - 学习与技能验证的产物先是笔记、草案或验证报告，不自动成为主意识能力。
 - 日记和笔记不自动成为客观事实、稳定人格结论或主意识长期记忆。
 - 健康指标、列表和错误摘要不泄露私密正文、固定提示词全文、附件内容或凭据。
@@ -610,12 +437,13 @@ parameters: {
 宿主未来至少暴露：
 
 - 采集覆盖范围、采集游标、观察总量、缺口与最后来源错误。
-- Router 当前状态、待研判批次、最老等待时间、最后实际呈现与决定。
+- Router 当前状态、待投递批次、最老等待时间、最后实际呈现与轮次结果。
 - 各任务的类型、状态、Mandate 版本、当前 Assignment 与最后报告。
 - 各专业 session 的 awake / resting、运行 owner、最后成功轮次和休息原因。
 - 待提交主动系统的候选数量、被拒绝原因和实际交接结果。
 - 模型、存储、投递和通知的区分错误，不把“空队列”“禁用”“休息”“故障”混为一谈。
 - 每个后台部件的 owner、重试次数、退避和卸载状态。
+- Shell 与后台 Job 的拥有者、真实状态、寿命、结束原因和回收结果。
 
 管理视图默认展示需要人工处理的异常和阻塞，不为了显得活跃而制造大量通知。
 
@@ -623,21 +451,25 @@ parameters: {
 
 ### 阶段 A：全量观察与 Router 最小闭环
 
-只使用隔离的合成表界流，建立不可变观察、批次、游标、Router 独立 preset 与 `ignore` / `defer`。验证主意识不被阻塞、重启恢复和无内容丢失，不接真实渠道、不派发真实任务。
+先用隔离表界流验证不可变观察、来源游标、宿主投递、独立 Router 会话与原生轮次收尾。覆盖卸载和重挂补读，再验收实际 Web 输入。
 
-### 阶段 B：一种派工闭环
+### 阶段 B：通用工具与权限
 
-注册一个无外部副作用的测试专业 session，跑通 `dispatch → Mandate → Assignment → report → Router 关闭`，验证幂等、权限、休息和卸载。不要在同一阶段上线所有专业类型。
+按 [TOOLS.zh.md](TOOLS.zh.md) 接入文件、图像、网络、Skills、Shell 和后台 Job，分别完成真实工具调用、路径准入、沙箱、资源回收与回归验收。文件工具接入不等于整个阶段完成。
 
-### 阶段 C：记忆专业接入
+### 阶段 C：一种派工闭环
+
+注册一个无外部副作用的测试专业 session，跑通任务授权、Assignment 投递和结果回传，验证幂等、权限、休息和卸载。不要在同一阶段上线所有专业类型。
+
+### 阶段 D：记忆专业接入
 
 把 `memory` 作为第一个真实专业 session，通过 Router 接收有界任务和主意识观察，写真实日记或选择 `pass`。原“记忆 session 直接消费主意识投影”的路径不再绕过中枢。
 
-### 阶段 D：主动机会候选
+### 阶段 E：主动机会候选
 
-先以只记录、不呈现的方式验证 `propose`，再接入主动系统的持久化与明确呈现。主意识始终可以拒绝或 `pass`，不直接发送预设问候。
+先验证候选形成与来源记录，再接入主动系统的持久化与明确呈现。主意识始终可以拒绝或 `pass`，不直接发送预设问候。
 
-### 阶段 E：其他专业类型
+### 阶段 F：其他专业类型
 
 学习、技能验证、计划、主动表达准备分别审定和实施，不共用一次唤醒，不自动获得彼此权限。
 
@@ -646,14 +478,14 @@ parameters: {
 1. 所有声明范围内的外界输入、主意识输出和外部结果都有不可变观察记录，重复事件不会制造重复观察。
 2. 主意识正常回复不被潜意识采集、Router 或专业任务阻塞。
 3. Router 是表界信息的唯一语义派工中枢，专业 session 不各自订阅全量外界流。
-4. 每项任务都能回溯到具体观察、Router 决定、Mandate、Assignment 和真实报告。
-5. Router 不亲自代替专业 session 写日记、学习或验证技能。
+4. 每项任务都能回溯到具体观察、Router 会话事件、Mandate、Assignment 和真实报告。
+5. 持续性专业工作原则上由专业 session 承担，但中枢可以按职责直接使用通用工具完成简单工作；通用能力本身按 [TOOLS.zh.md](TOOLS.zh.md) 独立验收。
 6. 空队列不调用模型，同一 session 不重入，重启不造成重复派发。
-7. 采集、呈现、决定、读取、报告和主动呈现使用不同游标，不混淆“收到”和“处理完成”。
+7. 采集、会话投递、轮次结果、专业任务报告和主动呈现各有自己的工程证据。
 8. 私聊、群聊、附件和不同权限域不因统一观察存储而串权。
 9. 潜意识不能直接对外发送，主动候选必须经过主动系统呈现并由主意识亲自决定。
 10. 主意识处理候选后的真实活动重新进入观察链，且不会把 Router 自己的内部活动递归伪装成外界输入。
-11. 休息期间观察继续保存、语义游标不推进，恢复后来源连续。
+11. 休息期间观察继续保存，恢复后按来源顺序继续投递。
 12. 存储失败、模型失败、通知未知和卸载都有明确状态，不伪装成功。
 
 ## 19. 实施前仍需讨论
@@ -661,12 +493,12 @@ parameters: {
 - DSH 哪个真实边界可以保证覆盖全部表界输入、主意识输出、工具结果与渠道回执。
 - 表界权威来源是主意识耐久事件日志、入口事件总线，还是两者组合；怎样证明没有缺口。
 - Router 的实际固定提示词文件清单、模型与资源预算。
-- 批次大小、合并窗口、延期默认值和 Router 空闲判定。
+- 批次大小、合并窗口和 Router 空闲判定。
 - Store 的选型、事务边界、状态目录和迁移策略。
 - 任务续接与关联的最小规则，第一版是否需要订阅，还是仅允许显式父任务关联。
-- `subconscious_read`、`subconscious_route`、`subconscious_report` 的 Schema 审定与 DSH 类型落地。
+- 专业会话的任务投递和结果回传方式。
 - 主动系统接收 `ConsciousProposal` 的最小 Cordis 接口，以及候选接受、拒绝和撤回语义。
 - 第一个真实派工是否直接进入记忆，还是先用测试专业验证领域闭环。
 - 各任务类型的完成检查、文件权限和产物引用格式。
 
-在这些契约确定前，不启动真实表界采集，不创建 Router 或专业潜意识 session，不派发真实任务，也不向主意识或外部渠道发送任何内容。
+后续范围按阶段验收。专业会话、真实派工与主动呈现以各阶段的实现和验收为准。

@@ -79,6 +79,30 @@ it('admits workspace files and selected prompts but nothing else', async () => {
   await expect(callPre('read', { file_path: join(backups, 'old.bak') })).resolves.toMatchObject({ kind: 'deny' })
 })
 
+it('lets a memory session read its shared index and edit only its own workspace', async () => {
+  const listeners = new Map<string, unknown>()
+  const ctx = {
+    on(event: string, listener: unknown) { listeners.set(event, listener) },
+  } as unknown as Context
+  await mountFileCapabilities(ctx, {
+    baseDir: prompts,
+    files: ['MEMORY.md'],
+    required: [],
+    workspaceDir: workspace,
+    backupDir: backups,
+    allowPromptWrites: false,
+  })
+  pre = listeners.get('tools/pre-execute') as Pre
+  const memory = join(prompts, 'MEMORY.md')
+  await expect(callPre('read', { file_path: memory })).resolves.toEqual(allow)
+  await expect(callPre('read', { file_path: join(prompts, 'SOUL.md') })).resolves.toMatchObject({ kind: 'deny' })
+  await expect(callPre('write', { file_path: memory, content: 'overwrite' })).resolves.toMatchObject({ kind: 'deny' })
+  await expect(callPre('edit', { file_path: memory, old_string: 'before', new_string: 'after' })).resolves.toMatchObject({ kind: 'deny' })
+  await expect(callPre('write', { file_path: join(workspace, 'entry.md'), content: 'note' })).resolves.toEqual(allow)
+  await expect(callPre('edit', { file_path: join(workspace, 'note.md'), old_string: 'note', new_string: 'revised' })).resolves.toEqual(allow)
+  expect(await readdir(backups)).toEqual([])
+})
+
 it('uses workspace for omitted searches and checks explicit roots', async () => {
   await expect(callPre('glob', { pattern: '**/*.md' })).resolves.toEqual(allow)
   await expect(callPre('grep', { pattern: 'note', path: workspace })).resolves.toEqual(allow)

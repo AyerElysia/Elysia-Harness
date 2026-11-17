@@ -1,6 +1,6 @@
 # Elysia-Harness 架构
 
-> 状态：目标架构与现状盘点。最近一次核对：2026-11-10（Ayla 通道插件挂载）。
+> 状态：目标架构与现状盘点。最近一次核对：2026-11-17（潜意识 Router 表界观察与通用工具接入）。
 > 本文描述「一条主意识 session、四个渠道汇入」的目标形态，并逐层标注当前实现状态。
 > 与代码冲突时以代码为准；发现冲突请直接改本文，不要让两种说法并存。源码已实现不等于完成真实模型、平台或重启验收。
 
@@ -8,7 +8,7 @@
 
 目标是让所有外部平台的消息汇入**同一条主意识 DSH session**，由同一个 agent 阅读、思考、决定回不回、回给谁、从哪个平台发出去。
 
-跨平台的目标是**一个主体**有四个出入口。当前 KOOK 与 Ayla 已接入主意识 pending；QQ、飞书仍待接入。这里的单 session 指主意识，潜意识的独立心跳 session 目前仅有需求。
+跨平台的目标是**一个主体**有四个出入口。当前 KOOK 与 Ayla 已接入主意识 pending；QQ、飞书仍待接入。这里的单 session 指主意识；潜意识已有独立的长期 Router Session，接收主意识实际发生的表界事件。
 
 Ayla 一条的取证边界：插件代码、挂载行与离线测试已完成，**尚未做真实 Ayla 后端的端到端验收**（见第 5 节）。
 
@@ -22,7 +22,7 @@ Ayla 一条的取证边界：插件代码、挂载行与离线测试已完成，
 - 提示词一致：主意识使用同一份按配置重读的身份前缀；
 - 决策统一：她可以在同一轮里选择一个或多个可达会话，也可以沉默。
 
-session 是运行边界，不是主体边界；潜意识拟建独立 session，并不因此成为另一个主体。共享历史也不能代替长期记忆系统。
+session 是运行边界，不是主体边界；潜意识的独立 Router Session 并不因此成为另一个主体。共享历史也不能代替长期记忆系统。
 
 代价是上下文增长更快。见第 7 节。
 
@@ -72,12 +72,12 @@ session 是运行边界，不是主体边界；潜意识拟建独立 session，�
 | `plugins/kook-bot` | 本仓库 | KOOK Gateway、图文附件入站、文字与语音 sender | 不持有 session |
 | `plugins/feishu-app` | 本仓库 | 飞书长连接、`feishu` sender | 不持有 session |
 | `plugins/ayla-app` | 本仓库 | Ayla WS 通道（插件主动拨 Ayla）、`ayla` sender、standalone 备用形态 | 不持有主意识 session；不 import 任何 `@elysia/*` |
-| `plugins/subconscious` | 只有需求文档 | 拟建独立心跳 session，读取主意识新增事件 | 尚无运行实现 |
+| `plugins/subconscious` | 本仓库 | 持久采集主意识的输入、可见输出与工具事件，由宿主分批推送至长期 Router Session | 不派工、不写专业记忆、不向渠道外发 |
 | 人物目录插件 | 待建 | 跨平台身份图谱 | 不替模型判断关系 |
 | `dsh/packages/schedule` | dsh | 定时规则、持久化、唤醒 | 不认识外部平台 |
 | `dsh/packages/compaction` | dsh | 上下文压缩 | — |
 
-**硬规则**：渠道插件永远不调用 `ctx.agents.create()` 或 `ctx.sessionController.create()`。主意识 session 仅由 `conscious-mind/main-session.ts` 创建和恢复。潜意识的独立 session 仍是需求。
+**硬规则**：渠道插件永远不调用 `ctx.agents.create()` 或 `ctx.sessionController.create()`。主意识 session 仅由 `conscious-mind/main-session.ts` 创建和恢复；潜意识 Router 的固定独立 session 仅由 `subconscious/router-session.ts` 创建和恢复。
 
 ## 5. 逐层状态
 
@@ -104,7 +104,7 @@ session 是运行边界，不是主体边界；潜意识拟建独立 session，�
 | 定时 | `dsh/packages/schedule` | ✅ | 六种规则 + 时区 + 错过合并 |
 | 定时接入 | proactive-system/plan-tools、plan-host | ✅ 代码接入与运行重载验证通过 | 原生提醒回到固定主意识；见 6.4 |
 | UI 可见 | 主 session 元数据 | ✅ 已提供 cwd | 持久化列表依赖此字段；真实重启恢复仍需验收 |
-| 潜意识 | `plugins/subconscious/REQUIREMENTS.zh.md` | 🔴 仅需求 | 尚无心跳插件、独立 session 或事件消费实现 |
+| 潜意识 | `plugins/subconscious` | ✅ Router 已接入 | 主意识表界事件观察、SQLite、分批投递、长期 Router 会话与通用工具，见 6.5 |
 | 压缩 | `dsh/packages/compaction` | ✅ | — |
 
 ## 6. 实现说明与未完项
@@ -190,7 +190,17 @@ profile 停用原先直接加载的 schedule 行，由 @elysia/proactive-system/
 
 计划不是渠道消息，不隐式选择最近活跃会话作为收件人。她可以在计划原文里留下自己需要的上下文与明确目标，提醒到达后再通过既有工具选择是否发送。一次提醒入箱只表示调度交付，不表示外部消息送达或计划执行完成。使用、Schema、恢复与验收见 [第一版简单计划](../plugins/proactive-system/PLAN-V1.zh.md)。
 
-### 6.5 其余待处理项
+### 6.5 潜意识 Router（已实现基础闭环）
+
+潜意识插件监听固定主意识 Session 的耐久 `session/event`，采集 `user/message`、`assistant/message`、`tool/call` 和 `tool/result`。文字、图片和文件内容块保留原样；可见输出与隐藏 reasoning、provider replayState 和框架上下文分开处理。Observation 以来源身份稳定去重，并使用 SessionPersistence 和持久游标补读漏收的事件。
+
+宿主把有界批次的正文直接送入固定的 `elysia-subconscious-router`。Router 在有输入时恢复或创建，按普通 DSH 会话运行；宿主分别记录 Session 接收、模型呈现和原生轮次完成，正常完成的轮次即关闭当前批次，技术失败沿用稳定批次 ID 重试。旧库中的历史 Decision 与延期记录保留，但当前没有 `subconscious_read` 或 `subconscious_route` 工具。
+
+Router 在自己的 Agent 作用域挂载文件、图像、网络、Skills、Shell、后台 Job 和 Schedule 共 17 个 DSH 原生通用工具。文件写入、Shell 沙箱、后台任务数量与寿命、Schedule 归属均由宿主限制；Router 没有 `send_text` 或 `send_voice`。真实 Web Search 的上游连接超时仍未验收通过。
+
+专业派工、专业记忆写入、主动机会和对外表达属于后续工作。接收契约与历史最小链路分别见 [INTAKE](../plugins/subconscious/INTAKE.zh.md) 和 [Router 最小实现与验收记录](../plugins/subconscious/ROUTER-MVP.zh.md)；其中旧领域工具描述不再代表当前实现。
+
+### 6.6 其余待处理项
 
 | 项 | 说明 |
 |---|---|

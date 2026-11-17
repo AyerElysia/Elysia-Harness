@@ -92,6 +92,10 @@ vendor/*/node_modules/
 *.log
 *.orig
 *.bak
+# Local staged copies used by subconscious refactor verification.
+plugins/subconscious-intake-check/
+plugins/subconscious-tools-work/
+
 tmp/
 .DS_Store
 

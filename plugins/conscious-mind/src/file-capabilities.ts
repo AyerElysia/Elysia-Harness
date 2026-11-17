@@ -33,6 +33,12 @@ export interface Config {
   workspaceDir: string
   /** Maintenance-only prompt backup directory, never model-readable. */
   backupDir: string
+  /** Additional recursively readable directories; mutations remain workspace-only. */
+  readOnlyDirs?: string[]
+  /** Allow native tools to edit the listed prompt files outside the workspace. */
+  allowPromptWrites?: boolean
+  /** Expose just this preset's locally registered tools. */
+  restrictInheritedTools?: boolean
   /** Maximum UTF-8 bytes in one prompt after mutation. */
   maxPromptBytes?: number
   /** Maximum retained backups per prompt after a successful mutation. */
@@ -45,6 +51,9 @@ export const Config: z<Config> = z.object({
   required: z.array(z.string()).default(['SOUL.md']),
   workspaceDir: z.string().required(),
   backupDir: z.string().required(),
+  readOnlyDirs: z.array(z.string()).default([]),
+  allowPromptWrites: z.boolean().default(true),
+  restrictInheritedTools: z.boolean().default(false),
   maxPromptBytes: z.number().default(65536),
   backupRetention: z.number().default(20),
 })
@@ -52,6 +61,8 @@ export const Config: z<Config> = z.object({
 interface Roots {
   workspace: string
   migration: string
+  readOnly: string[]
+  allowPromptWrites: boolean
   prompts: Map<string, string>
   promptNames: Map<string, string>
   required: ReadonlySet<string>
@@ -118,10 +129,12 @@ async function rootsOf(config: Config): Promise<Roots> {
     throw new Error('backupRetention must be a positive integer')
   }
   const workspace = await realpath(config.workspaceDir)
+  const readOnly = await Promise.all((config.readOnlyDirs ?? []).map(path => realpath(path)))
   const promptBase = await realpath(config.baseDir)
   await mkdir(config.backupDir, { recursive: true, mode: 0o700 })
   const backup = await realpath(config.backupDir)
-  if (under(workspace, backup) || backup === promptBase || config.files.some(file => backup === join(promptBase, file))) {
+  if (under(workspace, backup) || readOnly.some(root => under(root, backup))
+    || backup === promptBase || config.files.some(file => backup === join(promptBase, file))) {
     throw new Error('prompt backups must be outside every model-accessible path')
   }
   const prompts = new Map<string, string>()
@@ -134,6 +147,8 @@ async function rootsOf(config: Config): Promise<Roots> {
   return {
     workspace,
     migration: join(workspace, '.migration'),
+    readOnly,
+    allowPromptWrites: config.allowPromptWrites ?? true,
     prompts,
     promptNames,
     required,
@@ -152,9 +167,10 @@ function promptName(roots: Roots, target: string): string | undefined {
 }
 
 function admitted(roots: Roots, tool: string, target: string): boolean {
-  if (tool === 'read_image') return under(roots.workspace, target) && !under(roots.migration, target)
   if (under(roots.workspace, target) && !under(roots.migration, target)) return true
-  return promptName(roots, target) !== undefined
+  if (!MUTATION_TOOLS.has(tool) && roots.readOnly.some(root => under(root, target))) return true
+  if (tool === 'read_image') return false
+  return promptName(roots, target) !== undefined && (roots.allowPromptWrites || !MUTATION_TOOLS.has(tool))
 }
 
 async function rejectHardLink(target: string): Promise<boolean> {
@@ -316,12 +332,31 @@ export async function mountFileCapabilities(ctx: Context, config: Config): Promi
 export const name = 'elysia-file-capabilities'
 export const inject = ['tools', 'workingDirectory', 'fs', 'systemPrompt', 'subprocess']
 export async function apply(ctx: Context, config: Config): Promise<void> {
-  if (scopeOf(ctx) === undefined) throw new Error('elysia file capabilities must be mounted in an agent scope')
+  const scope = scopeOf(ctx)
+  if (scope === undefined) throw new Error('elysia file capabilities must be mounted in an agent scope')
+  if (config.restrictInheritedTools === true && !('session' in scope)) {
+    // Native DSH restrictions exempt tools owned by the concrete Agent, not
+    // tools inherited from its preset. Mount both there before its first turn.
+    ctx.on('agent/created', async ({ agent }) => {
+      await agent.ctx.plugin(memoryFiles, config)
+      return undefined
+    })
+    return
+  }
+  await mountAgentFileTools(ctx, config)
+}
+
+const memoryFiles = { name: 'elysia-scoped-file-tools', inject, apply: mountAgentFileTools }
+
+async function mountAgentFileTools(ctx: Context, config: Config): Promise<void> {
   const removeGuards = await mountFileCapabilities(ctx, config)
   let files: { dispose(): Promise<unknown> } | undefined
   try {
     files = await ctx.plugin(ToolFs, { read: true, readImage: true, write: true, edit: true })
     await ctx.plugin(ToolFsSearch, { sampleOverCapGlobResults: false })
+    if (config.restrictInheritedTools === true) {
+      ctx.effect(() => ctx.tools.restrict({ allow: [] }), 'elysia-file-capabilities.inherited-tools()')
+    }
   } catch (error) {
     const cleanup = await Promise.allSettled([
       Promise.resolve().then(removeGuards),

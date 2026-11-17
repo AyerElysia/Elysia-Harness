@@ -1,6 +1,6 @@
 # 记忆潜意识 session 需求
 
-状态：**仅讨论与需求占位，未创建运行实例。**
+状态：**固定会话、提示词与基础文件工具已在 Spark Web 装配。中枢自动派工与记忆整理闭环待接入。**
 
 `memory` 是潜意识宿主下的第一个 session，用来验证多潜意识架构，而不是把所有潜意识任务换一个名字继续混在一起。
 
@@ -24,7 +24,7 @@ DSH session ID：elysia-subconscious-memory
 工作目录：/home/ayerelysia/Elysia/Data/workspace/subconscious/memory
 ```
 
-工作目录是未来实施时的建议位置，本次没有创建或写入它。
+Spark 已创建上述固定会话及工作目录，目录下有 `diary/` 与 `notes/`。自检使用临时合成文件。
 
 - 使用独立长期 DSH session，不并入主意识日志。
 - 使用自己的提示词组合、来源游标、心跳、休息状态和工具权限。
@@ -36,12 +36,7 @@ DSH session ID：elysia-subconscious-memory
 
 记忆 session 通过 DSH Agent Preset 挂载现有 standing-prompts 子插件，文件清单属于这个 agent，不影响主意识或其他潜意识。
 
-实际文件清单在实施前单独审定，不默认把主意识五份文件原样全部复制。未来若需要记忆任务专属提示文件：
-
-- 先在 preset 中显式声明单个文件名与 required 规则。
-- 文件内容仍按现有规则在每次模型请求时重新读取。
-- 工程侧只管理加载和权限，不冒充她创作第一人称主体内容。
-- 修改提示文件本身不会主动唤醒记忆 session。
+当前按 `SOUL.md → USER.md → SUBCONSCIOUS-MEMORY.md` 组装。`SOUL.md` 与角色文件必需，`USER.md` 可选。文件清单由预设指定，正文在每次组装时重新读取。共享 `MEMORY.md` 作为可按需查阅的只读材料。
 
 ## 4. 这一轮能看见什么
 
@@ -133,20 +128,9 @@ Data/workspace/subconscious/memory/
 
 优先复用 DSH 原生文件工具，不为日记另造一套模型可见的 `write_diary` 黑箱。
 
-第一版建议只开放完成任务所需的：
+当前挂载 DSH 原生 `read`、`read_image`、`glob`、`grep`、`write`、`edit`。写入范围为记忆工作区，共享 `MEMORY.md` 可读。图片实际读取依赖附件与模型图像能力。会话使用 DSH 原生轮次收尾。
 
-- `read`
-- `write`
-- `edit`
-- `glob`
-- `grep`
-- `subconscious_read`：读取本 Assignment 获准的任务、观察和产物引用。
-- `subconscious_report`：把真实结果交回 Router。
-- 作用域 `pass`
-
-所有文件工具使用与主意识同等级别的规范化路径、真实路径、符号链接、版本和大小检查，但允许根收紧到本 session 的 `diary/` 与 `notes/`。两个 `subconscious_*` 工具的输入、输出、权限与错误 Schema 以插件根目录需求文档的草案为起点，实施前必须审定；它们不是当前已经注册的工具。
-
-若实施时发现需要新增其他模型工具，必须先在实施文档中补全工具输入、输出、必填性、空值、默认值、校验、权限与错误 Schema。
+中枢派工及结果回传将在后续接入，相关材料由宿主随任务投递。
 
 ## 9. 心跳、休息与唤醒在记忆 session 中的表现
 
@@ -155,7 +139,7 @@ Data/workspace/subconscious/memory/
 - 只检查是否有新 Assignment、后续输入或其他待处理工作，不自行扫描全量表界流。
 - 没有新工作时，不调用模型。
 - 有待处理工作且当前 `awake`、空闲、资源允许时，启动一轮。
-- 一轮结束后可以写日记、写笔记或 `pass`，并通过 `subconscious_report` 交回真实结果，不强制输出篇数。
+- 一轮可以写日记、写笔记或自然结束。结果记录追溯实际产物。
 
 ### 休息
 
@@ -175,11 +159,11 @@ Data/workspace/subconscious/memory/
 ```text
 主意识表界事件及版本
 → SurfaceObservation 与 Router 批次
-→ Router 决定、Task 与 Mandate
+→ 任务来源、Task 与 Mandate
 → 记忆 session 的 Assignment、来源批次与游标
 → 实际模型请求
 → 她的思考、选择或 pass
-→ read / write / edit / subconscious_report 等真实工具调用
+→ 实际文件工具调用（如发生）
 → 文件结果、日记 entryId 与 TaskReport
 → Router 后续处理、游标推进或保留原因
 ```

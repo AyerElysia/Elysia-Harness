@@ -1,0 +1,5 @@
+Official package: @deepseek-ai/node-addon-system-linux-arm64@0.1.2
+Source: https://registry.npmjs.org/@deepseek-ai/node-addon-system-linux-arm64/-/node-addon-system-linux-arm64-0.1.2.tgz
+Tarball SHA-1: 577d2b82c6d597f078ecec12936852622c269f8d
+Tarball SHA-512: sha512-Z/DQtqgEYzjBzb2ocHGjMzx51W7xDILkJKKj89nyErr8gZMNiLs+JNL1uKzJqc3VLZB+vYCPaHGyQ3oX6EzEmA==
+landlock-run SHA-256: f6ae2ad5893e3123f45329ade5518b33c3ac3b102978001ff1c6a6a8ebe2ad9b

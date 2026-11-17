@@ -8,8 +8,32 @@
     "src"
   ],
   "references": [
-    {
-      "path": "../../dsh/vendor/cordis"
-    }
+    { "path": "../../dsh/vendor/cordis" },
+    { "path": "../../dsh/vendor/schemastery" },
+    { "path": "../../dsh/packages/core/agent" },
+    { "path": "../../dsh/packages/core/agent-default-model" },
+    { "path": "../../dsh/packages/util/brand" },
+    { "path": "../../dsh/packages/compaction/compaction-basic" },
+    { "path": "../../dsh/packages/llm/llm" },
+    { "path": "../../dsh/packages/core/scope" },
+    { "path": "../../dsh/packages/core/session" },
+    { "path": "../../dsh/packages/session/session-persistence" },
+    { "path": "../../dsh/packages/core/system-prompt" },
+    { "path": "../../dsh/packages/core/tools" },
+    { "path": "../../dsh/packages/jobs/jobs" },
+    { "path": "../../dsh/packages/jobs/jobs-local" },
+    { "path": "../../dsh/packages/jobs/tool-jobs" },
+    { "path": "../../dsh/packages/sandbox/sandbox" },
+    { "path": "../../dsh/packages/sandbox/sandbox-local" },
+    { "path": "../../dsh/packages/sandbox/sandbox-policy" },
+    { "path": "../../dsh/packages/schedule/schedule" },
+    { "path": "../../dsh/packages/schedule/tool-schedule" },
+    { "path": "../../dsh/packages/shell/bash-sandbox" },
+    { "path": "../../dsh/packages/shell/shell" },
+    { "path": "../../dsh/packages/shell/shell-env" },
+    { "path": "../../dsh/packages/shell/tool-bash" },
+    { "path": "../../dsh/packages/session/working-directory" },
+    { "path": "../../dsh/packages/util/values" },
+    { "path": "../conscious-mind" }
   ]
 }
