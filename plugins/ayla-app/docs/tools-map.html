@@ -1,0 +1,160 @@
+<!doctype html>
+<html lang="zh-CN"><head><meta charset="utf-8">
+<style>
+  * { box-sizing: border-box; margin: 0; padding: 0; }
+  body { font-family: "Microsoft YaHei UI","Microsoft YaHei","Segoe UI",sans-serif;
+         background:#fbfafc; color:#2b2430; padding:40px 44px 34px; width:1360px; }
+  .head { display:flex; align-items:flex-end; justify-content:space-between;
+          border-bottom:2px solid #efe6ec; padding-bottom:16px; margin-bottom:22px; }
+  h1 { font-size:30px; font-weight:700; letter-spacing:.5px; }
+  h1 span { color:#b8738f; }
+  .sub { font-size:13.5px; color:#7c6b78; margin-top:7px; }
+  .count { text-align:right; font-size:12.5px; color:#8a7786; line-height:1.9; }
+  .count b { font-size:26px; color:#b8738f; font-weight:700; }
+  .grid { column-count:3; column-gap:14px; }
+  .card { border:1px solid #e6dae2; border-radius:10px; background:#fff; overflow:hidden;
+          break-inside:avoid; -webkit-column-break-inside:avoid; margin-bottom:14px;
+          box-shadow:0 1px 2px rgba(90,60,80,.04); }
+  .card-h { display:flex; align-items:center; justify-content:space-between;
+            padding:9px 12px; background:#f8f1f5; border-bottom:1px solid #eee1e8; }
+  .card-h .t { font-size:13px; font-weight:700; color:#5c4252; letter-spacing:.3px; }
+  .card-h .n { font-size:11px; color:#a5899a; background:#fff; border:1px solid #e8dae2;
+               border-radius:9px; padding:1px 7px; }
+  .tools { padding:9px 11px 11px; display:flex; flex-direction:column; gap:9px; }
+  .tool { border-left:3px solid #d9c7d2; padding-left:9px; }
+  .tool.r { border-left-color:#6d9ce8; }
+  .tool.w { border-left-color:#d9a441; }
+  .tool.x { border-left-color:#d0453a; }
+  .nm { font-family:Consolas,"Courier New",monospace; font-size:12.5px; font-weight:700; color:#2f2633; }
+  .nm em { font-style:normal; font-size:10px; font-weight:400; color:#9b8a95; margin-left:6px; }
+  .ds { font-size:11.5px; color:#6f6270; line-height:1.55; margin-top:2px; }
+  .acts { margin-top:4px; display:flex; flex-wrap:wrap; gap:3px; }
+  .a { font-family:Consolas,monospace; font-size:10px; color:#6b5a66;
+       background:#f6f1f4; border:1px solid #ece0e7; border-radius:4px; padding:1px 4px; }
+  .card.defer { background:#fafafa; border-style:dashed; border-color:#d9d3d6; }
+  .card.defer .card-h { background:#f4f2f3; }
+  .card.defer .nm { color:#8b8289; }
+  .card.defer .ds { color:#948c92; }
+  .legend { display:flex; gap:18px; align-items:center; margin-top:16px;
+            font-size:11.5px; color:#6f6270; padding-top:12px; border-top:1px solid #efe6ec; }
+  .lg { display:flex; align-items:center; gap:6px; }
+  .dot { width:9px; height:9px; border-radius:2px; }
+  .notes { margin-top:12px; display:grid; grid-template-columns:repeat(3,1fr); gap:10px; }
+  .note { background:#f8f4f7; border:1px solid #ece0e7; border-radius:8px; padding:9px 11px;
+          font-size:11.5px; color:#5f5363; line-height:1.65; }
+  .note b { color:#b8738f; }
+</style></head>
+<body>
+  <div class="head">
+    <div>
+      <h1>Ayla<span>-use</span> 工具全景</h1>
+      <div class="sub">本期口径：只做装上就能用的 · 依赖上传/推流/语音对接的一律不注册</div>
+    </div>
+    <div class="count"><b>20</b> 个工具<br>8 个类别 + 4 个推迟</div>
+  </div>
+
+  <div class="grid">
+    <div class="card">
+      <div class="card-h"><span class="t">R1 · 身份与资料</span><span class="n">2</span></div>
+      <div class="tools">
+        <div class="tool r"><div class="nm">ayla_me</div><div class="ds">读自己：昵称/头像/签名/状态 + 未读徽标</div></div>
+        <div class="tool w"><div class="nm">ayla_update_profile</div><div class="ds">改昵称 · 签名 · 在线状态 · 内容可见（文字字段）</div></div>
+      </div>
+    </div>
+
+    <div class="card">
+      <div class="card-h"><span class="t">R2 · 人与好友</span><span class="n">3</span></div>
+      <div class="tools">
+        <div class="tool r"><div class="nm">ayla_search_users</div><div class="ds">关键字 → <b>带唯一 id</b> 的列表（名字变 id 的唯一入口）</div></div>
+        <div class="tool r"><div class="nm">ayla_get_user</div><div class="ds">只收 user_id；返回主页 + relation</div></div>
+        <div class="tool w"><div class="nm">ayla_friends</div><div class="ds">standalone 下不加好友就发不出私聊</div>
+          <div class="acts"><span class="a">list</span><span class="a">request</span><span class="a">handle</span><span class="a">remove</span></div></div>
+      </div>
+    </div>
+
+    <div class="card">
+      <div class="card-h"><span class="t">R3 · 会话与群</span><span class="n">4</span></div>
+      <div class="tools">
+        <div class="tool w"><div class="nm">ayla_conversations</div><div class="ds">会话列表 / 详情 / 开私聊 / 置顶 / 隐藏 / 已读</div>
+          <div class="acts"><span class="a">list</span><span class="a">get</span><span class="a">open_private</span><span class="a">pin</span><span class="a">hide</span><span class="a">mark_read</span></div></div>
+        <div class="tool w"><div class="nm">ayla_create_group</div><div class="ds">建群（我=群主，自动建「默认组」）</div></div>
+        <div class="tool w"><div class="nm">ayla_group</div><div class="ds">群管理与子群；解散/踢人不可逆</div>
+          <div class="acts"><span class="a">update</span><span class="a">add_members</span><span class="a">remove_member</span><span class="a">mute</span><span class="a">set_role</span><span class="a">transfer</span><span class="a">leave</span><span class="a">dissolve</span><span class="a">subgroups</span></div></div>
+        <div class="tool w"><div class="nm">ayla_group_access</div><div class="ds">申请 / 审批 / 邀请 / 处理邀请</div>
+          <div class="acts"><span class="a">apply</span><span class="a">approve</span><span class="a">invite</span><span class="a">accept</span></div></div>
+      </div>
+    </div>
+
+    <div class="card">
+      <div class="card-h"><span class="t">R4 · 消息</span><span class="n">4</span></div>
+      <div class="tools">
+        <div class="tool w"><div class="nm">ayla_send</div><div class="ds">本期三种载荷；<b>图片/语音/文件/表情/@ 依赖上传，不注册</b></div>
+          <div class="acts"><span class="a">text</span><span class="a">share</span><span class="a">poke</span></div></div>
+        <div class="tool r"><div class="nm">ayla_read_messages</div><div class="ds">历史（裸数组、seq 升序），before_seq 翻页</div></div>
+        <div class="tool x"><div class="nm">ayla_recall_message</div><div class="ds">撤回：120s 内、仅自己发的</div></div>
+        <div class="tool w"><div class="nm">ayla_typing</div><div class="ds">声明正在输入</div></div>
+      </div>
+    </div>
+
+    <div class="card">
+      <div class="card-h"><span class="t">R5 · 帖子</span><span class="n">1</span></div>
+      <div class="tools">
+        <div class="tool w"><div class="nm">ayla_posts</div><div class="ds">自己发 · 看别人的 · 评论 · 收评论；title/body 必填</div>
+          <div class="acts"><span class="a">list</span><span class="a">get</span><span class="a">create</span><span class="a">update</span><span class="a">delete</span><span class="a">comment</span><span class="a">comments</span><span class="a">delete_comment</span><span class="a">mark_viewed</span></div></div>
+      </div>
+    </div>
+
+    <div class="card">
+      <div class="card-h"><span class="t">R6 · 直播</span><span class="n">2</span></div>
+      <div class="tools">
+        <div class="tool w"><div class="nm">ayla_live</div><div class="ds">开播/下播 ✓；<b>无推流，画面是黑的</b>（如实返回）</div>
+          <div class="acts"><span class="a">list</span><span class="a">create</span><span class="a">update</span><span class="a">start</span><span class="a">stop</span><span class="a">status</span><span class="a">viewers</span><span class="a">delete</span></div></div>
+        <div class="tool w"><div class="nm">ayla_danmaku</div><div class="ds">看弹幕 / 发弹幕（≤200 字）</div>
+          <div class="acts"><span class="a">list</span><span class="a">send</span></div></div>
+      </div>
+    </div>
+
+    <div class="card">
+      <div class="card-h"><span class="t">R7 · 通知</span><span class="n">1</span></div>
+      <div class="tools">
+        <div class="tool r"><div class="nm">ayla_notifications</div><div class="ds">「打开应用看红点」：未读聚合 + 待处理清单</div>
+          <div class="acts"><span class="a">badges</span><span class="a">friend_requests</span><span class="a">group_invites</span><span class="a">join_requests</span><span class="a">leave_notices</span></div></div>
+      </div>
+    </div>
+
+    <div class="card">
+      <div class="card-h"><span class="t">R8 · 元操作</span><span class="n">3</span></div>
+      <div class="tools">
+        <div class="tool r"><div class="nm">ayla_search</div><div class="ds">全局检索：人 · 群 · 帖 · 直播 · 语音 · 桌游</div></div>
+        <div class="tool w"><div class="nm">ayla_favorites</div><div class="ds">收藏（群已不支持收藏）</div>
+          <div class="acts"><span class="a">list</span><span class="a">add</span><span class="a">remove</span><span class="a">status</span></div></div>
+        <div class="tool w"><div class="nm">ayla_boardgame</div><div class="ds">桌游房（仅房间框架，无对局引擎）</div>
+          <div class="acts"><span class="a">list</span><span class="a">create</span><span class="a">join</span><span class="a">leave</span><span class="a">members</span><span class="a">kick</span><span class="a">transfer</span><span class="a">delete</span></div></div>
+      </div>
+    </div>
+
+    <div class="card defer">
+      <div class="card-h"><span class="t">⏸ 依赖未就位 · 本期不注册</span><span class="n">4</span></div>
+      <div class="tools">
+        <div class="tool"><div class="nm">ayla_set_avatar</div><div class="ds">换头像 —— 缺「图从哪来」（上传链路）</div></div>
+        <div class="tool"><div class="nm">ayla_stickers</div><div class="ds">表情包 —— 缺工作区表情文件体系</div></div>
+        <div class="tool"><div class="nm">ayla_voice</div><div class="ds">语音房 —— 缺 LiveKit 客户端对接（出声）</div></div>
+        <div class="tool"><div class="nm">ayla_media</div><div class="ds">媒体上传/签名 —— 缺素材来源与文件访问</div></div>
+      </div>
+    </div>
+  </div>
+
+  <div class="legend">
+    <span class="lg"><span class="dot" style="background:#6d9ce8"></span>读</span>
+    <span class="lg"><span class="dot" style="background:#d9a441"></span>写（含不可逆动作）</span>
+    <span class="lg"><span class="dot" style="background:#d0453a"></span>不可逆</span>
+    <span class="lg"><span class="dot" style="background:#d9d3d6"></span>本期不注册</span>
+    <span style="margin-left:auto;color:#9b8a95;">阅读顺序：按列自上而下，R1 → R8</span>
+  </div>
+
+  <div class="notes">
+    <div class="note"><b>发窄收宽</b><br>发出的只有文字/分享/戳一戳；但收到的必须覆盖全部 10 种消息类型——收是通道的事，发才是工具的事。</div>
+    <div class="note"><b>可以而非必须</b><br>收到转发帖子只给引用，不预先把正文塞进来；看不看、回不回都由她决定，入站不做任何自动展开。</div>
+    <div class="note"><b>通知可查</b><br>好友申请/群邀请/入群申请现在只广播给应用 UI，她要能拿到：本期先做查询，推送待后端加帧。</div>
+  </div>
+</body></html>
