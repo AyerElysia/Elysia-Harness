@@ -10,8 +10,11 @@ import * as StandingPrompt from '@elysia/conscious-mind/standing-prompts'
 import * as CurrentTime from '@elysia/conscious-mind/current-time'
 import { restoreDirectSessionModel } from '@elysia/conscious-mind/src/restore-direct-session-model.ts'
 import type { Config } from './config.ts'
-import { batchContent, ROUTER_SESSION_ID, routerMessageSource, type RouterBatch } from './model.ts'
+import { batchContent, ROUTER_SESSION_ID, routerMessageSource, routerReportSource, type RouterBatch } from './model.ts'
 import type { RouterStore } from './store.ts'
+import type { DispatchStore } from './dispatch-store.ts'
+import { reportContent } from './dispatch.ts'
+import { defineSubconsciousDispatchTool } from './dispatch-tools.ts'
 import { mountGeneralCapabilities } from './general-capabilities.ts'
 
 const contextSources = new Set(['agent-instructions', 'runtime-context'])
@@ -19,6 +22,10 @@ const composed = new WeakSet<Context>()
 
 function isBatchMessage(message: UserMessage, batchId: string): boolean {
   return message.source.kind === 'elysia-subconscious-router' && message.source.batchId === batchId
+}
+
+function isReportMessage(message: UserMessage, reportId: string): boolean {
+  return message.source.kind === 'elysia-subconscious-router' && message.source.reportId === reportId
 }
 
 function isolateRouterContext(agentCtx: Context, agent: Agent, store: RouterStore): void {
@@ -47,13 +54,23 @@ function isolateRouterContext(agentCtx: Context, agent: Agent, store: RouterStor
 
 export class RouterSession {
   private handlePromise: Promise<AgentHandle> | undefined
+  private activeTrigger: string | undefined
 
-  constructor(private readonly ctx: Context, private readonly config: Required<Config>, private readonly store: RouterStore) {
+  constructor(
+    private readonly ctx: Context,
+    private readonly config: Required<Config>,
+    private readonly store: RouterStore,
+    private readonly dispatch: DispatchStore,
+  ) {
     ctx.effect(() => ctx.root.on('session/event', (session, event) => {
       if (session.id !== ROUTER_SESSION_ID || event.type !== 'user/message') return
       const batchId = event.data.source.kind === 'elysia-subconscious-router' ? event.data.source.batchId : undefined
       if (batchId !== undefined) store.markAccepted(batchId, event.seq, event.time)
     }), 'elysia-subconscious.delivery-accepted()')
+  }
+
+  currentTrigger(): string | undefined {
+    return this.activeTrigger
   }
 
   private selectModel(agent: Agent): void {
@@ -70,14 +87,11 @@ export class RouterSession {
       complete: true,
     })
     await agentCtx.plugin(CurrentTime, { timeZone: 'Asia/Shanghai' })
-    // The Web profile already owns the shared compaction service. Only an
-    // isolated host without one needs the Router-local fallback.
-    if (agentCtx.get('compaction') === undefined) {
-      await agentCtx.plugin(BasicCompactionEngine, { auto: true })
-    }
-    // Hide unrelated Host-global tools; native capabilities mount explicitly below.
+    if (agentCtx.get('compaction') === undefined) await agentCtx.plugin(BasicCompactionEngine, { auto: true })
     agentCtx.effect(() => agentCtx.tools.restrict({ allow: [] }), 'elysia-subconscious.global-tool-denial()')
     await mountGeneralCapabilities(agentCtx, this.config)
+    agentCtx.effect(() => agentCtx.tools.register(defineSubconsciousDispatchTool(this.dispatch, () => this.activeTrigger)),
+      'elysia-subconscious.dispatch-tool()')
     isolateRouterContext(agentCtx, agent, this.store)
     composed.add(agentCtx)
   }
@@ -108,7 +122,6 @@ export class RouterSession {
           this.selectModel(concurrent)
           return { agent: concurrent, dispose: async () => {} }
         }
-        // Never disguise setup, corruption, or ownership failures as a first run.
         if (!(error instanceof SessionPersistenceNotFoundError)) throw error
         return await this.ctx.agents.create({
           sessionId: ROUTER_SESSION_ID, agentOptions, setup, meta: { cwd: this.config.workspaceDir },
@@ -121,7 +134,7 @@ export class RouterSession {
     return this.handlePromise
   }
 
-  private async completedTurn(batchId: string, from: number): Promise<{ turn: number; completedAt: number } | undefined> {
+  private async completedTurn(from: number, matches: (message: UserMessage) => boolean): Promise<{ turn: number; completedAt: number } | undefined> {
     const reader = await this.ctx.sessionPersistence.open(ROUTER_SESSION_ID, 'read')
     try {
       let offset = from
@@ -131,11 +144,9 @@ export class RouterSession {
         if (events.length === 0) return undefined
         for (const event of events) {
           if (event.type === 'turn/start') received = false
-          if (event.type === 'user/message' && isBatchMessage(event.data, batchId)) received = true
+          if (event.type === 'user/message' && matches(event.data)) received = true
           if (event.type === 'turn/end') {
-            if (received && event.data.reason.kind === 'completed') {
-              return { turn: event.data.turn, completedAt: event.time }
-            }
+            if (received && event.data.reason.kind === 'completed') return { turn: event.data.turn, completedAt: event.time }
             received = false
           }
         }
@@ -150,22 +161,56 @@ export class RouterSession {
   async run(batch: RouterBatch): Promise<{ turn: number; completedAt: number }> {
     const { agent } = await this.ensure()
     await agent.whenIdle()
+    const matches = (message: UserMessage): boolean => isBatchMessage(message, batch.id)
     if (batch.state === 'presenting' || batch.state === 'presented') {
       await this.ctx.sessions.flush(agent.session)
-      const completed = await this.completedTurn(batch.id, 0)
+      const completed = await this.completedTurn(0, matches)
       if (completed !== undefined) return completed
-      // If DSH did not finish the original turn, retry the same stable batch ID.
       for (const message of agent.inbox.nextTurn) {
         if (isBatchMessage(message, batch.id)) agent.inbox.remove(message.id)
       }
     }
     const from = agent.session.seq
-    agent.followup(createUserMessage({ content: batchContent(batch), source: routerMessageSource(batch.id) }))
+    this.activeTrigger = `batch/${batch.id}`
+    try {
+      agent.followup(createUserMessage({ content: batchContent(batch), source: routerMessageSource(batch.id) }))
+      await agent.whenIdle()
+      await this.ctx.sessions.flush(agent.session)
+      const completed = await this.completedTurn(from, matches)
+      if (completed === undefined) throw new Error(`Router 批次 ${batch.id} 没有正常结束的 DSH 轮次`)
+      return completed
+    } finally {
+      this.activeTrigger = undefined
+    }
+  }
+
+  /** Relay a persisted specialist report into the same long Router identity. */
+  async runReport(reportId: string): Promise<{ turn: number; completedAt: number }> {
+    const report = this.dispatch.getReport(reportId)
+    if (report === undefined) throw new Error(`Report ${reportId} 不存在`)
+    const task = this.dispatch.getTask(report.taskId)
+    if (task === undefined) throw new Error(`Report ${reportId} 的原任务不存在`)
+    const { agent } = await this.ensure()
     await agent.whenIdle()
+    const matches = (message: UserMessage): boolean => isReportMessage(message, reportId)
     await this.ctx.sessions.flush(agent.session)
-    const completed = await this.completedTurn(batch.id, from)
-    if (completed === undefined) throw new Error(`Router 批次 ${batch.id} 没有正常结束的 DSH 轮次`)
-    return completed
+    const existing = await this.completedTurn(0, matches)
+    if (existing !== undefined) return existing
+    for (const message of agent.inbox.nextTurn) {
+      if (isReportMessage(message, reportId)) agent.inbox.remove(message.id)
+    }
+    const from = agent.session.seq
+    this.activeTrigger = `report/${reportId}`
+    try {
+      agent.followup(createUserMessage({ content: reportContent(report, task), source: routerReportSource(reportId) }))
+      await agent.whenIdle()
+      await this.ctx.sessions.flush(agent.session)
+      const completed = await this.completedTurn(from, matches)
+      if (completed === undefined) throw new Error(`Report ${reportId} 没有正常结束的 Router 轮次`)
+      return completed
+    } finally {
+      this.activeTrigger = undefined
+    }
   }
 
   async dispose(): Promise<void> {

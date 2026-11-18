@@ -8,6 +8,9 @@ import { mountAgentLoopTestDependencies, mountAgentLoopTestHarness } from '@deep
 import LocalAttachmentStore from '@deepseek-ai/dsh-attachment-local'
 import { LlmAdapter, ToolCallId, createUserMessage } from '@deepseek-ai/dsh-llm'
 import BasicCompactionEngine from '@deepseek-ai/dsh-compaction-basic'
+import SandboxBashExecutor from '@deepseek-ai/dsh-bash-sandbox'
+import LocalSandboxProvider from '@deepseek-ai/dsh-sandbox-local'
+import SandboxPolicyService from '@deepseek-ai/dsh-sandbox-policy'
 import type { GenerateOptions, LlmResolvedModelInfo, StreamChunk } from '@deepseek-ai/dsh-llm'
 import ScheduleService, { ScheduleId } from '@deepseek-ai/dsh-schedule'
 import { SessionId } from '@deepseek-ai/dsh-session'
@@ -44,14 +47,19 @@ function batchId(options: GenerateOptions): string {
 
 class RouterAdapter extends LlmAdapter {
   readonly requests: GenerateOptions[] = []
+  handler?: (options: GenerateOptions) => StreamChunk[]
   override resolveModel(provider: string, model: string): Promise<LlmResolvedModelInfo> {
     return Promise.resolve({ provider, id: model, name: model })
   }
   async * stream(options: GenerateOptions): AsyncIterable<StreamChunk> {
     this.requests.push(options)
+    if (this.handler !== undefined) {
+      yield* this.handler(options)
+      return
+    }
     yield { type: 'block-start', index: 0, blockType: 'text' }
-    yield { type: 'text-delta', index: 0, text: '已接收并阅读本批观察' }
-    yield { type: 'block-end', index: 0, block: { type: 'text', text: '已接收并阅读本批观察' } }
+    yield { type: 'text-delta', index: 0, text: '本轮自然结束' }
+    yield { type: 'block-end', index: 0, block: { type: 'text', text: '本轮自然结束' } }
     yield { type: 'finish', reason: { kind: 'stop' } }
   }
 }
@@ -64,7 +72,8 @@ async function harness(overrides: Partial<Subconscious.Config> = {}) {
   await mkdir(join(skills, 'router-fixture'), { recursive: true })
   await Promise.all([
     ['SOUL.md', 'Shared soul fixture'], ['USER.md', 'Shared user fixture'],
-    ['MEMORY.md', 'Shared memory fixture'], ['SUBCONSCIOUS-ROUTER.md', 'Read the observation and route it.'],
+    ['MEMORY.md', 'Shared memory fixture'], ['SUBCONSCIOUS-ROUTER.md', 'Observe the batch and finish naturally.'],
+    ['SUBCONSCIOUS-MEMORY.md', 'Write a real diary when needed, then submit subconscious_report.'],
   ].map(([name, text]) => writeFile(join(prompts, name!), text!)))
   await writeFile(join(skills, 'router-fixture', 'SKILL.md'), [
     '---', 'name: router-fixture', 'description: Router integration fixture skill.', '---',
@@ -77,6 +86,11 @@ async function harness(overrides: Partial<Subconscious.Config> = {}) {
     await rm(home, { recursive: true, force: true })
   })
   await mountAgentLoopTestDependencies(ctx, { workingDirectory: true })
+  // Match the real Web Host: these services already exist and may have probed
+  // their backend before the Router is composed. Router must isolate, not replace.
+  await ctx.plugin(SandboxPolicyService, { mode: 'workspace-write', workspaceRoot: home })
+  await ctx.plugin(LocalSandboxProvider, {})
+  await ctx.plugin(SandboxBashExecutor, { cwd: home })
   await ctx.plugin(LocalAttachmentStore, { dshHome: join(home, 'dsh') })
   await ctx.plugin(LocalSubprocessRuntime)
   await ctx.plugin(SkillRegistry)
@@ -116,6 +130,7 @@ async function harness(overrides: Partial<Subconscious.Config> = {}) {
   }), { surfaceOp: 'append' })
   const config = {
     baseDir: prompts, stateDir: join(home, 'state'), workspaceDir: join(home, 'router'), collectMs: 5,
+    memoryWorkspaceDir: join(home, 'memory'), memoryBackupDir: join(home, 'memory-backups'),
     skillsDir: skills, backupDir: join(home, 'backups'), provider: 'mock', model: 'router-fixture', ...overrides,
   }
   return { home, ctx, adapter, main, config }
@@ -155,6 +170,52 @@ function futureRule(offsetMs = 3_600_000): string {
   return `DTSTART:${stamp}\nRRULE:FREQ=DAILY`
 }
 
+it('merges ready batches once and applies the persisted slash-command threshold immediately', async () => {
+  const { ctx, adapter, main, config } = await harness({ triggerBatchCount: 3 })
+  let fiber = await ctx.plugin(Subconscious, config)
+  await vi.waitFor(() => expect(ctx.subconsciousRouter).toBeDefined())
+  let runtime = ctx.subconsciousRouter
+  await runtime.whenIdle()
+  const append = async (text: string, rpcId: string, count: number): Promise<void> => {
+    main.agent.session.append('user/message', createUserMessage({
+      content: [{ type: 'text', text }], source: { kind: 'user', rpcId },
+    }), { surfaceOp: 'append' })
+    await ctx.sessions.flush(main.agent.session)
+    await vi.waitFor(() => expect(runtime.health().observations).toBe(count))
+    runtime.store.formBatches(20, 65536)
+    await vi.waitFor(() => expect(runtime.health().readyBatches).toBe(count))
+  }
+  await append('等待合并的第一批', 'trigger-group-1', 1)
+  await append('等待合并的第二批', 'trigger-group-2', 2)
+  await new Promise(resolve => setTimeout(resolve, 20))
+  expect(adapter.requests).toHaveLength(0)
+  expect(runtime.executeCommand('')).toEqual({ kind: 'success', text: '当前待研判 2 批；每 3 批合并研判一次。' })
+  expect(runtime.executeCommand('status')).toEqual({ kind: 'success', text: '当前待研判 2 批；每 3 批合并研判一次。' })
+  for (const input of ['trigger 0', 'trigger -1', 'trigger 1.5', 'unknown']) {
+    expect(runtime.executeCommand(input).kind).toBe('error')
+  }
+  const changed = await ctx.commands.execute(main.agent, '/subconscious trigger 2', [], new AbortController().signal)
+  expect(JSON.stringify(changed)).toContain('已设置每 2 批合并研判一次')
+  await vi.waitFor(() => expect(adapter.requests).toHaveLength(1))
+  await runtime.whenIdle()
+  const raw = JSON.stringify(adapter.requests[0]!.messages)
+  expect(raw).toContain('等待合并的第一批')
+  expect(raw).toContain('等待合并的第二批')
+  expect(raw.match(/batch_id: batch_/g)).toHaveLength(1)
+  expect(runtime.health()).toMatchObject({ readyBatches: 0, completedBatches: 2, triggerBatchCount: 2 })
+  expect(adapter.requests).toHaveLength(1)
+
+  await fiber.dispose()
+  fiber = await ctx.plugin(Subconscious, { ...config, triggerBatchCount: 1 })
+  await vi.waitFor(() => expect(ctx.subconsciousRouter).toBeDefined())
+  runtime = ctx.subconsciousRouter
+  await runtime.whenIdle()
+  expect(runtime.store.triggerBatchCount()).toBe(2)
+  expect(adapter.requests).toHaveLength(1)
+  await fiber.dispose()
+  await main.dispose()
+}, 20000)
+
 it('feeds real main Session input through a real Router AgentLoop with scoped tools and delivery evidence', async () => {
   const { ctx, adapter, main, config } = await harness()
   let routerFiber = await ctx.plugin(Subconscious, config)
@@ -179,16 +240,17 @@ it('feeds real main Session input through a real Router AgentLoop with scoped to
   expect(JSON.stringify(request.messages)).toContain('Shared soul fixture')
   expect(JSON.stringify(request.messages)).toContain('Shared user fixture')
   expect(JSON.stringify(request.messages)).toContain('Shared memory fixture')
-  expect(JSON.stringify(request.messages)).toContain('Read the observation and route it.')
+  expect(JSON.stringify(request.messages)).toContain('Observe the batch and finish naturally.')
   expect(JSON.stringify(request.messages)).not.toContain('CONSCIOUS-MIND.md')
   expect(request.tools?.map(tool => tool.name).sort()).toEqual([
     'bash', 'edit', 'glob', 'grep', 'job_kill', 'job_list', 'job_output', 'read', 'read_image',
-    'schedule_create', 'schedule_edit', 'schedule_list', 'schedule_view', 'skill',
+    'schedule_create', 'schedule_edit', 'schedule_list', 'schedule_view', 'skill', 'subconscious_dispatch',
     'web_fetch', 'web_search', 'write',
   ])
-  let routerEvents = ctx.agents.get(ROUTER_SESSION_ID)!.session.snapshotEvents()
+  const routerEvents = ctx.agents.get(ROUTER_SESSION_ID)!.session.snapshotEvents()
   expect(routerEvents.some(event => event.type === 'request/header'
     && event.data.header.config.provider === 'mock' && event.data.header.config.model === 'router-fixture')).toBe(true)
+  expect(JSON.stringify(request.messages)).not.toContain('续读:')
 
   main.agent.session.append('user/message', createUserMessage({
     content: [{ type: 'text', text: '后续收到的新图片' }, {
@@ -203,7 +265,7 @@ it('feeds real main Session input through a real Router AgentLoop with scoped to
   expect(JSON.stringify(adapter.requests[1]!.messages)).toContain('router-image')
   expect(ctx.subconsciousRouter.health()).toMatchObject({ observations: 2, pendingObservations: 0, completedBatches: 2 })
 
-  // Simulate a stop after DSH persisted its turn, before SQLite completion was marked.
+  // Simulate a stop after DSH persisted its Decision and turn, before SQLite completion was marked.
   await routerFiber.dispose()
   const db = new DatabaseSync(join(config.stateDir, 'router.sqlite'))
   try {
@@ -228,7 +290,6 @@ it('feeds real main Session input through a real Router AgentLoop with scoped to
   expect(JSON.stringify(adapter.requests[2]!.messages)).toContain('卸载期间的离线补漏输入')
   expect(ctx.subconsciousRouter.health()).toMatchObject({ observations: 3, pendingObservations: 0, completedBatches: 3 })
   expect(adapter.requests).toHaveLength(3)
-  routerEvents = ctx.agents.get(ROUTER_SESSION_ID)!.session.snapshotEvents()
   await routerFiber.dispose()
   await main.dispose()
 }, 20000)
@@ -380,4 +441,177 @@ it('isolates Schedule ownership and delivers a real scheduled prompt to the Rout
   expect(JSON.stringify(adapter.requests.at(-1)?.messages)).toContain('真实 Schedule 投递 fixture')
   expect((await ctx.schedule.view({ id: ScheduleId(id) })).lastDelivery).toMatchObject({ targetSessionId: ROUTER_SESSION_ID })
   expect((await execute(ctx, router, 'schedule_edit', { id, action: 'delete' })).value).toEqual({ id, deleted: true })
+}, 30000)
+
+it('completes a real Router dispatch, memory write, structured report, and Router relay', async () => {
+  const { ctx, adapter, main } = await readyRouter()
+  const runtime = ctx.subconsciousRouter
+  const diary = join(runtime.config.memoryWorkspaceDir, 'diary.md')
+  const natural = (): StreamChunk[] => [
+    { type: 'block-start', index: 0, blockType: 'text' },
+    { type: 'text-delta', index: 0, text: '已阅读并自然结束' },
+    { type: 'block-end', index: 0, block: { type: 'text', text: '已阅读并自然结束' } },
+    { type: 'finish', reason: { kind: 'stop' } },
+  ]
+  let wroteDiary = false
+  let submittedReport = false
+  const dispatched = new Set<string>()
+  adapter.handler = options => {
+    const raw = JSON.stringify(options.messages)
+    if (raw.includes('[subconscious.task]')) {
+      if (!wroteDiary) {
+        wroteDiary = true
+        return call('memory-write-diary', 'write', {
+          file_path: diary,
+          content: '# 派工闭环测试日记\n\n今天收到了一段值得留下的经历，并亲自写下了这篇日记。',
+        })
+      }
+      if (submittedReport) return natural()
+      submittedReport = true
+      const taskId = Array.from(raw.matchAll(/task_id: (task_[a-f0-9-]+)/g)).at(-1)?.[1]
+      const assignmentId = Array.from(raw.matchAll(/assignment_id: (assignment_[a-f0-9-]+)/g)).at(-1)?.[1]
+      if (taskId === undefined || assignmentId === undefined) throw new Error('Missing task identity in memory request')
+      return call('memory-submit-report', 'subconscious_report', {
+        task_id: taskId,
+        assignment_id: assignmentId,
+        status: 'completed',
+        summary: '我已经把这段经历写成日记，并核对了真实文件。',
+        output_refs: [`file:${diary}`],
+      })
+    }
+    if (raw.includes('[subconscious.report]')) return natural()
+    if (raw.includes('[subconscious.batch]')) {
+      const id = batchId(options)
+      if (dispatched.has(id)) return natural()
+      dispatched.add(id)
+      const observation = Array.from(raw.matchAll(/observation\/(obs_[a-f0-9]+)/g)).at(-1)?.[1]
+      if (observation === undefined) throw new Error('Missing Observation in Router batch')
+      return call(`dispatch-${id}`, 'subconscious_dispatch', {
+        trigger_ref: `batch/${id}`,
+        kind: 'memory',
+        title: '留下今天的测试日记',
+        reason: '这段经历包含明确请求，值得由记忆专业亲自整理。',
+        instruction: '阅读随任务送达的完整材料，在记忆工作区写一篇简短日记，然后提交真实报告。',
+        source_refs: [`observation/${observation}`],
+      })
+    }
+    return natural()
+  }
+  main.agent.session.append('user/message', createUserMessage({
+    content: [{ type: 'text', text: '爱莉，请把这段真实经历留给记忆潜意识整理。' }],
+    source: { kind: 'user', rpcId: 'dispatch-full-flow' },
+  }), { surfaceOp: 'append' })
+  await vi.waitFor(() => expect(runtime.health().dispatch, JSON.stringify(runtime.health())).toMatchObject({
+    tasks: 1, activeTasks: 0, completedTasks: 1, pendingAssignments: 0, pendingReportRelays: 0,
+  }), { timeout: 15000 })
+  await runtime.whenIdle()
+  const task = runtime.dispatch.listTasks()[0]!
+  const report = runtime.dispatch.listReports()[0]!
+  const assignment = runtime.dispatch.getAssignment(task.currentAssignmentId)!
+  expect(task).toMatchObject({
+    kind: 'memory', state: 'completed', sourceRefs: report.outputRefs.length === 1 ? task.sourceRefs : [],
+    formation: { triggerRef: expect.stringMatching(/^batch\/batch_/), toolCallId: expect.any(String) },
+  })
+  expect(report).toMatchObject({
+    taskId: task.id, assignmentId: assignment.id, status: 'completed', outputRefs: [`file:${diary}`],
+  })
+  expect(assignment).toMatchObject({
+    state: 'ended', sessionSeq: expect.any(Number), acceptedAt: expect.any(Number),
+    presentedTurn: expect.any(Number), presentedStep: expect.any(Number), endedAt: expect.any(Number),
+  })
+  expect(await readFile(diary, 'utf8')).toContain('派工闭环测试日记')
+  const memory = ctx.agents.get(Subconscious.MEMORY_SESSION_ID)
+  expect(memory).toBeDefined()
+  const memoryRequest = adapter.requests.find(request => JSON.stringify(request.messages).includes('[subconscious.task]'))!
+  expect(memoryRequest.tools?.map(tool => tool.name).sort()).toEqual([
+    'edit', 'glob', 'grep', 'read', 'read_image', 'subconscious_report', 'write',
+  ])
+  expect(JSON.stringify(adapter.requests.at(-1)?.messages)).toContain('[subconscious.report]')
+  expect(JSON.stringify(adapter.requests.at(-1)?.messages)).toContain('我已经把这段经历写成日记')
+  expect(ctx.tools.get('subconscious_dispatch', memory)).toBeUndefined()
+  expect(ctx.tools.get('subconscious_report', ctx.agents.get(ROUTER_SESSION_ID))).toBeUndefined()
+  expect(ctx.tools.get('send_text', memory)).toBeUndefined()
+  expect(ctx.tools.get('send_voice', memory)).toBeUndefined()
+}, 30000)
+
+
+it('prioritizes an accepted assignment and its report over an already queued batch', async () => {
+  const { ctx, adapter, main } = await readyRouter()
+  const runtime = ctx.subconsciousRouter
+  runtime.setResting(true)
+  const append = async (text: string, rpcId: string): Promise<void> => {
+    main.agent.session.append('user/message', createUserMessage({
+      content: [{ type: 'text', text }], source: { kind: 'user', rpcId },
+    }), { surfaceOp: 'append' })
+    await ctx.sessions.flush(main.agent.session)
+  }
+  await append('第一段需要派工的真实材料', 'priority-first')
+  await vi.waitFor(() => expect(runtime.health().observations).toBe(2), { timeout: 5000 })
+  runtime.store.formBatches(20, 65536)
+  await append('持续到达的后续批次，不应饿死已派任务', 'priority-second')
+  await vi.waitFor(() => expect(runtime.health().observations).toBe(3), { timeout: 5000 })
+  runtime.store.formBatches(20, 65536)
+
+  const diary = join(runtime.config.memoryWorkspaceDir, 'diary.md')
+  const natural = (): StreamChunk[] => [
+    { type: 'block-start', index: 0, blockType: 'text' },
+    { type: 'text-delta', index: 0, text: '自然结束' },
+    { type: 'block-end', index: 0, block: { type: 'text', text: '自然结束' } },
+    { type: 'finish', reason: { kind: 'stop' } },
+  ]
+  let wrote = false
+  let reported = false
+  const dispatched = new Set<string>()
+  adapter.handler = options => {
+    const raw = JSON.stringify(options.messages)
+    if (raw.includes('[subconscious.task]')) {
+      if (!wrote) {
+        wrote = true
+        return call('priority-write', 'write', { file_path: diary, content: '# 优先级验证日记\n' })
+      }
+      if (reported) return natural()
+      reported = true
+      const taskId = /task_id: (task_[a-f0-9-]+)/.exec(raw)?.[1]
+      const assignmentId = /assignment_id: (assignment_[a-f0-9-]+)/.exec(raw)?.[1]
+      if (!taskId || !assignmentId) throw new Error('Missing assignment identity')
+      return call('priority-report', 'subconscious_report', {
+        task_id: taskId, assignment_id: assignmentId, status: 'completed',
+        summary: '已真实写入优先级验证日记。', output_refs: [`file:${diary}`],
+      })
+    }
+    if (raw.includes('[subconscious.report]')) return natural()
+    const currentBatch = raw.includes('[subconscious.batch]') ? raw.slice(raw.lastIndexOf('[subconscious.batch]')) : ''
+    if (currentBatch.includes('第一段需要派工的真实材料')) {
+      const id = batchId(options)
+      if (dispatched.has(id)) return natural()
+      dispatched.add(id)
+      const observation = Array.from(currentBatch.matchAll(/observation\/(obs_[a-f0-9]+)/g)).at(-1)?.[1]
+      if (!observation) throw new Error('Missing source observation')
+      return call('priority-dispatch', 'subconscious_dispatch', {
+        trigger_ref: `batch/${id}`, kind: 'memory', title: '验证派工优先级',
+        reason: '第一段材料需要真实记忆成果。', instruction: '写日记并报告。',
+        source_refs: [`observation/${observation}`],
+      })
+    }
+    return natural()
+  }
+  runtime.setResting(false)
+  await vi.waitFor(() => expect(runtime.health().dispatch, JSON.stringify(runtime.health())).toMatchObject({
+    completedTasks: 1, pendingAssignments: 0, pendingReportRelays: 0,
+  }), { timeout: 15000 })
+  await runtime.whenIdle()
+  const kinds = adapter.requests.map(request => {
+    const relay = [...request.messages].reverse().find(message =>
+      message.source.kind === 'elysia-subconscious-router' || message.source.kind === 'elysia-subconscious-task')
+    const raw = JSON.stringify(relay ?? request.messages.at(-1))
+    if (raw.includes('[subconscious.task]')) return 'task'
+    if (raw.includes('[subconscious.report]')) return 'report'
+    if (raw.includes('持续到达的后续批次，不应饿死已派任务')) return 'second-batch'
+    if (raw.includes('第一段需要派工的真实材料')) return 'first-batch'
+    return 'other'
+  })
+  expect(kinds.indexOf('task')).toBeGreaterThan(kinds.indexOf('first-batch'))
+  expect(kinds.indexOf('task')).toBeLessThan(kinds.indexOf('second-batch'))
+  expect(kinds.indexOf('report')).toBeLessThan(kinds.indexOf('second-batch'))
+  await ctx.agents.get(ROUTER_SESSION_ID)?.whenIdle()
 }, 30000)

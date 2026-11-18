@@ -37,7 +37,7 @@ async function canonical(path: string): Promise<string> {
 }
 
 /** The shared file adapter backs up prompts; Router itself may only read them. */
-async function guardStandingPromptWrites(ctx: Context, config: Required<Config>): Promise<void> {
+export async function guardStandingPromptWrites(ctx: Context, config: { baseDir: string; files: string[]; workspaceDir: string }): Promise<void> {
   const promptPaths = new Set<string>()
   for (const file of config.files) {
     const path = resolve(config.baseDir, file)
@@ -146,6 +146,7 @@ export async function mountGeneralCapabilities(ctx: Context, config: Required<Co
   if (config.shellTimeoutMs > config.shellMaxTimeoutMs) throw new Error('shellTimeoutMs 不能大于 shellMaxTimeoutMs')
   await mkdir(config.workspaceDir, { recursive: true })
   await mkdir(config.skillsDir, { recursive: true })
+  await mkdir(config.memoryWorkspaceDir, { recursive: true })
   await guardStandingPromptWrites(ctx, config)
   await ctx.plugin(FileCapabilities, {
     baseDir: config.baseDir,
@@ -153,7 +154,7 @@ export async function mountGeneralCapabilities(ctx: Context, config: Required<Co
     required: config.required,
     workspaceDir: config.workspaceDir,
     backupDir: config.backupDir,
-    readOnlyDirs: [config.skillsDir],
+    readOnlyDirs: [config.skillsDir, config.memoryWorkspaceDir, ...config.readOnlyDirs],
   })
   await ctx.plugin(WebCapabilities)
   await ctx.plugin(SkillCapabilities, { rootDir: config.skillsDir })

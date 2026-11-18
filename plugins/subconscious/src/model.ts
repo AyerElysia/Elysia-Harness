@@ -5,7 +5,7 @@ import type { SessionEvent, SessionId } from '@deepseek-ai/dsh-session'
 
 declare module '@deepseek-ai/dsh-llm' {
   interface MessageSourceMap {
-    'elysia-subconscious-router': { kind: 'elysia-subconscious-router'; batchId?: string } & ContextFormed
+    'elysia-subconscious-router': { kind: 'elysia-subconscious-router'; batchId?: string; reportId?: string } & ContextFormed
   }
 }
 
@@ -15,6 +15,7 @@ export const ROUTER_SESSION_CWD = '/home/ayerelysia/Elysia/Data/workspace/subcon
 export const MAIN_SOURCE_KIND = 'conscious_session'
 export const MAIN_SOURCE_INSTANCE = 'elysia-conscious-mind'
 export const routerMessageSource = (batchId: string) => ({ kind: 'elysia-subconscious-router', form: 'relay', batchId }) as const
+export const routerReportSource = (reportId: string) => ({ kind: 'elysia-subconscious-router', form: 'relay', reportId }) as const
 
 const frameworkSources = new Set([
   'agent-instructions',
@@ -75,7 +76,10 @@ export interface Observation {
 }
 
 export interface RouterBatch {
+  /** Stable trigger identity: the first member Batch ID. */
   id: string
+  /** Every ordinary Batch merged into this single Router turn, in delivery order. */
+  batchIds: string[]
   state: 'ready' | 'presenting' | 'presented' | 'decided' | 'deferred'
   previousBatchId?: string
   successorBatchId?: string
@@ -204,7 +208,7 @@ export function observationFromMainEvent(event: MainSessionEvent): ObservationDr
 export function batchContent(batch: RouterBatch): ContentBlock[] {
   const content: ContentBlock[] = [{
     type: 'text',
-    text: `[subconscious.batch]\nbatch_id: ${batch.id}\nobservations: ${batch.observations.length}`,
+    text: `[subconscious.batch]\nbatch_id: ${batch.id}\nbatch_ids: ${batch.batchIds.join(', ')}\nobservations: ${batch.observations.length}`,
   }]
   for (const observation of batch.observations) {
     const complete = observation.projectionComplete !== false

@@ -72,7 +72,9 @@ session 是运行边界，不是主体边界；潜意识的独立 Router Session
 | `plugins/kook-bot` | 本仓库 | KOOK Gateway、图文附件入站、文字与语音 sender | 不持有 session |
 | `plugins/feishu-app` | 本仓库 | 飞书长连接、`feishu` sender | 不持有 session |
 | `plugins/ayla-app` | 本仓库 | Ayla WS 通道（插件主动拨 Ayla）、`ayla` sender、standalone 备用形态 | 不持有主意识 session；不 import 任何 `@elysia/*` |
-| `plugins/subconscious` | 本仓库 | 持久采集主意识的输入、可见输出与工具事件，由宿主分批推送至长期 Router Session | 不派工、不写专业记忆、不向渠道外发 |
+| `plugins/subconscious` | 本仓库 | 持久采集主意识表界活动，分批送达 Router，执行并回传已授权的记忆任务 | 渠道表达由主意识负责 |
+| `plugins/session-communication` | 本仓库 | 在 Web 上为已登记的长期 Session 提供内部消息和有界历史查询 | 使用独立通讯记录与交付凭据 |
+| `plugins/session-compaction` | 本仓库 | 在 Host 层为所有现存与未来 Agent Session 补齐原生 Compact 和 `/compact` | 不替换已有策略；主意识继续保持仅人工 Compact |
 | 人物目录插件 | 待建 | 跨平台身份图谱 | 不替模型判断关系 |
 | `dsh/packages/schedule` | dsh | 定时规则、持久化、唤醒 | 不认识外部平台 |
 | `dsh/packages/compaction` | dsh | 上下文压缩 | — |
@@ -105,7 +107,7 @@ session 是运行边界，不是主体边界；潜意识的独立 Router Session
 | 定时接入 | proactive-system/plan-tools、plan-host | ✅ 代码接入与运行重载验证通过 | 原生提醒回到固定主意识；见 6.4 |
 | UI 可见 | 主 session 元数据 | ✅ 已提供 cwd | 持久化列表依赖此字段；真实重启恢复仍需验收 |
 | 潜意识 | `plugins/subconscious` | ✅ Router 已接入 | 主意识表界事件观察、SQLite、分批投递、长期 Router 会话与通用工具，见 6.5 |
-| 压缩 | `dsh/packages/compaction` | ✅ | — |
+| 压缩 | `plugins/session-compaction` + DSH 原生 Compact | ✅ | Web/TUI Host 统一装配；除主意识仅人工外，其余 Session 自动压缩，所有 Session 提供 `/compact` |
 
 ## 6. 实现说明与未完项
 
@@ -190,7 +192,7 @@ profile 停用原先直接加载的 schedule 行，由 @elysia/proactive-system/
 
 计划不是渠道消息，不隐式选择最近活跃会话作为收件人。她可以在计划原文里留下自己需要的上下文与明确目标，提醒到达后再通过既有工具选择是否发送。一次提醒入箱只表示调度交付，不表示外部消息送达或计划执行完成。使用、Schema、恢复与验收见 [第一版简单计划](../plugins/proactive-system/PLAN-V1.zh.md)。
 
-### 6.5 潜意识 Router（已实现基础闭环）
+### 6.5 潜意识 Router 与记忆派工
 
 潜意识插件监听固定主意识 Session 的耐久 `session/event`，采集 `user/message`、`assistant/message`、`tool/call` 和 `tool/result`。文字、图片和文件内容块保留原样；可见输出与隐藏 reasoning、provider replayState 和框架上下文分开处理。Observation 以来源身份稳定去重，并使用 SessionPersistence 和持久游标补读漏收的事件。
 
@@ -198,7 +200,9 @@ profile 停用原先直接加载的 schedule 行，由 @elysia/proactive-system/
 
 Router 在自己的 Agent 作用域挂载文件、图像、网络、Skills、Shell、后台 Job 和 Schedule 共 17 个 DSH 原生通用工具。文件写入、Shell 沙箱、后台任务数量与寿命、Schedule 归属均由宿主限制；Router 没有 `send_text` 或 `send_voice`。真实 Web Search 的上游连接超时仍未验收通过。
 
-专业派工、专业记忆写入、主动机会和对外表达属于后续工作。接收契约与历史最小链路分别见 [INTAKE](../plugins/subconscious/INTAKE.zh.md) 和 [Router 最小实现与验收记录](../plugins/subconscious/ROUTER-MVP.zh.md)；其中旧领域工具描述不再代表当前实现。
+最小派工链路已在 Spark Web 验收。Router 针对获准的观察创建持久任务，由长期记忆 Session 写日记或笔记并提交 Report，宿主保存结果并回传 Router。接收契约与实测分别见 [INTAKE](../plugins/subconscious/INTAKE.zh.md) 和 [派工与验收](../plugins/subconscious/DISPATCH.zh.md)。主动机会与其他专业类型留待后续设计。
+
+固定主意识、Router 和记忆 Session 可以直接发送内部消息及查询获准历史。通讯和任务派发各自持久保存交付状态。[Session 通讯](../plugins/session-communication/README.md)
 
 ### 6.6 其余待处理项
 
@@ -218,6 +222,8 @@ Router 在自己的 Agent 作用域挂载文件、图像、网络、Skills、She
 - `compaction-image-offload`：图片外置
 - `command-compact`：`/compact` 命令
 - `token-meter`：`contextPressure` 投影
+
+`@elysia/session-compaction` 在 Web/TUI Host 层监听 `agent/created` 并枚举启动时已存在的 Agent。缺少 Compact 的 Session 获得 `BasicCompactionEngine({ auto: true })`，缺少命令的 Session 获得原生 `/compact`；已有服务与命令保持不变。因此记忆潜意识、爱莉独立 preset、Ayla、直播及后续新建 Session 都有自动 Compact，主意识既有 `auto: false` 不被覆盖。
 
 **不要自己实现压缩。** 但要注意：压缩产生摘要时必须保留原文可读路径（session log 不删除），否则等于篡改历史。
 

@@ -1,7 +1,7 @@
 {
   "name": "@elysia/subconscious",
   "description": "Elysia's durable surface observer and long subconscious Router session",
-  "version": "0.2.0",
+  "version": "0.3.0",
   "private": true,
   "type": "module",
   "main": "./src/index.ts",
@@ -24,7 +24,8 @@
     "REQUIREMENTS.zh.md",
     "ROUTER-MVP.zh.md",
     "INTAKE.zh.md",
-    "TOOLS.zh.md"
+    "TOOLS.zh.md",
+    "DISPATCH.zh.md"
   ],
   "scripts": {
     "test": "vitest run"
@@ -36,6 +37,7 @@
     "@deepseek-ai/dsh-agent-default-model": "workspace:*",
     "@deepseek-ai/dsh-brand": "workspace:*",
     "@deepseek-ai/dsh-compaction-basic": "workspace:*",
+    "@deepseek-ai/dsh-commands": "workspace:*",
     "@deepseek-ai/dsh-bash-sandbox": "workspace:*",
     "@deepseek-ai/dsh-jobs": "workspace:*",
     "@deepseek-ai/dsh-jobs-local": "workspace:*",
@@ -67,6 +69,7 @@
     "@deepseek-ai/dsh-attachment-local": "workspace:*",
     "@deepseek-ai/dsh-brand": "workspace:*",
     "@deepseek-ai/dsh-compaction-basic": "workspace:*",
+    "@deepseek-ai/dsh-commands": "workspace:*",
     "@deepseek-ai/dsh-bash-sandbox": "workspace:*",
     "@deepseek-ai/dsh-jobs": "workspace:*",
     "@deepseek-ai/dsh-jobs-local": "workspace:*",

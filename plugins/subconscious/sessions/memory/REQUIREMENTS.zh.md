@@ -1,6 +1,6 @@
 # 记忆潜意识 session 需求
 
-状态：**固定会话、提示词与基础文件工具已在 Spark Web 装配。中枢自动派工与记忆整理闭环待接入。**
+状态：**固定会话、提示词与基础文件工具已在 Spark Web 装配。最小记忆派工与报告回传已验收，持续整理方案仍待设计。** [派工验收](../../DISPATCH.zh.md#20-实施与真实验收记录2026-11-18)
 
 `memory` 是潜意识宿主下的第一个 session，用来验证多潜意识架构，而不是把所有潜意识任务换一个名字继续混在一起。
 
@@ -45,6 +45,8 @@ Spark 已创建上述固定会话及工作目录，目录下有 `diary/` 与 `no
 ### 4.1 自己的长期 session
 
 她自己以往在记忆 session 中产生的活动和工具结果，由 DSH 历史与 Compact 按现有机制提供，不复制到另一份私有历史。
+
+当前由 Host 层的 `@elysia/session-compaction` 统一补齐原生 Compact：记忆 session 使用 `BasicCompactionEngine({ auto: true })`，在上下文压力和模型上下文溢出时自动压缩，同时提供人工 `/compact`。这层装配不放在记忆 preset 内，因此同样覆盖其他 preset、固定渠道 session 与未来新建的 Agent；已有 Compact 策略不会被替换，主意识仍保持仅人工 `/compact`。
 
 ### 4.2 Router 派发的主意识活动有界投影
 

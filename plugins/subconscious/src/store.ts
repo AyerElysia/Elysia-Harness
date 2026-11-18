@@ -21,11 +21,20 @@ export interface RouterHealth {
   readyBatches: number
   deferredBatches: number
   completedBatches: number
+  triggerBatchCount: number
   sourceCursor?: number
   sourceCursors: Record<string, number>
   lastDecisionAt?: string
   lastError?: string
 }
+
+interface IntakeTurn {
+  internal: boolean
+  external: boolean
+}
+
+const communicationTools = new Set(['session_list', 'session_read', 'session_send'])
+const communicationSource = 'elysia-session-communication'
 
 interface ObservationRow {
   id: string
@@ -56,6 +65,7 @@ interface ObservationRow {
 interface BatchRow {
   id: string
   state: RouterBatch['state']
+  trigger_group_id: string | null
   previous_batch_id: string | null
   successor_batch_id: string | null
   attempt_count: number
@@ -156,7 +166,7 @@ function projectContent(item: Observation, maxBytes: number): { content: Content
 export class RouterStore {
   private readonly db: DatabaseSync
 
-  constructor(readonly stateDir: string) {
+  constructor(readonly stateDir: string, defaultTriggerBatchCount = 1) {
     mkdirSync(stateDir, { recursive: true })
     this.db = new DatabaseSync(join(stateDir, 'router.sqlite'))
     this.db.exec('PRAGMA journal_mode = WAL; PRAGMA foreign_keys = ON;')
@@ -243,6 +253,7 @@ export class RouterStore {
       CREATE INDEX IF NOT EXISTS batches_work ON batches(state, available_at, created_at);
     `)
     this.migrate()
+    if (this.state('trigger_batch_count') === undefined) this.setTriggerBatchCount(defaultTriggerBatchCount)
   }
 
   private migrate(): void {
@@ -251,6 +262,7 @@ export class RouterStore {
     const additions: [string, string][] = [
       ['session_seq', 'INTEGER'], ['accepted_at', 'INTEGER'], ['presented_turn', 'INTEGER'],
       ['presented_step', 'INTEGER'], ['presented_at', 'INTEGER'], ['completed_turn', 'INTEGER'], ['completed_at', 'INTEGER'],
+      ['trigger_group_id', 'TEXT'],
     ]
     this.transaction(() => {
       for (const [name, type] of additions) {
@@ -317,6 +329,16 @@ export class RouterStore {
     this.db.prepare('INSERT INTO runtime_state(key, value) VALUES (?, ?) ON CONFLICT(key) DO UPDATE SET value = excluded.value').run(key, value)
   }
 
+  triggerBatchCount(): number {
+    const value = Number(this.state('trigger_batch_count') ?? 1)
+    return Number.isSafeInteger(value) && value > 0 ? value : 1
+  }
+
+  setTriggerBatchCount(count: number): void {
+    if (!Number.isSafeInteger(count) || count < 1) throw new RouteError('INVALID_TRIGGER_BATCH_COUNT', '触发批次数必须是正整数')
+    this.transaction(() => this.setState('trigger_batch_count', String(count)))
+  }
+
   private cursorKey(kind: string, instance: string): string {
     return `source_cursor:${kind}:${instance}`
   }
@@ -332,7 +354,7 @@ export class RouterStore {
     })
   }
 
-  private insertObservation(draft: ObservationDraft): boolean {
+  private insertObservation(draft: ObservationDraft, reviewState: ReviewState = 'pending'): boolean {
     if (!draft.source.kind || !draft.source.instance || !draft.source.eventId) {
       throw new RouteError('INVALID_OBSERVATION', 'Observation 缺少稳定来源身份')
     }
@@ -351,10 +373,10 @@ export class RouterStore {
       id, source_kind, source_instance, source_event_id, ingest_seq, kind, event_time, recorded_at,
       content_hash, payload, content, thread_refs, correlation_refs, visibility_ref, review_state,
       session_id, event_seq, actor, turn, step, call_id
-    ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 'pending', ?, ?, ?, ?, ?, ?)`)
+    ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`)
       .run(id, draft.source.kind, draft.source.instance, draft.source.eventId, ingestSeq, draft.kind,
         draft.occurredAt, recordedAt, hash, JSON.stringify(draft.payload), JSON.stringify(draft.content),
-        JSON.stringify(draft.threadRefs), JSON.stringify(draft.correlationRefs ?? []), draft.visibilityRef,
+        JSON.stringify(draft.threadRefs), JSON.stringify(draft.correlationRefs ?? []), draft.visibilityRef, reviewState,
         draft.consciousSessionId ?? null, Number.isSafeInteger(Number(draft.source.eventId)) ? Number(draft.source.eventId) : null,
         draft.actor ?? null, draft.turn ?? null, draft.step ?? null, draft.callId ?? null)
     const thread = this.db.prepare('INSERT OR IGNORE INTO observation_threads(observation_id, thread) VALUES (?, ?)')
@@ -377,6 +399,16 @@ export class RouterStore {
     return this.transaction(() => {
       const cursor = this.sourceCursor()
       if (cursor !== undefined && event.seq <= cursor) return false
+      // Record routing provenance with the cursor so a restart cannot turn an
+      // internal message's later output into a new external Router wake.
+      if (event.type === 'turn/start') {
+        this.setState('intake_current_turn', String(event.data.turn))
+        this.setState(`intake_turn:${event.data.turn}`, JSON.stringify({ internal: false, external: false }))
+      }
+      const current = this.state('intake_current_turn')
+      let turn = event.type === 'assistant/message' || event.type === 'tool/call'
+        ? event.data.turn
+        : current === undefined ? undefined : Number(current)
       let draft = observationFromMainEvent(event)
       if (draft?.kind === 'tool_result' && draft.callId !== undefined) {
         const call = this.db.prepare(`SELECT id, turn, step, thread_refs FROM surface_observations
@@ -391,7 +423,30 @@ export class RouterStore {
           }
         }
       }
-      if (draft !== undefined) this.insertObservation(draft)
+      if (draft?.turn !== undefined) turn = draft.turn
+      const key = turn === undefined ? undefined : `intake_turn:${turn}`
+      const storedOrigin = key === undefined ? undefined : this.state(key)
+      let origin: IntakeTurn = storedOrigin === undefined
+        ? { internal: false, external: false }
+        : parseJson<IntakeTurn>(storedOrigin)
+      const internalInput = event.type === 'user/message' && String(event.data.source.kind) === communicationSource
+      if (event.type === 'user/message' && draft !== undefined && key !== undefined) {
+        origin = {
+          internal: origin.internal || internalInput,
+          external: origin.external || !internalInput,
+        }
+        this.setState(key, JSON.stringify(origin))
+        draft = { ...draft, ...turn === undefined ? {} : { turn } }
+      }
+      const internalTurn = origin.internal && !origin.external
+      const communicationCall = event.type === 'tool/call' && communicationTools.has(event.data.name)
+      const internalCallResult = draft?.kind === 'tool_result' && draft.callId !== undefined
+        && this.state(`intake_internal_call:${draft.callId}`) === 'true'
+      const reviewed = internalInput || internalTurn || communicationCall || internalCallResult
+      if (reviewed && event.type === 'tool/call') {
+        this.setState(`intake_internal_call:${event.data.callId}`, 'true')
+      }
+      if (draft !== undefined) this.insertObservation(draft, reviewed ? 'reviewed' : 'pending')
       this.setState(this.cursorKey(MAIN_SOURCE_KIND, MAIN_SOURCE_INSTANCE), String(event.seq))
       return true
     })
@@ -452,14 +507,9 @@ export class RouterStore {
     return rows.map(observation)
   }
 
-  getBatch(id: string): RouterBatch | undefined {
-    const row = this.batchRow(id)
-    if (row === undefined) return undefined
-    const observations = (this.db.prepare(`SELECT o.*, bi.projection, bi.complete AS projection_complete
-      FROM surface_observations o JOIN batch_items bi ON bi.observation_id = o.id
-      WHERE bi.batch_id = ? ORDER BY bi.position`).all(id) as unknown as ObservationRow[]).map(observation)
+  private fromRow(row: BatchRow, observations: Observation[], id = row.id, batchIds = [row.id]): RouterBatch {
     return {
-      id: row.id, state: row.state,
+      id, batchIds, state: row.state,
       ...row.previous_batch_id === null ? {} : { previousBatchId: row.previous_batch_id },
       ...row.successor_batch_id === null ? {} : { successorBatchId: row.successor_batch_id },
       attemptCount: row.attempt_count, availableAt: row.available_at, createdAt: row.created_at,
@@ -474,12 +524,47 @@ export class RouterStore {
     }
   }
 
-  /** Return the next serial work item, materializing one due defer continuation. */
+  getBatch(id: string): RouterBatch | undefined {
+    const row = this.batchRow(id)
+    if (row === undefined) return undefined
+    const observations = (this.db.prepare(`SELECT o.*, bi.projection, bi.complete AS projection_complete
+      FROM surface_observations o JOIN batch_items bi ON bi.observation_id = o.id
+      WHERE bi.batch_id = ? ORDER BY bi.position`).all(id) as unknown as ObservationRow[]).map(observation)
+    return this.fromRow(row, observations)
+  }
+
+  private getBatchGroup(id: string): RouterBatch | undefined {
+    const rows = this.db.prepare(`SELECT * FROM batches WHERE trigger_group_id = ? OR id = ?
+      ORDER BY created_at, rowid`).all(id, id) as unknown as BatchRow[]
+    const first = rows.find(row => row.id === id)
+    if (first === undefined) return undefined
+    const observations = (this.db.prepare(`SELECT o.*, bi.projection, bi.complete AS projection_complete
+      FROM surface_observations o JOIN batch_items bi ON bi.observation_id = o.id
+      JOIN batches b ON b.id = bi.batch_id
+      WHERE b.trigger_group_id = ? OR b.id = ?
+      ORDER BY b.created_at, b.rowid, bi.position`).all(id, id) as unknown as ObservationRow[]).map(observation)
+    return this.fromRow(first, observations, id, rows.map(row => row.id))
+  }
+
+  /** Form a stable N-Batch trigger once, or resume its exact members after restart. */
   nextBatch(now = Date.now()): RouterBatch | undefined {
-    const ready = this.db.prepare(`SELECT id FROM batches
-      WHERE state IN ('ready', 'presenting', 'presented') AND completed_turn IS NULL
-      ORDER BY created_at LIMIT 1`).get() as { id: string } | undefined
-    if (ready !== undefined) return this.getBatch(ready.id)
+    const active = this.db.prepare(`SELECT trigger_group_id AS id FROM batches
+      WHERE trigger_group_id IS NOT NULL AND state IN ('ready', 'presenting', 'presented') AND completed_turn IS NULL
+      GROUP BY trigger_group_id ORDER BY MIN(created_at) LIMIT 1`).get() as { id: string } | undefined
+    if (active !== undefined) return this.getBatchGroup(active.id)
+
+    const grouped = this.transaction(() => {
+      const rows = this.db.prepare(`SELECT id FROM batches
+        WHERE trigger_group_id IS NULL AND state IN ('ready', 'presenting', 'presented') AND completed_turn IS NULL
+        ORDER BY created_at, rowid LIMIT ?`).all(this.triggerBatchCount()) as { id: string }[]
+      if (rows.length < this.triggerBatchCount()) return undefined
+      const id = rows[0]!.id
+      const mark = this.db.prepare('UPDATE batches SET trigger_group_id = ? WHERE id = ? AND trigger_group_id IS NULL')
+      for (const row of rows) mark.run(id, row.id)
+      return this.getBatchGroup(id)
+    })
+    if (grouped !== undefined) return grouped
+
     const due = this.db.prepare(`SELECT id FROM batches
       WHERE state = 'deferred' AND successor_batch_id IS NULL AND available_at <= ?
       ORDER BY available_at LIMIT 1`).get(now) as { id: string } | undefined
@@ -488,8 +573,8 @@ export class RouterStore {
         const previous = this.batchRow(due.id)
         if (previous === undefined || previous.successor_batch_id !== null) return previous?.successor_batch_id ?? undefined
         const id = `batch_${randomUUID()}`
-        this.db.prepare(`INSERT INTO batches(id, state, previous_batch_id, attempt_count, available_at, created_at)
-          VALUES (?, 'ready', ?, 0, ?, ?)`).run(id, due.id, now, now)
+        this.db.prepare(`INSERT INTO batches(id, state, previous_batch_id, attempt_count, available_at, created_at, trigger_group_id)
+          VALUES (?, 'ready', ?, 0, ?, ?, ?)`).run(id, due.id, now, now, id)
         this.db.prepare(`INSERT INTO batch_items(batch_id, observation_id, position, projection, complete)
           SELECT ?, observation_id, position, projection, complete FROM batch_items WHERE batch_id = ? ORDER BY position`).run(id, due.id)
         this.db.prepare(`UPDATE surface_observations SET review_state = 'in_batch'
@@ -497,7 +582,7 @@ export class RouterStore {
         this.db.prepare('UPDATE batches SET successor_batch_id = ? WHERE id = ?').run(id, due.id)
         return id
       })
-      if (successor !== undefined) return this.getBatch(successor)
+      if (successor !== undefined) return this.getBatchGroup(successor)
     }
     return undefined
   }
@@ -510,34 +595,40 @@ export class RouterStore {
 
   markPresenting(id: string): void {
     this.db.prepare(`UPDATE batches SET state = 'presenting', attempt_count = attempt_count + 1
-      WHERE id = ? AND state IN ('ready', 'presenting', 'presented')`).run(id)
+      WHERE (trigger_group_id = ? OR id = ?) AND state IN ('ready', 'presenting', 'presented')`).run(id, id)
   }
 
   markAccepted(id: string, sessionSeq: number, acceptedAt = Date.now()): void {
-    this.db.prepare(`UPDATE batches SET session_seq = COALESCE(session_seq, ?), accepted_at = COALESCE(accepted_at, ?) WHERE id = ?`)
-      .run(sessionSeq, acceptedAt, id)
+    this.db.prepare(`UPDATE batches SET session_seq = COALESCE(session_seq, ?), accepted_at = COALESCE(accepted_at, ?)
+      WHERE trigger_group_id = ? OR id = ?`).run(sessionSeq, acceptedAt, id, id)
   }
 
   markPresented(id: string, turn?: number, step?: number, presentedAt = Date.now()): void {
     this.db.prepare(`UPDATE batches SET state = 'presented', presented_turn = COALESCE(?, presented_turn),
       presented_step = COALESCE(?, presented_step), presented_at = COALESCE(presented_at, ?)
-      WHERE id = ? AND state IN ('presenting', 'presented')`).run(turn ?? null, step ?? null, presentedAt, id)
+      WHERE (trigger_group_id = ? OR id = ?) AND state IN ('presenting', 'presented')`)
+      .run(turn ?? null, step ?? null, presentedAt, id, id)
   }
 
   markCompleted(id: string, turn: number, completedAt: number): void {
     this.transaction(() => {
-      this.db.prepare('UPDATE batches SET completed_turn = ?, completed_at = ? WHERE id = ?').run(turn, completedAt, id)
-      // Legacy defer decisions still govern batches created before route tools were removed.
-      const decision = this.db.prepare('SELECT action FROM decisions WHERE batch_id = ?').get(id) as { action: 'ignore' | 'defer' } | undefined
-      if (decision?.action === 'defer') {
-        this.db.prepare(`UPDATE batches SET state = 'deferred' WHERE id = ?`).run(id)
-        this.db.prepare(`UPDATE surface_observations SET review_state = 'deferred'
-          WHERE id IN (SELECT observation_id FROM batch_items WHERE batch_id = ?)`).run(id)
-      } else {
-        // A normal DSH turn is sufficient. No model-generated route receipt is required.
-        this.db.prepare(`UPDATE batches SET state = 'decided' WHERE id = ?`).run(id)
-        this.db.prepare(`UPDATE surface_observations SET review_state = 'reviewed'
-          WHERE id IN (SELECT observation_id FROM batch_items WHERE batch_id = ?)`).run(id)
+      const rows = this.db.prepare(`SELECT id FROM batches WHERE trigger_group_id = ? OR id = ?
+        ORDER BY created_at, rowid`).all(id, id) as { id: string }[]
+      for (const row of rows) {
+        const batchId = row.id
+        this.db.prepare('UPDATE batches SET completed_turn = ?, completed_at = ? WHERE id = ?').run(turn, completedAt, batchId)
+        // Legacy defer decisions still govern batches created before route tools were removed.
+        const decision = this.db.prepare('SELECT action FROM decisions WHERE batch_id = ?').get(batchId) as { action: 'ignore' | 'defer' } | undefined
+        if (decision?.action === 'defer') {
+          this.db.prepare(`UPDATE batches SET state = 'deferred' WHERE id = ?`).run(batchId)
+          this.db.prepare(`UPDATE surface_observations SET review_state = 'deferred'
+            WHERE id IN (SELECT observation_id FROM batch_items WHERE batch_id = ?)`).run(batchId)
+        } else {
+          // A normal DSH turn is sufficient. No model-generated route receipt is required.
+          this.db.prepare(`UPDATE batches SET state = 'decided' WHERE id = ?`).run(batchId)
+          this.db.prepare(`UPDATE surface_observations SET review_state = 'reviewed'
+            WHERE id IN (SELECT observation_id FROM batch_items WHERE batch_id = ?)`).run(batchId)
+        }
       }
     })
   }
@@ -562,6 +653,7 @@ export class RouterStore {
       readyBatches: count(`SELECT COUNT(*) AS count FROM batches WHERE state IN ('ready', 'presenting', 'presented')`),
       deferredBatches: count(`SELECT COUNT(*) AS count FROM batches WHERE state = 'deferred'`),
       completedBatches: count('SELECT COUNT(*) AS count FROM batches WHERE completed_turn IS NOT NULL'),
+      triggerBatchCount: this.triggerBatchCount(),
       ...cursor === undefined ? {} : { sourceCursor: cursor },
       sourceCursors: Object.fromEntries(cursors.map(row => [row.key.slice('source_cursor:'.length), Number(row.value)])),
       ...last.time === null ? {} : { lastDecisionAt: new Date(last.time).toISOString() },

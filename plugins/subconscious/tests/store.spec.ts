@@ -104,6 +104,128 @@ describe('durable Router store', () => {
     } finally { store.close() }
   })
 
+  it('retains internal communication turns without creating another Router batch after restart', () => {
+    const dir = join(home, 'internal-turn-restart')
+    let store = new RouterStore(dir)
+    store.recordEvent(event(0, 'turn/start', { turn: 8 }))
+    store.recordEvent(input(1, '内部消息材料', { kind: 'elysia-session-communication', messageId: 'msg-one' }))
+    store.close()
+    store = new RouterStore(dir)
+    try {
+      store.recordEvent(event(2, 'assistant/message', {
+        turn: 8, step: 1, message: {
+          id: 'internal-answer', source: { provider: 'mock', model: 'fixture' },
+          content: [{ type: 'text', text: '内部回复' }],
+        },
+      }))
+      store.recordEvent(event(3, 'tool/call', {
+        turn: 8, step: 1, callId: 'internal-file-call', name: 'read', arguments: '{"file_path":"note.md"}',
+      }))
+      store.recordEvent(event(4, 'tool/result', {
+        message: { toolCallId: 'internal-file-call', content: [{ type: 'text', text: '原有笔记' }] },
+      }))
+      store.recordEvent(event(5, 'turn/end', { turn: 8, reason: { kind: 'completed' } }))
+      expect(store.listObservations()).toHaveLength(4)
+      expect(store.listObservations().every(item => item.reviewState === 'reviewed')).toBe(true)
+      expect(store.formBatches(20, 65536)).toBe(0)
+      expect(store.sourceCursor()).toBe(5)
+
+      store.recordEvent(event(6, 'turn/start', { turn: 9 }))
+      store.recordEvent(input(7, '新的 KOOK 输入', { kind: 'user', elysiaIngress: 'platform' }))
+      store.recordEvent(event(8, 'assistant/message', {
+        turn: 9, step: 1, message: {
+          id: 'external-answer', source: { provider: 'mock', model: 'fixture' },
+          content: [{ type: 'text', text: '对新输入的回复' }],
+        },
+      }))
+      expect(store.formBatches(20, 65536)).toBe(1)
+      expect(store.nextBatch()?.observations.map(item => item.source.eventId)).toEqual(['7', '8'])
+    } finally { store.close() }
+  })
+
+  it('keeps external input and subsequent work when it arrives within an internal turn', () => {
+    const store = new RouterStore(join(home, 'mixed-turn'))
+    try {
+      store.recordEvent(event(0, 'turn/start', { turn: 3 }))
+      store.recordEvent(input(1, '来自记忆的内部消息', { kind: 'elysia-session-communication' }))
+      store.recordEvent(event(2, 'tool/call', {
+        turn: 3, step: 1, callId: 'before-external', name: 'read', arguments: '{"file_path":"old.md"}',
+      }))
+      store.recordEvent(input(3, '真实的新外界输入', { kind: 'user', elysiaIngress: 'platform' }))
+      store.recordEvent(event(4, 'tool/result', {
+        message: { toolCallId: 'before-external', content: [{ type: 'text', text: '内部读取的迟到结果' }] },
+      }))
+      store.recordEvent(event(5, 'assistant/message', {
+        turn: 3, step: 2, message: {
+          id: 'mixed-answer', source: { provider: 'mock', model: 'fixture' },
+          content: [{ type: 'text', text: '现在处理外界输入' }],
+        },
+      }))
+      store.recordEvent(event(6, 'tool/call', {
+        turn: 3, step: 2, callId: 'after-external', name: 'send_text',
+        arguments: '{"channel":"kook","conversation":"kook:direct:42","content":"收到"}',
+      }))
+      store.recordEvent(event(7, 'tool/result', {
+        message: { toolCallId: 'after-external', content: [{ type: 'text', text: '已发送' }] },
+      }))
+      expect(store.formBatches(20, 65536)).toBe(1)
+      expect(store.nextBatch()?.observations.map(item => item.source.eventId)).toEqual(['3', '5', '6', '7'])
+      expect(store.listObservations().filter(item => item.reviewState === 'reviewed').map(item => item.source.eventId))
+        .toEqual(['1', '2', '4'])
+    } finally { store.close() }
+  })
+
+  it('records direct communication tools without re-presenting returned history on ordinary turns', () => {
+    const store = new RouterStore(join(home, 'communication-tools'))
+    try {
+      store.recordEvent(event(0, 'turn/start', { turn: 2 }))
+      store.recordEvent(input(1, '请核对已有记录'))
+      for (const [index, name] of ['session_list', 'session_read', 'session_send'].entries()) {
+        store.recordEvent(event(2 + index * 2, 'tool/call', {
+          turn: 2, step: index + 1, callId: 'communication-' + index, name, arguments: '{}',
+        }))
+        store.recordEvent(event(3 + index * 2, 'tool/result', {
+          message: { toolCallId: 'communication-' + index, content: [{ type: 'text', text: '已有历史或通讯收据' }] },
+        }))
+      }
+      store.recordEvent(input(8, '内部回复到达', { kind: 'elysia-session-communication' }))
+      store.recordEvent(event(9, 'assistant/message', {
+        turn: 2, step: 4, message: {
+          id: 'ordinary-answer', source: { provider: 'mock', model: 'fixture' },
+          content: [{ type: 'text', text: '原用户请求的正常回复' }],
+        },
+      }))
+      expect(store.formBatches(20, 65536)).toBe(1)
+      expect(store.nextBatch()?.observations.map(item => item.source.eventId)).toEqual(['1', '9'])
+      expect(store.listObservations().filter(item => item.reviewState === 'reviewed')).toHaveLength(7)
+    } finally { store.close() }
+  })
+
+  it('keeps a late communication result internal across both a new turn and reopen', () => {
+    const dir = join(home, 'late-communication-result')
+    let store = new RouterStore(dir)
+    store.recordEvent(event(0, 'turn/start', { turn: 1 }))
+    store.recordEvent(input(1, '普通用户输入'))
+    store.recordEvent(event(2, 'tool/call', {
+      turn: 1, step: 1, callId: 'late-read', name: 'session_read', arguments: '{"target":"memory"}',
+    }))
+    store.recordEvent(event(3, 'turn/end', { turn: 1, reason: { kind: 'error' } }))
+    store.recordEvent(event(4, 'turn/start', { turn: 2 }))
+    store.recordEvent(input(5, '下一条外部输入'))
+    store.close()
+    store = new RouterStore(dir)
+    try {
+      store.recordEvent(event(6, 'tool/result', {
+        message: { toolCallId: 'late-read', content: [{ type: 'text', text: '迟到的历史查询结果' }] },
+      }))
+      expect(store.listObservations().find(item => item.source.eventId === '6'))
+        .toMatchObject({ turn: 1, reviewState: 'reviewed' })
+      expect(store.formBatches(20, 65536)).toBe(1)
+      expect(store.nextBatch()?.observations.map(item => item.source.eventId)).toEqual(['1', '5'])
+      expect(store.sourceCursor()).toBe(6)
+    } finally { store.close() }
+  })
+
   it('bounds large projections while retaining complete observations after completion', () => {
     const store = new RouterStore(join(home, 'continuation'))
     try {
@@ -170,5 +292,39 @@ describe('durable Router store', () => {
       migrated.markCompleted('batch_legacy', 4, 3001)
       expect(migrated.getBatch('batch_legacy')).toMatchObject({ sessionSeq: 99, acceptedAt: 3000, completedTurn: 4 })
     } finally { migrated.close() }
+  })
+
+  it('persists the trigger threshold and resumes the exact multi-Batch group', () => {
+    const dir = join(home, 'trigger-groups')
+    let store = new RouterStore(dir, 3)
+    for (const seq of [1, 2, 3]) {
+      store.recordEvent(input(seq, `第 ${seq} 批`))
+      expect(store.formBatches(20, 65536)).toBe(1)
+      if (seq < 3) expect(store.nextBatch()).toBeUndefined()
+    }
+    const grouped = store.nextBatch()!
+    expect(grouped.batchIds).toHaveLength(3)
+    expect(grouped.observations.map(item => item.eventSeq)).toEqual([1, 2, 3])
+    expect(JSON.stringify(batchContent(grouped))).toContain(`batch_ids: ${grouped.batchIds.join(', ')}`)
+    store.markPresenting(grouped.id)
+    store.markAccepted(grouped.id, 50, 2000)
+    store.markPresented(grouped.id, 1, 1, 2001)
+    const originalIds = [...grouped.batchIds]
+    store.close()
+
+    store = new RouterStore(dir, 1)
+    try {
+      expect(store.triggerBatchCount()).toBe(3)
+      const resumed = store.nextBatch()!
+      expect(resumed.id).toBe(grouped.id)
+      expect(resumed.batchIds).toEqual(originalIds)
+      expect(resumed.observations.map(item => item.eventSeq)).toEqual([1, 2, 3])
+      expect(resumed.state).toBe('presenting')
+      store.markCompleted(resumed.id, 1, 3000)
+      expect(originalIds.map(id => store.getBatch(id)?.state)).toEqual(['decided', 'decided', 'decided'])
+      expect(store.health()).toMatchObject({ pendingObservations: 0, completedBatches: 3, triggerBatchCount: 3 })
+      expect(store.nextBatch()).toBeUndefined()
+      expect(() => store.setTriggerBatchCount(0)).toThrow('正整数')
+    } finally { store.close() }
   })
 })
