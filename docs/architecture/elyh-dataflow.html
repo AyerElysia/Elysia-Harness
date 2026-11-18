@@ -1,4 +1,4 @@
-<!doctype html><html lang="zh-CN"><head><meta charset="utf-8"><style>html,body{margin:0;padding:0;background:#fff}svg{display:block}</style></head><body><svg xmlns="http://www.w3.org/2000/svg" width="1500" height="840" viewBox="0 0 1500 840">
+<!doctype html><html lang="zh-CN"><head><meta charset="utf-8"><style>html,body{margin:0;padding:0;background:#fff}svg{display:block}</style></head><body><svg xmlns="http://www.w3.org/2000/svg" width="1500" height="784" viewBox="0 0 1500 784">
 <defs>
 <marker id="ap" markerWidth="10" markerHeight="10" refX="8" refY="5" orient="auto"><path d="M0,1 L9,5 L0,9 z" fill="#7c3aed"/></marker>
 <marker id="ab" markerWidth="10" markerHeight="10" refX="8" refY="5" orient="auto"><path d="M0,1 L9,5 L0,9 z" fill="#2563eb"/></marker>
@@ -50,7 +50,4 @@
 <text x="800" y="686" font-size="13" fill="#0f766e"><tspan fill="#475569" font-weight="700">○</tspan><tspan dx="5">写入</tspan></text>
 <path d="M1070,640 L1070,120 L764,120" fill="none" stroke="#0d9488" stroke-width="2" stroke-dasharray="7 5" marker-end="url(#at)" stroke-linejoin="round"/>
 <text x="1082" y="300" font-size="13" fill="#0f766e"><tspan fill="#475569" font-weight="700">○</tspan><tspan dx="5">只读</tspan></text>
-<text x="80" y="784" font-size="13" fill="#475569">主意识不再直接派工：派工只有 Router 一个入口，worker 的结果也一律回 Router，由它决定要不要提议给主意识。</text>
-<text x="80" y="808" font-size="13" fill="#475569">事件 worker：Router 发现重复工作后创建触发事件，之后由事件自动创建 worker，Router 不再逐次审核，worker 跑完向 Router 汇报即可。</text>
-<text x="80" y="832" font-size="13" fill="#475569">通信工具：所有 session 都可用 send_message 向任意 session 发消息（未画在本图，见能力图）。</text>
 </svg></body></html>
