@@ -1,0 +1,6 @@
+# Independent same-subject Session communication, enabled by its profile.
+- insert:
+    - id: elysia-session-communication
+      name: '@elysia/session-communication'
+      config:
+        stateDir: /home/ayerelysia/Elysia/Data/subconscious/session-communication

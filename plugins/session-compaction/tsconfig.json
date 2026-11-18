@@ -1,0 +1,24 @@
+{
+  "extends": "../../dsh/tsconfig.base.json",
+  "compilerOptions": {
+    "rootDir": "src",
+    "outDir": "lib/types"
+  },
+  "include": [
+    "src"
+  ],
+  "references": [
+    {
+      "path": "../../dsh/vendor/cordis"
+    },
+    {
+      "path": "../../dsh/packages/core/agent"
+    },
+    {
+      "path": "../../dsh/packages/compaction/command-compact"
+    },
+    {
+      "path": "../../dsh/packages/compaction/compaction-basic"
+    }
+  ]
+}

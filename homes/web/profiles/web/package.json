@@ -12,6 +12,8 @@
     "@elysia/proactive-system": "file:../../../../plugins/proactive-system",
     "@elysia/qq-napcat": "file:../../../../plugins/qq-napcat",
     "@elysia/request-archive": "file:../../../../plugins/request-archive",
+    "@elysia/session-communication": "link:../../../../plugins/session-communication",
+    "@elysia/session-compaction": "file:../../../../plugins/session-compaction",
     "@elysia/voice-call": "file:../../../../plugins/voice-call",
     "@linxin666/dsh-remote-web-ui": "0.4.8",
     "@liustack/modsearch": "5.10.12",

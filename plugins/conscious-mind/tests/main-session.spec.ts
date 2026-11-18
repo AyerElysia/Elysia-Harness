@@ -39,7 +39,7 @@ function compositionContext() {
   const restrict = vi.fn().mockReturnValue(vi.fn())
   const removeContextFilter = vi.fn()
   const restoreRuntimeContext = vi.fn()
-  const on = vi.fn().mockReturnValue(removeContextFilter)
+  const on = vi.fn().mockImplementation((name: string) => name === 'agent/pre-step' ? removeContextFilter : vi.fn())
   const suppressRuntimeContext = vi.fn().mockReturnValue(restoreRuntimeContext)
   const ctx = {
     plugin,
@@ -265,14 +265,16 @@ describe('main agent tool scope', () => {
   it('registers scoped pass and exposes only send_text, send_voice, and read_image globally', async () => {
     const register = vi.fn()
     const restrict = vi.fn()
+    const on = vi.fn()
     const plugin = vi.fn().mockResolvedValue(undefined)
-    await composeMainAgent({ tools: { register, restrict, guard: vi.fn(() => vi.fn()) }, systemPrompt: { suppressRuntimeContext: vi.fn() }, root: { on: vi.fn() }, on: vi.fn(), plugin, effect: (callback: () => () => void) => callback() } as unknown as Context, promptConfig)
+    await composeMainAgent({ tools: { register, restrict, guard: vi.fn(() => vi.fn()) }, systemPrompt: { suppressRuntimeContext: vi.fn() }, root: { on: vi.fn() }, on, plugin, effect: (callback: () => () => void) => callback() } as unknown as Context, promptConfig)
     expect(plugin).toHaveBeenCalledWith(StandingPrompt, { ...promptConfig, timeZone: 'Asia/Shanghai' })
     expect(plugin).toHaveBeenCalledWith(CurrentTime, { timeZone: 'Asia/Shanghai' })
     expect(plugin).toHaveBeenCalledWith(WebCapabilities)
     expect(plugin).toHaveBeenCalledWith(SkillCapabilities, { rootDir: join(workspace, 'skills') })
     expect(register.mock.calls[0]?.[0].name).toBe('pass')
     expect(restrict).toHaveBeenCalledWith({ allow: ['send_text', 'send_voice', 'read_image'] })
+    expect(on).toHaveBeenCalledWith('agent/turn-stopping', expect.any(Function))
   })
   it('shares concurrent composition and rejects an attempt to change its fixed file selection', async () => {
     const scoped = compositionContext()

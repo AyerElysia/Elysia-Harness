@@ -28,6 +28,15 @@ describe('native main dialogue routing', () => {
     expect(hasLocal(turnStart, input, tool)).toBe(false)
   })
 
+  it('keeps an internal Session message on the local reply path', () => {
+    const relay = {
+      type: 'user/message',
+      data: { source: { kind: 'elysia-session-communication', form: 'relay' } },
+    }
+    expect(hasLocal(turnStart, relay, tool)).toBe(true)
+    expect(hasLocal(turnStart, relay, turnEnd, turnStart, user(platformMessageSource), tool)).toBe(false)
+  })
+
   it('treats a mixed active turn as local and ignores a completed local turn', () => {
     const local = user({ kind: 'user', rpcId: 'web-request' })
     const external = user(platformMessageSource)

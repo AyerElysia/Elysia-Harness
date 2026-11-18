@@ -9,6 +9,8 @@ import { mkdir, readFile, readdir, realpath, rename, stat, unlink, writeFile } f
 import { dirname, isAbsolute, join, relative, resolve } from 'node:path'
 import type { Context } from '@deepseek-ai/cordis'
 import type { Agent } from '@deepseek-ai/dsh-agent'
+import type { ContentBlock } from '@deepseek-ai/dsh-llm'
+import type { SessionEvent } from '@deepseek-ai/dsh-session'
 import { scopeOf } from '@deepseek-ai/dsh-scope'
 import * as ToolFs from '@deepseek-ai/dsh-tool-fs'
 import * as ToolFsSearch from '@deepseek-ai/dsh-tool-fs-search'
@@ -173,6 +175,40 @@ function admitted(roots: Roots, tool: string, target: string): boolean {
   return promptName(roots, target) !== undefined && (roots.allowPromptWrites || !MUTATION_TOOLS.has(tool))
 }
 
+interface AttachmentFilePaths {
+  fileHostPath(ref: Extract<ContentBlock, { type: 'file' }>['attachment']): string | undefined
+}
+
+interface AttachmentHistory {
+  readSession(id: Agent['id']): Promise<{ events: readonly SessionEvent[] }>
+}
+
+// The LLM projects a native file to its immutable object path. Only a file
+// already received by this Agent grants a read, even when the path is shared
+// by the host's attachment store.
+async function receivedFile(ctx: Context, agent: Agent, target: string, signal: AbortSignal): Promise<boolean> {
+  const attachments = ctx.reflect.get('attachments', false) as AttachmentFilePaths | undefined
+  const history = ctx.reflect.get('sessionQuery', false) as AttachmentHistory | undefined
+  if (attachments === undefined || history === undefined) return false
+  const snapshot = await history.readSession(agent.id).catch(() => undefined)
+  signal.throwIfAborted()
+  if (snapshot === undefined) return false
+  for (const event of snapshot.events) {
+    if (event.type !== 'user/message') continue
+    for (const block of event.data.content) {
+      if (block.type !== 'file') continue
+      try {
+        // target is canonical. Equality excludes a store path that now links
+        // to some other file.
+        if (attachments.fileHostPath(block.attachment) === target) return true
+      } catch {
+        // Skip stale or malformed references.
+      }
+    }
+  }
+  return false
+}
+
 async function rejectHardLink(target: string): Promise<boolean> {
   try {
     const info = await stat(target)
@@ -276,7 +312,12 @@ export async function mountFileCapabilities(ctx: Context, config: Config): Promi
     const args = exec.arguments as Args
     const { target } = await resolveTarget(exec, args)
     if (target.length === 0) return next()
-    if (!admitted(roots, exec.name, target) || await rejectHardLink(target)) {
+    const withinRoots = admitted(roots, exec.name, target)
+    const canReadAttachment = !withinRoots && exec.name === 'read'
+      && exec.agent !== undefined && await receivedFile(ctx, exec.agent, target, exec.signal)
+    // The native store hard-links its admitted immutable file objects.
+    // Other paths still pass the ordinary hard-link check.
+    if (!canReadAttachment && (!withinRoots || await rejectHardLink(target))) {
       return denial(exec, `爱莉的文件权限不允许访问该路径：${exec.name}`)
     }
     const name = promptName(roots, target)

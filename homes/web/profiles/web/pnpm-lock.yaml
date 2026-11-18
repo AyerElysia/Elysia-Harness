@@ -38,6 +38,12 @@ importers:
       '@elysia/request-archive':
         specifier: file:../../../../plugins/request-archive
         version: file:../../../../plugins/request-archive
+      '@elysia/session-communication':
+        specifier: link:../../../../plugins/session-communication
+        version: link:../../../../plugins/session-communication
+      '@elysia/session-compaction':
+        specifier: file:../../../../plugins/session-compaction
+        version: file:../../../../plugins/session-compaction
       '@elysia/voice-call':
         specifier: file:../../../../plugins/voice-call
         version: file:../../../../plugins/voice-call(@elysia/conscious-mind@file:../../../../plugins/conscious-mind(@elysia/proactive-system@file:../../../../plugins/proactive-system))
@@ -87,10 +93,13 @@ packages:
       '@deepseek-ai/dsh-llm': workspace:*
       '@deepseek-ai/dsh-scope': workspace:*
       '@deepseek-ai/dsh-session': workspace:*
+      '@deepseek-ai/dsh-skill': workspace:*
+      '@deepseek-ai/dsh-skill-filesystem': workspace:*
       '@deepseek-ai/dsh-system-prompt': workspace:*
       '@deepseek-ai/dsh-time-context': workspace:*
       '@deepseek-ai/dsh-tool-fs': workspace:*
       '@deepseek-ai/dsh-tool-fs-search': workspace:*
+      '@deepseek-ai/dsh-tool-skill': workspace:*
       '@deepseek-ai/dsh-tool-web': workspace:*
       '@deepseek-ai/dsh-tools': workspace:*
       '@deepseek-ai/dsh-web': workspace:*
@@ -162,6 +171,16 @@ packages:
       '@deepseek-ai/cordis': workspace:~
       '@deepseek-ai/dsh-llm': workspace:*
       '@deepseek-ai/schemastery': workspace:~
+
+  '@elysia/session-compaction@file:../../../../plugins/session-compaction':
+    resolution: {directory: ../../../../plugins/session-compaction, type: directory}
+    peerDependencies:
+      '@deepseek-ai/cordis': workspace:~
+      '@deepseek-ai/dsh-agent': workspace:*
+      '@deepseek-ai/dsh-command-compact': workspace:*
+      '@deepseek-ai/dsh-commands': workspace:*
+      '@deepseek-ai/dsh-compaction': workspace:*
+      '@deepseek-ai/dsh-compaction-basic': workspace:*
 
   '@elysia/voice-call@file:../../../../plugins/voice-call':
     resolution: {directory: ../../../../plugins/voice-call, type: directory}
@@ -335,6 +354,8 @@ snapshots:
       - utf-8-validate
 
   '@elysia/request-archive@file:../../../../plugins/request-archive': {}
+
+  '@elysia/session-compaction@file:../../../../plugins/session-compaction': {}
 
   '@elysia/voice-call@file:../../../../plugins/voice-call(@elysia/conscious-mind@file:../../../../plugins/conscious-mind(@elysia/proactive-system@file:../../../../plugins/proactive-system))':
     dependencies:

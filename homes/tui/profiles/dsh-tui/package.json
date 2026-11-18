@@ -9,6 +9,7 @@
     "@elysia/kook-bot": "file:../../../../plugins/kook-bot",
     "@elysia/qq-napcat": "file:../../../../plugins/qq-napcat",
     "@elysia/request-archive": "file:../../../../plugins/request-archive",
+    "@elysia/session-compaction": "file:../../../../plugins/session-compaction",
     "@liustack/modsearch": "5.10.12",
     "dsh-ops": "0.4.1",
     "dsh-tui-elysia-pet": "file:../../../../vendor/elysia-pet",

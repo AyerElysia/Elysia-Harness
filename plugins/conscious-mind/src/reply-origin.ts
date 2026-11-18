@@ -14,7 +14,21 @@ export function hasLocalDialogueInput(agent: Pick<Agent, 'session'>): boolean {
     if (event?.type === 'turn/start') return local
     if (event?.type !== 'user/message') continue
     const source = event.data.source
-    if (source.kind === 'user' && (!('elysiaIngress' in source) || source.elysiaIngress !== 'platform')) local = true
+    if (String(source.kind) === 'elysia-session-communication'
+      || (source.kind === 'user' && (!('elysiaIngress' in source) || source.elysiaIngress !== 'platform'))) local = true
+  }
+  return false
+}
+
+/** Positive platform provenance; non-local internal inputs are not platform messages. */
+export function hasPlatformDialogueInput(agent: Pick<Agent, 'session'>): boolean {
+  const { session } = agent
+  for (let seq = Number(session.seq) - 1; seq >= 0; seq--) {
+    const event = session.eventAt(seq as SessionSeq)
+    if (event?.type === 'turn/end' || event?.type === 'turn/start') return false
+    if (event?.type !== 'user/message') continue
+    const source = event.data.source
+    if (source.kind === 'user' && 'elysiaIngress' in source && source.elysiaIngress === 'platform') return true
   }
   return false
 }

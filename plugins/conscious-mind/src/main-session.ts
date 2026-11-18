@@ -31,6 +31,7 @@ import * as SkillCapabilities from './skill-capabilities.ts'
 import * as CurrentTime from './current-time.ts'
 import { hasLocalDialogueInput, platformMessageSource } from './reply-origin.ts'
 import { installLocalSendConfirmation } from './local-send-confirmation.ts'
+import { installExternalReplyGuard } from './external-reply-guard.ts'
 import { restoreDirectSessionModel } from './restore-direct-session-model.ts'
 import * as PlanTools from '@elysia/proactive-system/plan-tools'
 
@@ -196,6 +197,7 @@ export function composeMainAgent(agentCtx: Context, promptConfig: MainSessionCon
     let removePass: (() => void) | undefined
     let removeRestriction: (() => void) | undefined
     let removeLocalSendConfirmation: (() => void) | undefined
+    let removeExternalReplyGuard: (() => void) | undefined
     try {
       removeIsolation = isolateMainAgentContext(agentCtx, agent)
       currentTime = await agentCtx.plugin(CurrentTime, { timeZone: config.timeZone ?? 'Asia/Shanghai' })
@@ -222,13 +224,16 @@ export function composeMainAgent(agentCtx: Context, promptConfig: MainSessionCon
       removePass = agentCtx.tools.register(definePassTool())
       removeRestriction = agentCtx.tools.restrict({ allow: ['send_text', 'send_voice', 'read_image'] })
       removeLocalSendConfirmation = installLocalSendConfirmation(agentCtx, hasLocalDialogueInput)
+      removeExternalReplyGuard = installExternalReplyGuard(agentCtx)
       agentCtx.effect(() => () => {
+        removeExternalReplyGuard?.()
         removeLocalSendConfirmation?.()
         if (mainCompositions.get(agentCtx) === composition) mainCompositions.delete(agentCtx)
       }, 'elysia-conscious-mind.composition()')
       composition.complete = true
     } catch (error) {
       const cleanup = await Promise.allSettled([
+        Promise.resolve().then(() => removeExternalReplyGuard?.()),
         Promise.resolve().then(() => removeLocalSendConfirmation?.()),
         Promise.resolve().then(() => removeRestriction?.()),
         Promise.resolve().then(() => removePass?.()),

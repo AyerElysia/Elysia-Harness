@@ -11,12 +11,14 @@ import { SandboxedFileSystem } from '@deepseek-ai/dsh-fs-sandbox'
 import type { ToolCallId } from '@deepseek-ai/dsh-llm'
 import { createScope } from '@deepseek-ai/dsh-scope'
 import SystemPrompt from '@deepseek-ai/dsh-system-prompt'
+import * as NativeToolExecutor from '@deepseek-ai/dsh-tool-executor-native'
 import * as ToolFs from '@deepseek-ai/dsh-tool-fs'
 import * as ToolFsSearch from '@deepseek-ai/dsh-tool-fs-search'
 import ToolRuntime, { defineTool } from '@deepseek-ai/dsh-tools'
 import { expect, it, onTestFinished, vi } from 'vitest'
 import { mountFileCapabilities } from '../src/file-capabilities.ts'
 import * as FileCapabilities from '../src/file-capabilities.ts'
+import { executeModelToolFixture } from '../../../dsh/packages/test-support/tool-testkit/src/index.ts'
 
 it('runs DSH mutations with observation, staleness, path and prompt-backup guards', async () => {
   const home = await mkdtemp(join(tmpdir(), 'elysia-file-integration-'))
@@ -236,4 +238,65 @@ it('mounts once in a shared preset scope without mistaking its key for an Agent'
   const otherScope = createScope(ctx, other)
   Object.assign(other, { ctx: otherScope.ctx })
   expect(ctx.tools.get('read', other)).toBeUndefined()
+})
+
+it('lets a session read only the native file already admitted to its history', async () => {
+  const home = await mkdtemp(join(tmpdir(), 'elysia-file-admission-'))
+  const workspace = join(home, 'workspace')
+  const prompts = join(home, 'prompts')
+  await mkdir(workspace)
+  await mkdir(prompts)
+  await writeFile(join(prompts, 'SOUL.md'), 'soul')
+  const ctx = new Context()
+  onTestFinished(async () => {
+    await ctx.fiber.dispose()
+    await rm(home, { recursive: true, force: true })
+  })
+  provideWorkingDirectoryFixture(ctx)
+  ctx.workingDirectory.set = vi.fn().mockResolvedValue(workspace)
+  await ctx.plugin(SystemPrompt)
+  await ctx.plugin(ToolRuntime)
+  await ctx.plugin(NativeToolExecutor)
+  await ctx.plugin(LocalFileSystem, { cwd: workspace })
+  await ctx.plugin(LocalAttachmentStore, { dshHome: home })
+  await ctx.plugin(FsObservationPolicy)
+  await ctx.plugin(ToolFs, { read: true, readImage: false, write: true, edit: true })
+
+  const agentId = 'elysia-file-admission-fixture'
+  const agent = { id: agentId, session: { id: agentId, header: { cwd: workspace } } } as unknown as Agent
+  const scope = createScope(ctx, agent)
+  Object.assign(agent, { ctx: scope.ctx })
+  await mountFileCapabilities(scope.ctx, {
+    baseDir: prompts, files: ['SOUL.md'], workspaceDir: workspace, backupDir: join(home, 'backups'),
+  })
+  const received = await ctx.attachments.saveFile({ name: 'shared.txt', data: Buffer.from('allowed bytes') })
+  const other = await ctx.attachments.saveFile({ name: 'other.txt', data: Buffer.from('another session') })
+  let admitted = false
+  ctx.provide('sessionQuery' as never, {
+    readSession: async (id: string) => ({
+      events: id === agentId && admitted ? [{
+        type: 'user/message',
+        data: { source: { kind: 'elysia-session-communication' }, content: [{ type: 'file', attachment: received }] },
+      }] : [],
+    }),
+  } as never)
+  let sequence = 0
+  const execute = async (name: string, args: Record<string, unknown>) => {
+    const signal = new AbortController().signal
+    const toolSet = await ctx.tools.resolve({
+      agent, modelSelection: { provider: 'fixture', model: 'fixture' }, signal,
+    })
+    return executeModelToolFixture(ctx, {
+      callId: `attach-${++sequence}` as ToolCallId, name, arguments: args, agent, signal, toolSet,
+    }).finally(() => toolSet.dispose())
+  }
+  const path = ctx.attachments.fileHostPath(received)!
+  expect((await execute('read', { file_path: path })).isError).toBe(true)
+  admitted = true
+  const reader = await execute('read', { file_path: path })
+  expect(reader.error).toBeUndefined()
+  expect(reader.isError).toBe(false)
+  expect(JSON.stringify(reader.content)).toContain('allowed bytes')
+  expect((await execute('read', { file_path: ctx.attachments.fileHostPath(other)! })).isError).toBe(true)
+  expect((await execute('write', { file_path: path, content: 'denied' })).isError).toBe(true)
 })

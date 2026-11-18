@@ -143,6 +143,35 @@ it.each([
   expect(agent.session.seq).toBe(settledSeq)
 })
 
+it('steers one correction into the same platform turn when text ends without a send or pass choice', async () => {
+  const { agent, adapter } = await fixture([
+    reply('这段正文不会投递到外部渠道'),
+    call('fixture-corrected-pass', 'pass', { reason: 'fixture chooses silence after the reminder' }),
+  ])
+  agent.followup(createUserMessage({ content: [{ type: 'text', text: 'platform input without a tool choice' }], source: platformMessageSource }))
+  await agent.whenIdle()
+  expect(adapter.requests).toHaveLength(2)
+  expect(JSON.stringify(adapter.requests[1]?.messages)).toContain('本轮包含外部渠道消息')
+  const events = agent.session.snapshotEvents()
+  expect(events.filter(event => event.type === 'turn/start')).toHaveLength(1)
+  expect(events.filter(event => event.type === 'turn/end')).toHaveLength(1)
+  expect(events.filter(event => event.type === 'step/start')).toHaveLength(2)
+  expect(events.some(event => event.type === 'user/message'
+    && event.data.source.kind === 'elysia-external-reply-guard'
+    && JSON.stringify(event.data.content).includes('send_text、send_voice 或 pass'))).toBe(true)
+  expect(events.some(event => event.type === 'tool/result'
+    && event.data.message.toolCallId === 'fixture-corrected-pass' && !event.data.message.isError)).toBe(true)
+})
+
+it('leaves an ordinary local text response untouched', async () => {
+  const { agent, adapter } = await fixture([reply('ordinary local response')])
+  agent.followup(input('ordinary local input'))
+  await agent.whenIdle()
+  expect(adapter.requests).toHaveLength(1)
+  expect(agent.session.snapshotEvents().some(event => event.type === 'user/message'
+    && event.data.source.kind === 'elysia-external-reply-guard')).toBe(false)
+})
+
 it('keeps and processes real steering that arrives during pass execution using the native inbox', async () => {
   const { ctx, agent, adapter } = await fixture([
     call('fixture-pass-steer', 'pass', { reason: 'fixture done before the later input' }),

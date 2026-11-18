@@ -5,6 +5,10 @@
 # homes/shared/models.patch.yml, which is ignored.
 
 - insert:
+    # Apply native compaction uniformly to every TUI Agent Session.
+    - id: elysia-session-compaction
+      name: '@elysia/session-compaction'
+
     - id: elysia-conscious-mind
       name: '@elysia/conscious-mind'
       config:

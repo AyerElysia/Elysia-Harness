@@ -1,0 +1,4 @@
+# Fill missing native compaction in every Agent Session, including preset and fixed-channel Sessions.
+- insert:
+    - id: elysia-session-compaction
+      name: '@elysia/session-compaction'

@@ -1,0 +1,42 @@
+{
+  "extends": "../../dsh/tsconfig.base.json",
+  "compilerOptions": {
+    "rootDir": "src",
+    "outDir": "lib/types"
+  },
+  "include": [
+    "src"
+  ],
+  "references": [
+    {
+      "path": "../../dsh/vendor/cordis"
+    },
+    {
+      "path": "../../dsh/packages/core/agent"
+    },
+    {
+      "path": "../../dsh/packages/api/session-controller/tsconfig.host.json"
+    },
+    {
+      "path": "../../dsh/packages/attachment/attachment"
+    },
+    {
+      "path": "../../dsh/packages/llm/llm"
+    },
+    {
+      "path": "../../dsh/packages/core/session"
+    },
+    {
+      "path": "../../dsh/packages/session-query/session-query"
+    },
+    {
+      "path": "../../dsh/packages/core/tools"
+    },
+    {
+      "path": "../../dsh/packages/util/values"
+    },
+    {
+      "path": "../../dsh/vendor/schemastery"
+    }
+  ]
+}
