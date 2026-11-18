@@ -1,0 +1,62 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="1600" height="1012" viewBox="0 0 1600 1012" role="img" aria-labelledby="title desc">
+<title id="title">爱莉的个人认知手册 · 接入架构</title><desc id="desc">长期记忆 Session 负责执笔，主意识按需回忆。手册保存她从经历中形成、并会继续修订的理解。</desc>
+<style>text {font-family:"Microsoft YaHei","Noto Sans CJK SC","PingFang SC",sans-serif}</style>
+<defs><marker id="arrow" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse"><path d="M0 0L10 5L0 10Z" fill="context-stroke"/></marker></defs>
+<rect x="0" y="0" width="1600" height="1012" rx="0" fill="#f3f7fb"/>
+<rect x="0" y="0" width="12" height="1012" rx="0" fill="#152a43"/>
+<text x="64" y="82" font-size="43" font-weight="700" fill="#152a43" text-anchor="start">爱莉的个人认知手册 · 接入架构</text>
+<text x="66" y="124" font-size="22" font-weight="400" fill="#465b73" text-anchor="start">长期记忆 Session 负责执笔，主意识按需回忆。手册保存她从经历中形成、并会继续修订的理解。</text>
+<polyline points="64,956 1536,956" fill="none" stroke="#cbd9e7" stroke-width="2.35" stroke-linecap="round" stroke-linejoin="round"/>
+<text x="65" y="988" font-size="16" font-weight="400" fill="#465b73" text-anchor="start">建议架构 · 沿用 ElyHarn 自主记忆需求中的主体执笔、稳定引用、按需读取与版本追溯。</text>
+<rect x="64" y="169" width="1472" height="309" rx="16" fill="#e7f3ef" stroke="#cbd9e7" stroke-width="1.5"/>
+<text x="89" y="207" font-size="24" font-weight="700" fill="#11665b" text-anchor="start">整理与写入</text>
+<rect x="88" y="228" width="318" height="208" rx="16" fill="#ffffff" stroke="#cbd9e7" stroke-width="1.5"/>
+<text x="109" y="264" font-size="24" font-weight="700" fill="#11665b" text-anchor="start">已有经历与记录</text>
+<text x="109" y="298" font-size="18" font-weight="400" fill="#465b73" text-anchor="start">DSH 历史保留原始对话与活动</text>
+<text x="109" y="327" font-size="18" font-weight="400" fill="#465b73" text-anchor="start">日记、笔记留下她当时的理解</text>
+<text x="109" y="356" font-size="18" font-weight="400" fill="#465b73" text-anchor="start">页面通过稳定引用回到这些材料</text>
+<rect x="448" y="228" width="318" height="208" rx="16" fill="#ffffff" stroke="#cbd9e7" stroke-width="1.5"/>
+<text x="469" y="264" font-size="24" font-weight="700" fill="#11665b" text-anchor="start">获得回顾机会</text>
+<text x="469" y="298" font-size="18" font-weight="400" fill="#465b73" text-anchor="start">爱莉主动提出，或用户明确请求</text>
+<text x="469" y="327" font-size="18" font-weight="400" fill="#465b73" text-anchor="start">先选定可读取的经历与范围</text>
+<text x="469" y="356" font-size="18" font-weight="400" fill="#465b73" text-anchor="start">后续可由 Router 做有界交接</text>
+<rect x="808" y="228" width="318" height="208" rx="16" fill="#ffffff" stroke="#cbd9e7" stroke-width="1.5"/>
+<text x="829" y="264" font-size="24" font-weight="700" fill="#11665b" text-anchor="start">记忆 Session 执笔</text>
+<text x="829" y="298" font-size="18" font-weight="400" fill="#465b73" text-anchor="start">读相关旧页和获准材料</text>
+<text x="829" y="327" font-size="18" font-weight="400" fill="#465b73" text-anchor="start">她决定建页、修订或暂不整理</text>
+<text x="829" y="356" font-size="18" font-weight="400" fill="#465b73" text-anchor="start">由她写正文、短入口和关联</text>
+<rect x="1168" y="228" width="342" height="208" rx="16" fill="#ffffff" stroke="#cbd9e7" stroke-width="1.5"/>
+<text x="1189" y="264" font-size="24" font-weight="700" fill="#5f4986" text-anchor="start">@elysia/memory 保存</text>
+<text x="1189" y="298" font-size="18" font-weight="400" fill="#465b73" text-anchor="start">宿主校验权限、来源和版本冲突</text>
+<text x="1189" y="327" font-size="18" font-weight="400" fill="#465b73" text-anchor="start">正文、短入口与版本一起提交</text>
+<text x="1189" y="356" font-size="18" font-weight="400" fill="#465b73" text-anchor="start">保存执笔会话、所用依据与旧版</text>
+<polyline points="409,332 445,332" fill="none" stroke="#11665b" stroke-width="2.35" stroke-linecap="round" stroke-linejoin="round" marker-end="url(#arrow)"/>
+<polyline points="769,332 805,332" fill="none" stroke="#11665b" stroke-width="2.35" stroke-linecap="round" stroke-linejoin="round" marker-end="url(#arrow)"/>
+<polyline points="1129,332 1165,332" fill="none" stroke="#11665b" stroke-width="2.35" stroke-linecap="round" stroke-linejoin="round" marker-end="url(#arrow)"/>
+<rect x="64" y="550" width="1472" height="342" rx="16" fill="#eaf1fb" stroke="#cbd9e7" stroke-width="1.5"/>
+<text x="89" y="588" font-size="24" font-weight="700" fill="#2357a1" text-anchor="start">回忆与使用</text>
+<rect x="88" y="616" width="422" height="185" rx="16" fill="#ffffff" stroke="#cbd9e7" stroke-width="1.5"/>
+<text x="109" y="652" font-size="24" font-weight="700" fill="#2357a1" text-anchor="start">爱莉 · 主意识</text>
+<text x="109" y="686" font-size="19" font-weight="400" fill="#465b73" text-anchor="start">遇到相关话题或需要确认时查阅</text>
+<text x="109" y="715" font-size="19" font-weight="400" fill="#465b73" text-anchor="start">把记忆放回当下情境判断</text>
+<text x="109" y="744" font-size="19" font-weight="400" fill="#465b73" text-anchor="start">发现新例外时，提出一次回顾</text>
+<rect x="567" y="616" width="383" height="185" rx="16" fill="#ffffff" stroke="#cbd9e7" stroke-width="1.5"/>
+<text x="588" y="652" font-size="24" font-weight="700" fill="#2357a1" text-anchor="start">短索引 · 她写的记忆线索</text>
+<text x="588" y="686" font-size="19" font-weight="400" fill="#465b73" text-anchor="start">只展示当前会话获准查阅的入口</text>
+<text x="588" y="715" font-size="19" font-weight="400" fill="#465b73" text-anchor="start">可按主题、关键词和关联查找</text>
+<text x="588" y="744" font-size="19" font-weight="400" fill="#465b73" text-anchor="start">线索指向稳定的记忆页面</text>
+<rect x="1007" y="616" width="503" height="185" rx="16" fill="#efedf7" stroke="#cbd9e7" stroke-width="1.5"/>
+<text x="1028" y="652" font-size="24" font-weight="700" fill="#5f4986" text-anchor="start">认知手册 · 正文与版本</text>
+<text x="1028" y="686" font-size="19" font-weight="400" fill="#465b73" text-anchor="start">Markdown 页面保存她目前的理解与适用范围</text>
+<text x="1028" y="715" font-size="19" font-weight="400" fill="#465b73" text-anchor="start">可沿链接读前次解释、日记和获准原始记录</text>
+<text x="1028" y="744" font-size="19" font-weight="400" fill="#465b73" text-anchor="start">旧版本保留曾经的认知和形成依据</text>
+<polyline points="513,709 564,709" fill="none" stroke="#2357a1" stroke-width="2.35" stroke-linecap="round" stroke-linejoin="round" marker-end="url(#arrow)"/>
+<polyline points="953,709 1004,709" fill="none" stroke="#2357a1" stroke-width="2.35" stroke-linecap="round" stroke-linejoin="round" marker-end="url(#arrow)"/>
+<polyline points="299,613 299,513 607,513 607,439" fill="none" stroke="#2357a1" stroke-width="2.35" stroke-linecap="round" stroke-linejoin="round" marker-end="url(#arrow)" stroke-dasharray="7 6"/>
+<rect x="392.0" y="493" width="122" height="31" rx="7" fill="#f3f7fb"/>
+<text x="453" y="514" font-size="16" font-weight="700" fill="#2357a1" text-anchor="middle">提出回顾</text>
+<polyline points="1341,439 1341,613" fill="none" stroke="#5f4986" stroke-width="2.35" stroke-linecap="round" stroke-linejoin="round" marker-end="url(#arrow)"/>
+<rect x="1273.0" y="493" width="136" height="31" rx="7" fill="#f3f7fb"/>
+<text x="1341" y="514" font-size="16" font-weight="700" fill="#5f4986" text-anchor="middle">提交修订</text>
+<text x="89" y="850" font-size="20" font-weight="400" fill="#465b73" text-anchor="start">可见性覆盖短索引、正文、旧版本、引用及实际进入会话的内容。</text>
+</svg>

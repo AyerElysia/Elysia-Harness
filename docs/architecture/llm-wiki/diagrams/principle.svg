@@ -1,0 +1,49 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="1600" height="798" viewBox="0 0 1600 798" role="img" aria-labelledby="title desc">
+<title id="title">LLM Wiki 的原理</title><desc id="desc">把跨资料的整理工作前移到导入和更新阶段，查询时阅读已编译的页面，并在需要时回看原文。</desc>
+<style>text {font-family:"Microsoft YaHei","Noto Sans CJK SC","PingFang SC",sans-serif}</style>
+<defs><marker id="arrow" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse"><path d="M0 0L10 5L0 10Z" fill="context-stroke"/></marker></defs>
+<rect x="0" y="0" width="1600" height="798" rx="0" fill="#f3f7fb"/>
+<rect x="0" y="0" width="12" height="798" rx="0" fill="#152a43"/>
+<text x="64" y="82" font-size="43" font-weight="700" fill="#152a43" text-anchor="start">LLM Wiki 的原理</text>
+<text x="66" y="124" font-size="22" font-weight="400" fill="#465b73" text-anchor="start">把跨资料的整理工作前移到导入和更新阶段，查询时阅读已编译的页面，并在需要时回看原文。</text>
+<polyline points="64,742 1536,742" fill="none" stroke="#cbd9e7" stroke-width="2.35" stroke-linecap="round" stroke-linejoin="round"/>
+<text x="65" y="774" font-size="16" font-weight="400" fill="#465b73" text-anchor="start">依据 Andrej Karpathy 的《LLM Wiki》设计说明。</text>
+<rect x="403" y="173" width="726" height="90" rx="16" fill="#efedf7" stroke="#cbd9e7" stroke-width="1.5"/>
+<text x="426" y="209" font-size="24" font-weight="700" fill="#5f4986" text-anchor="start">Schema 规定页面、引用和维护流程</text>
+<text x="426" y="240" font-size="19" font-weight="400" fill="#465b73" text-anchor="start">人选择材料和整理重点，模型按规则维护 Wiki。</text>
+<polyline points="551,263 551,307" fill="none" stroke="#5f4986" stroke-width="2.35" stroke-linecap="round" stroke-linejoin="round" marker-end="url(#arrow)"/>
+<rect x="64" y="310" width="290" height="192" rx="16" fill="#eaf1fb" stroke="#cbd9e7" stroke-width="1.5"/>
+<text x="85" y="346" font-size="24" font-weight="700" fill="#2357a1" text-anchor="start">原始资料</text>
+<text x="85" y="380" font-size="19" font-weight="400" fill="#465b73" text-anchor="start">文章、报告、网页或文件</text>
+<text x="85" y="409" font-size="19" font-weight="400" fill="#465b73" text-anchor="start">保存原文、出处及版本</text>
+<text x="85" y="438" font-size="19" font-weight="400" fill="#465b73" text-anchor="start">供编译和后续查证</text>
+<rect x="403" y="310" width="298" height="192" rx="16" fill="#ffffff" stroke="#cbd9e7" stroke-width="1.5"/>
+<text x="424" y="346" font-size="24" font-weight="700" fill="#11665b" text-anchor="start">导入 · Ingest</text>
+<text x="424" y="380" font-size="19" font-weight="400" fill="#465b73" text-anchor="start">读新资料及相关旧页</text>
+<text x="424" y="409" font-size="19" font-weight="400" fill="#465b73" text-anchor="start">提炼主题、实体和关系</text>
+<text x="424" y="438" font-size="19" font-weight="400" fill="#465b73" text-anchor="start">增量更新关联页面</text>
+<rect x="750" y="310" width="379" height="192" rx="16" fill="#e7f3ef" stroke="#cbd9e7" stroke-width="1.5"/>
+<text x="771" y="346" font-size="24" font-weight="700" fill="#11665b" text-anchor="start">派生 Wiki 页面</text>
+<text x="771" y="380" font-size="19" font-weight="400" fill="#465b73" text-anchor="start">Markdown 主题页和来源摘要</text>
+<text x="771" y="409" font-size="19" font-weight="400" fill="#465b73" text-anchor="start">索引与双向关联帮助导航</text>
+<text x="771" y="438" font-size="19" font-weight="400" fill="#465b73" text-anchor="start">引用指回可查证的原始资料</text>
+<rect x="1178" y="310" width="358" height="192" rx="16" fill="#eaf1fb" stroke="#cbd9e7" stroke-width="1.5"/>
+<text x="1199" y="346" font-size="24" font-weight="700" fill="#2357a1" text-anchor="start">查询 · Query</text>
+<text x="1199" y="380" font-size="19" font-weight="400" fill="#465b73" text-anchor="start">按目录、搜索或链接定位页面</text>
+<text x="1199" y="409" font-size="19" font-weight="400" fill="#465b73" text-anchor="start">综合相关页面并列出引用</text>
+<text x="1199" y="438" font-size="19" font-weight="400" fill="#465b73" text-anchor="start">有疑问时回查原文</text>
+<polyline points="357,411 400,411" fill="none" stroke="#2357a1" stroke-width="2.35" stroke-linecap="round" stroke-linejoin="round" marker-end="url(#arrow)"/>
+<polyline points="704,411 747,411" fill="none" stroke="#11665b" stroke-width="2.35" stroke-linecap="round" stroke-linejoin="round" marker-end="url(#arrow)"/>
+<polyline points="1132,411 1175,411" fill="none" stroke="#11665b" stroke-width="2.35" stroke-linecap="round" stroke-linejoin="round" marker-end="url(#arrow)"/>
+<rect x="750" y="569" width="379" height="131" rx="16" fill="#fbf1e2" stroke="#cbd9e7" stroke-width="1.5"/>
+<text x="771" y="605" font-size="24" font-weight="700" fill="#82501b" text-anchor="start">校查 · Lint</text>
+<text x="771" y="639" font-size="19" font-weight="400" fill="#465b73" text-anchor="start">检查断链、矛盾和过时结论</text>
+<text x="771" y="668" font-size="19" font-weight="400" fill="#465b73" text-anchor="start">标出需要核原文或补资料的地方</text>
+<rect x="403" y="569" width="298" height="131" rx="16" fill="#ffffff" stroke="#cbd9e7" stroke-width="1.5"/>
+<text x="424" y="605" font-size="24" font-weight="700" fill="#82501b" text-anchor="start">维护与修订</text>
+<text x="424" y="639" font-size="19" font-weight="400" fill="#465b73" text-anchor="start">确认问题，修页或补来源</text>
+<text x="424" y="668" font-size="19" font-weight="400" fill="#465b73" text-anchor="start">保留修订记录</text>
+<polyline points="939,505 939,566" fill="none" stroke="#82501b" stroke-width="2.35" stroke-linecap="round" stroke-linejoin="round" marker-end="url(#arrow)"/>
+<polyline points="747,634 704,634" fill="none" stroke="#82501b" stroke-width="2.35" stroke-linecap="round" stroke-linejoin="round" marker-end="url(#arrow)"/>
+<polyline points="551,566 551,505" fill="none" stroke="#82501b" stroke-width="2.35" stroke-linecap="round" stroke-linejoin="round" marker-end="url(#arrow)" stroke-dasharray="7 6"/>
+</svg>

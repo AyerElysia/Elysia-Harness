@@ -1,0 +1,44 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="1600" height="948" viewBox="0 0 1600 948" role="img" aria-labelledby="title desc">
+<title id="title">记忆维护指南怎样持续改进</title><desc id="desc">爱莉用现行指南做回顾，从实际使用发现问题，再用旧例和反例检验修订。</desc>
+<style>text {font-family:"Microsoft YaHei","Noto Sans CJK SC","PingFang SC",sans-serif}</style>
+<defs><marker id="arrow" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse"><path d="M0 0L10 5L0 10Z" fill="context-stroke"/></marker></defs>
+<rect x="0" y="0" width="1600" height="948" rx="0" fill="#f3f7fb"/>
+<rect x="0" y="0" width="12" height="948" rx="0" fill="#152a43"/>
+<text x="64" y="82" font-size="43" font-weight="700" fill="#152a43" text-anchor="start">记忆维护指南怎样持续改进</text>
+<text x="66" y="124" font-size="22" font-weight="400" fill="#465b73" text-anchor="start">爱莉用现行指南做回顾，从实际使用发现问题，再用旧例和反例检验修订。</text>
+<polyline points="64,892 1536,892" fill="none" stroke="#cbd9e7" stroke-width="2.35" stroke-linecap="round" stroke-linejoin="round"/>
+<text x="65" y="924" font-size="16" font-weight="400" fill="#465b73" text-anchor="start">示例是虚构的设计场景。技能文字由爱莉维护，访问、提交与启用边界由宿主执行。</text>
+<rect x="64" y="168" width="1472" height="104" rx="16" fill="#fbf1e2" stroke="#cbd9e7" stroke-width="1.5"/>
+<text x="89" y="206" font-size="24" font-weight="700" fill="#82501b" text-anchor="start">示例 · 一次有特定语境的表达，被条目写成了长期偏好</text>
+<text x="89" y="240" font-size="19" font-weight="400" fill="#465b73" text-anchor="start">修订设想是先保留发生时的语境和不确定性，需要时留在笔记里，由爱莉判断何时形成长期理解。</text>
+<rect x="64" y="327" width="332" height="197" rx="16" fill="#e7f3ef" stroke="#cbd9e7" stroke-width="1.5"/>
+<text x="85" y="363" font-size="24" font-weight="700" fill="#11665b" text-anchor="start">使用指南 v1</text>
+<text x="85" y="397" font-size="18" font-weight="400" fill="#465b73" text-anchor="start">记忆 Session 按当前版本回顾</text>
+<text x="85" y="426" font-size="18" font-weight="400" fill="#465b73" text-anchor="start">记下遇到的反例和所用版本</text>
+<text x="85" y="455" font-size="18" font-weight="400" fill="#465b73" text-anchor="start">需要时提出修订</text>
+<rect x="444" y="327" width="332" height="197" rx="16" fill="#eaf1fb" stroke="#cbd9e7" stroke-width="1.5"/>
+<text x="465" y="363" font-size="24" font-weight="700" fill="#2357a1" text-anchor="start">形成候选修订</text>
+<text x="465" y="397" font-size="18" font-weight="400" fill="#465b73" text-anchor="start">说清要改善的行为及依据</text>
+<text x="465" y="426" font-size="18" font-weight="400" fill="#465b73" text-anchor="start">保存候选、基准版本和差异</text>
+<text x="465" y="455" font-size="18" font-weight="400" fill="#465b73" text-anchor="start">候选区位于 DSH 扫描范围之外</text>
+<rect x="824" y="327" width="332" height="197" rx="16" fill="#efedf7" stroke="#cbd9e7" stroke-width="1.5"/>
+<text x="845" y="363" font-size="24" font-weight="700" fill="#5f4986" text-anchor="start">学习 Session 复验</text>
+<text x="845" y="397" font-size="18" font-weight="400" fill="#465b73" text-anchor="start">在隔离副本重放原例与反例</text>
+<text x="845" y="426" font-size="18" font-weight="400" fill="#465b73" text-anchor="start">比较新旧指南的结果</text>
+<text x="845" y="455" font-size="18" font-weight="400" fill="#465b73" text-anchor="start">检查来源、修订和可见性</text>
+<rect x="1204" y="327" width="332" height="197" rx="16" fill="#efedf7" stroke="#cbd9e7" stroke-width="1.5"/>
+<text x="1225" y="363" font-size="24" font-weight="700" fill="#5f4986" text-anchor="start">采用 v2</text>
+<text x="1225" y="397" font-size="18" font-weight="400" fill="#465b73" text-anchor="start">爱莉明确采用通过验证的候选</text>
+<text x="1225" y="426" font-size="18" font-weight="400" fill="#465b73" text-anchor="start">宿主发布到生效目录</text>
+<text x="1225" y="455" font-size="18" font-weight="400" fill="#465b73" text-anchor="start">下一次整理用 v2，可退回 v1</text>
+<polyline points="399,424 441,424" fill="none" stroke="#11665b" stroke-width="2.35" stroke-linecap="round" stroke-linejoin="round" marker-end="url(#arrow)"/>
+<polyline points="779,424 821,424" fill="none" stroke="#2357a1" stroke-width="2.35" stroke-linecap="round" stroke-linejoin="round" marker-end="url(#arrow)"/>
+<polyline points="1159,424 1201,424" fill="none" stroke="#5f4986" stroke-width="2.35" stroke-linecap="round" stroke-linejoin="round" marker-end="url(#arrow)"/>
+<rect x="824" y="580" width="332" height="113" rx="16" fill="#fbf1e2" stroke="#cbd9e7" stroke-width="1.5"/>
+<text x="845" y="616" font-size="24" font-weight="700" fill="#82501b" text-anchor="start">结果还不确定</text>
+<text x="845" y="650" font-size="17" font-weight="400" fill="#465b73" text-anchor="start">记下待验证的问题，继续使用 v1</text>
+<polyline points="990,527 990,577" fill="none" stroke="#82501b" stroke-width="2.35" stroke-linecap="round" stroke-linejoin="round" marker-end="url(#arrow)" stroke-dasharray="7 6"/>
+<rect x="64" y="737" width="1472" height="113" rx="16" fill="#eaf1fb" stroke="#cbd9e7" stroke-width="1.5"/>
+<text x="89" y="775" font-size="24" font-weight="700" fill="#2357a1" text-anchor="start">宿主执行的边界</text>
+<text x="89" y="810" font-size="20" font-weight="400" fill="#465b73" text-anchor="start">固定读写范围、来源与可见性校验、版本提交和发布。修改 Skill 只能改变工作方法。</text>
+</svg>

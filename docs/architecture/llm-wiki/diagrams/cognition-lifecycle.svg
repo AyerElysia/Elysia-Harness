@@ -1,0 +1,68 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="1600" height="999" viewBox="0 0 1600 999" role="img" aria-labelledby="title desc">
+<title id="title">一条记忆如何形成、使用与修订</title><desc id="desc">示例采用一段虚构对话。它展示爱莉怎样把一次经历写成有适用范围、可以改变的理解。</desc>
+<style>text {font-family:"Microsoft YaHei","Noto Sans CJK SC","PingFang SC",sans-serif}</style>
+<defs><marker id="arrow" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse"><path d="M0 0L10 5L0 10Z" fill="context-stroke"/></marker></defs>
+<rect x="0" y="0" width="1600" height="999" rx="0" fill="#f3f7fb"/>
+<rect x="0" y="0" width="12" height="999" rx="0" fill="#152a43"/>
+<text x="64" y="82" font-size="43" font-weight="700" fill="#152a43" text-anchor="start">一条记忆如何形成、使用与修订</text>
+<text x="66" y="124" font-size="22" font-weight="400" fill="#465b73" text-anchor="start">示例采用一段虚构对话。它展示爱莉怎样把一次经历写成有适用范围、可以改变的理解。</text>
+<polyline points="64,943 1536,943" fill="none" stroke="#cbd9e7" stroke-width="2.35" stroke-linecap="round" stroke-linejoin="round"/>
+<text x="65" y="975" font-size="16" font-weight="400" fill="#465b73" text-anchor="start">示例只说明流程。她决定页面的实际措辞、组织方式和是否留下记录。</text>
+<rect x="64" y="172" width="468" height="530" rx="16" fill="#e7f3ef" stroke="#cbd9e7" stroke-width="1.5"/>
+<text x="89" y="210" font-size="24" font-weight="700" fill="#11665b" text-anchor="start">形成 · 第一次回顾</text>
+<rect x="566" y="172" width="468" height="530" rx="16" fill="#eaf1fb" stroke="#cbd9e7" stroke-width="1.5"/>
+<text x="591" y="210" font-size="24" font-weight="700" fill="#2357a1" text-anchor="start">使用 · 另一场对话</text>
+<rect x="1068" y="172" width="468" height="530" rx="16" fill="#efedf7" stroke="#cbd9e7" stroke-width="1.5"/>
+<text x="1093" y="210" font-size="24" font-weight="700" fill="#5f4986" text-anchor="start">修订 · 发现新的适用范围</text>
+<rect x="88" y="234" width="420" height="139" rx="16" fill="#ffffff" stroke="#cbd9e7" stroke-width="1.5"/>
+<text x="109" y="270" font-size="24" font-weight="700" fill="#11665b" text-anchor="start">当时发生的事</text>
+<text x="109" y="304" font-size="18" font-weight="400" fill="#465b73" text-anchor="start">对方说「我还在想，想先讲完整。」</text>
+<text x="109" y="333" font-size="18" font-weight="400" fill="#465b73" text-anchor="start">DSH 保留这次对话的原始记录</text>
+<rect x="88" y="446" width="420" height="210" rx="16" fill="#ffffff" stroke="#cbd9e7" stroke-width="1.5"/>
+<text x="109" y="482" font-size="24" font-weight="700" fill="#11665b" text-anchor="start">她写下页面 v1</text>
+<text x="109" y="516" font-size="18" font-weight="400" fill="#465b73" text-anchor="start">「聊还没成形的想法时，我可以先听完，</text>
+<text x="109" y="545" font-size="18" font-weight="400" fill="#465b73" text-anchor="start">再问要不要一起拆解。」</text>
+<text x="109" y="574" font-size="18" font-weight="400" fill="#465b73" text-anchor="start">她写下「交流节奏」作为查阅线索</text>
+<text x="109" y="603" font-size="18" font-weight="400" fill="#465b73" text-anchor="start">入口连到页面，页面连到原始对话</text>
+<polyline points="298,376 298,443" fill="none" stroke="#11665b" stroke-width="2.35" stroke-linecap="round" stroke-linejoin="round" marker-end="url(#arrow)"/>
+<rect x="231.0" y="390" width="134" height="31" rx="7" fill="#e7f3ef"/>
+<text x="298" y="411" font-size="16" font-weight="700" fill="#11665b" text-anchor="middle">回顾后亲自写</text>
+<rect x="590" y="234" width="420" height="139" rx="16" fill="#ffffff" stroke="#cbd9e7" stroke-width="1.5"/>
+<text x="611" y="270" font-size="24" font-weight="700" fill="#2357a1" text-anchor="start">相似话题再次出现</text>
+<text x="611" y="304" font-size="18" font-weight="400" fill="#465b73" text-anchor="start">对方说「我有个想法想捋一捋。」</text>
+<text x="611" y="333" font-size="18" font-weight="400" fill="#465b73" text-anchor="start">爱莉从「交流节奏」找到 v1</text>
+<rect x="590" y="446" width="420" height="210" rx="16" fill="#ffffff" stroke="#cbd9e7" stroke-width="1.5"/>
+<text x="611" y="482" font-size="24" font-weight="700" fill="#2357a1" text-anchor="start">她结合当下选择回应</text>
+<text x="611" y="516" font-size="18" font-weight="400" fill="#465b73" text-anchor="start">「你想先讲完，还是要我一起拆？」</text>
+<text x="611" y="545" font-size="18" font-weight="400" fill="#465b73" text-anchor="start">记忆帮她记起以前怎样沟通</text>
+<text x="611" y="574" font-size="18" font-weight="400" fill="#465b73" text-anchor="start">这次要怎样回应，由当前对话决定</text>
+<polyline points="800,376 800,443" fill="none" stroke="#2357a1" stroke-width="2.35" stroke-linecap="round" stroke-linejoin="round" marker-end="url(#arrow)"/>
+<rect x="733.0" y="390" width="134" height="31" rx="7" fill="#eaf1fb"/>
+<text x="800" y="411" font-size="16" font-weight="700" fill="#2357a1" text-anchor="middle">读正文和语境</text>
+<rect x="1092" y="234" width="420" height="139" rx="16" fill="#ffffff" stroke="#cbd9e7" stroke-width="1.5"/>
+<text x="1113" y="270" font-size="24" font-weight="700" fill="#5f4986" text-anchor="start">新对话补充了例外</text>
+<text x="1113" y="304" font-size="18" font-weight="400" fill="#465b73" text-anchor="start">对方说「赶时间的时候，直接点问题。」</text>
+<text x="1113" y="333" font-size="18" font-weight="400" fill="#465b73" text-anchor="start">这句话也有独立的原始记录</text>
+<rect x="1092" y="446" width="420" height="210" rx="16" fill="#ffffff" stroke="#cbd9e7" stroke-width="1.5"/>
+<text x="1113" y="482" font-size="24" font-weight="700" fill="#5f4986" text-anchor="start">她修订为页面 v2</text>
+<text x="1113" y="516" font-size="18" font-weight="400" fill="#465b73" text-anchor="start">「探索想法时先听完。对方明确说赶时间，</text>
+<text x="1113" y="545" font-size="18" font-weight="400" fill="#465b73" text-anchor="start">我就直接指出需要解决的问题。」</text>
+<text x="1113" y="574" font-size="18" font-weight="400" fill="#465b73" text-anchor="start">后续从同一入口读到新版</text>
+<text x="1113" y="603" font-size="18" font-weight="400" fill="#465b73" text-anchor="start">她仍能回看 v1 及其形成依据</text>
+<polyline points="1302,376 1302,443" fill="none" stroke="#5f4986" stroke-width="2.35" stroke-linecap="round" stroke-linejoin="round" marker-end="url(#arrow)"/>
+<rect x="1235.0" y="390" width="134" height="31" rx="7" fill="#efedf7"/>
+<text x="1302" y="411" font-size="16" font-weight="700" fill="#5f4986" text-anchor="middle">比较旧页与新话</text>
+<polyline points="535,543 563,543" fill="none" stroke="#2357a1" stroke-width="2.35" stroke-linecap="round" stroke-linejoin="round" marker-end="url(#arrow)"/>
+<polyline points="1037,543 1065,543" fill="none" stroke="#5f4986" stroke-width="2.35" stroke-linecap="round" stroke-linejoin="round" marker-end="url(#arrow)"/>
+<rect x="64" y="746" width="1472" height="159" rx="16" fill="#fbf1e2" stroke="#cbd9e7" stroke-width="1.5"/>
+<text x="89" y="784" font-size="24" font-weight="700" fill="#82501b" text-anchor="start">同一页保留可追溯的版本</text>
+<rect x="89" y="797" width="644" height="86" rx="16" fill="#ffffff" stroke="#cbd9e7" stroke-width="1.5"/>
+<text x="110" y="833" font-size="24" font-weight="700" fill="#82501b" text-anchor="start">v1 · 先听完</text>
+<text x="110" y="867" font-size="16" font-weight="400" fill="#465b73" text-anchor="start">依据第一次对话，保留为历史版本</text>
+<rect x="867" y="797" width="644" height="86" rx="16" fill="#ffffff" stroke="#cbd9e7" stroke-width="1.5"/>
+<text x="888" y="833" font-size="24" font-weight="700" fill="#82501b" text-anchor="start">v2 · 区分探索与赶时间</text>
+<text x="888" y="867" font-size="16" font-weight="400" fill="#465b73" text-anchor="start">纳入两次对话的依据，成为当前版本</text>
+<polyline points="736,839 864,839" fill="none" stroke="#82501b" stroke-width="2.35" stroke-linecap="round" stroke-linejoin="round" marker-end="url(#arrow)"/>
+<rect x="768.0" y="819" width="64" height="31" rx="7" fill="#fbf1e2"/>
+<text x="800" y="840" font-size="16" font-weight="700" fill="#82501b" text-anchor="middle">修订</text>
+</svg>

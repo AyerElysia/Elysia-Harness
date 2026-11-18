@@ -229,6 +229,8 @@ Router 在自己的 Agent 作用域挂载文件、图像、网络、Skills、She
 
 ## 8. 记忆
 
+爱莉的统一记忆 Wiki、学习 Session 与技能维护指南仍处于设计阶段。[设计记录与图稿](architecture/llm-wiki/README.zh.md)
+
 本仓库尚未迁入 Elysium 的生命记忆、学习与检索闭环；主意识耐久 session 历史和提示词中的 `MEMORY.md` 读取不等于这些子系统已经实现。
 
 DSH 的 `packages/` 里**没有任何 memory 包**。现状可用的只有：

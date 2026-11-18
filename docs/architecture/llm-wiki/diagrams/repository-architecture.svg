@@ -1,0 +1,61 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="1600" height="986" viewBox="0 0 1600 986" role="img" aria-labelledby="title desc">
+<title id="title">nashsu/llm_wiki 的架构</title><desc id="desc">桌面应用在本地维护 Markdown 项目。编辑界面、剪藏扩展和外部 Agent 通过不同入口使用它。</desc>
+<style>text {font-family:"Microsoft YaHei","Noto Sans CJK SC","PingFang SC",sans-serif}</style>
+<defs><marker id="arrow" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse"><path d="M0 0L10 5L0 10Z" fill="context-stroke"/></marker></defs>
+<rect x="0" y="0" width="1600" height="986" rx="0" fill="#f3f7fb"/>
+<rect x="0" y="0" width="12" height="986" rx="0" fill="#152a43"/>
+<text x="64" y="82" font-size="43" font-weight="700" fill="#152a43" text-anchor="start">nashsu/llm_wiki 的架构</text>
+<text x="66" y="124" font-size="22" font-weight="400" fill="#465b73" text-anchor="start">桌面应用在本地维护 Markdown 项目。编辑界面、剪藏扩展和外部 Agent 通过不同入口使用它。</text>
+<polyline points="64,930 1536,930" fill="none" stroke="#cbd9e7" stroke-width="2.35" stroke-linecap="round" stroke-linejoin="round"/>
+<text x="65" y="962" font-size="16" font-weight="400" fill="#465b73" text-anchor="start">依据 nashsu/llm_wiki 提交 e08cfce · 入口和模块已核对 README、Ingest 与 API/MCP 源码。</text>
+<rect x="500" y="186" width="678" height="542" rx="16" fill="#eaf1fb" stroke="#cbd9e7" stroke-width="1.5"/>
+<text x="525" y="224" font-size="24" font-weight="700" fill="#2357a1" text-anchor="start">桌面应用  ·  Tauri v2</text>
+<rect x="526" y="247" width="626" height="185" rx="16" fill="#ffffff" stroke="#cbd9e7" stroke-width="1.5"/>
+<text x="547" y="283" font-size="24" font-weight="700" fill="#2357a1" text-anchor="start">React / TypeScript 应用层</text>
+<text x="547" y="317" font-size="19" font-weight="400" fill="#465b73" text-anchor="start">Wiki 浏览、编辑、检索、图谱和设置</text>
+<text x="547" y="346" font-size="19" font-weight="400" fill="#465b73" text-anchor="start">持久导入队列，先分析资料，再生成或更新页面</text>
+<text x="547" y="375" font-size="19" font-weight="400" fill="#465b73" text-anchor="start">Lint 检查与 Review 待审项</text>
+<rect x="526" y="505" width="626" height="194" rx="16" fill="#ffffff" stroke="#cbd9e7" stroke-width="1.5"/>
+<text x="547" y="541" font-size="24" font-weight="700" fill="#5f4986" text-anchor="start">Tauri / Rust 宿主</text>
+<text x="547" y="575" font-size="19" font-weight="400" fill="#465b73" text-anchor="start">文档解析、文件读写与同步、搜索与向量索引</text>
+<text x="547" y="604" font-size="19" font-weight="400" fill="#465b73" text-anchor="start">内置 Chat Agent 可调用检索等工具</text>
+<text x="547" y="633" font-size="19" font-weight="400" fill="#465b73" text-anchor="start">承载本地剪藏入口与 HTTP API</text>
+<polyline points="834,436 834,501" fill="none" stroke="#2357a1" stroke-width="2.35" stroke-linecap="round" stroke-linejoin="round" marker-start="url(#arrow)" marker-end="url(#arrow)"/>
+<rect x="749.0" y="449" width="170" height="31" rx="7" fill="#eaf1fb"/>
+<text x="834" y="470" font-size="16" font-weight="700" fill="#2357a1" text-anchor="middle">Tauri 命令与事件</text>
+<rect x="64" y="249" width="347" height="116" rx="16" fill="#ffffff" stroke="#cbd9e7" stroke-width="1.5"/>
+<text x="85" y="285" font-size="24" font-weight="700" fill="#2357a1" text-anchor="start">桌面用户</text>
+<text x="85" y="319" font-size="19" font-weight="400" fill="#465b73" text-anchor="start">导入、浏览、问答、审核</text>
+<polyline points="414,307 523,307" fill="none" stroke="#2357a1" stroke-width="2.35" stroke-linecap="round" stroke-linejoin="round" marker-end="url(#arrow)"/>
+<rect x="64" y="421" width="347" height="116" rx="16" fill="#ffffff" stroke="#cbd9e7" stroke-width="1.5"/>
+<text x="85" y="457" font-size="24" font-weight="700" fill="#11665b" text-anchor="start">浏览器剪藏扩展</text>
+<text x="85" y="491" font-size="19" font-weight="400" fill="#465b73" text-anchor="start">本地剪藏入口 · 19827</text>
+<polyline points="414,479 453,479 453,555 523,555" fill="none" stroke="#11665b" stroke-width="2.35" stroke-linecap="round" stroke-linejoin="round" marker-end="url(#arrow)"/>
+<rect x="64" y="592" width="347" height="135" rx="16" fill="#ffffff" stroke="#cbd9e7" stroke-width="1.5"/>
+<text x="85" y="628" font-size="24" font-weight="700" fill="#5f4986" text-anchor="start">外部 Agent · MCP</text>
+<text x="85" y="662" font-size="19" font-weight="400" fill="#465b73" text-anchor="start">MCP 转发给应用内 HTTP API</text>
+<text x="85" y="691" font-size="19" font-weight="400" fill="#465b73" text-anchor="start">默认本机回环 · 19828 · 令牌鉴权</text>
+<polyline points="414,645 523,645" fill="none" stroke="#5f4986" stroke-width="2.35" stroke-linecap="round" stroke-linejoin="round" marker-start="url(#arrow)" marker-end="url(#arrow)"/>
+<rect x="1230" y="186" width="306" height="542" rx="16" fill="#e7f3ef" stroke="#cbd9e7" stroke-width="1.5"/>
+<text x="1255" y="224" font-size="24" font-weight="700" fill="#11665b" text-anchor="start">本地项目目录</text>
+<rect x="1249" y="247" width="268" height="119" rx="16" fill="#ffffff" stroke="#cbd9e7" stroke-width="1.5"/>
+<text x="1270" y="283" font-size="24" font-weight="700" fill="#11665b" text-anchor="start">原文与规则</text>
+<text x="1270" y="317" font-size="17" font-weight="400" fill="#465b73" text-anchor="start">raw/sources/</text>
+<text x="1270" y="342" font-size="17" font-weight="400" fill="#465b73" text-anchor="start">purpose.md · schema.md</text>
+<rect x="1249" y="381" width="268" height="133" rx="16" fill="#ffffff" stroke="#cbd9e7" stroke-width="1.5"/>
+<text x="1270" y="417" font-size="24" font-weight="700" fill="#11665b" text-anchor="start">Markdown Wiki</text>
+<text x="1270" y="451" font-size="17" font-weight="400" fill="#465b73" text-anchor="start">主题、实体与来源页</text>
+<text x="1270" y="476" font-size="17" font-weight="400" fill="#465b73" text-anchor="start">索引、日志、wikilink</text>
+<rect x="1249" y="529" width="268" height="170" rx="16" fill="#ffffff" stroke="#cbd9e7" stroke-width="1.5"/>
+<text x="1270" y="565" font-size="24" font-weight="700" fill="#11665b" text-anchor="start">应用状态与搜索</text>
+<text x="1270" y="599" font-size="17" font-weight="400" fill="#465b73" text-anchor="start">.llm-wiki/ 设置及待审项</text>
+<text x="1270" y="625" font-size="17" font-weight="400" fill="#465b73" text-anchor="start">关键词检索及可选语义检索</text>
+<text x="1270" y="651" font-size="17" font-weight="400" fill="#465b73" text-anchor="start">LanceDB 存储可选向量索引</text>
+<polyline points="1155,608 1227,608" fill="none" stroke="#11665b" stroke-width="2.35" stroke-linecap="round" stroke-linejoin="round" marker-start="url(#arrow)" marker-end="url(#arrow)"/>
+<rect x="1157.0" y="555" width="68" height="31" rx="7" fill="#f3f7fb"/>
+<text x="1191" y="576" font-size="16" font-weight="700" fill="#11665b" text-anchor="middle">读写</text>
+<polyline points="834,732 834,787" fill="none" stroke="#5f4986" stroke-width="2.35" stroke-linecap="round" stroke-linejoin="round" marker-start="url(#arrow)" marker-end="url(#arrow)"/>
+<rect x="500" y="791" width="678" height="110" rx="16" fill="#efedf7" stroke="#cbd9e7" stroke-width="1.5"/>
+<text x="521" y="827" font-size="24" font-weight="700" fill="#5f4986" text-anchor="start">配置的模型提供方</text>
+<text x="521" y="861" font-size="19" font-weight="400" fill="#465b73" text-anchor="start">导入与问答用 LLM，启用语义检索时使用 Embedding。</text>
+</svg>

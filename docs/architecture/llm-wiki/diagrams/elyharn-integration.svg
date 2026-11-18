@@ -1,0 +1,67 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="1600" height="1040" viewBox="0 0 1600 1040" role="img" aria-labelledby="title desc">
+<title id="title">给爱莉接入 LLM Wiki</title><desc id="desc">定位为可查证的工程与外部知识库。爱莉按需查阅，并沿引用核对结论。</desc>
+<style>text {font-family:"Microsoft YaHei","Noto Sans CJK SC","PingFang SC",sans-serif}</style>
+<defs><marker id="arrow" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse"><path d="M0 0L10 5L0 10Z" fill="context-stroke"/></marker></defs>
+<rect x="0" y="0" width="1600" height="1040" rx="0" fill="#f3f7fb"/>
+<rect x="0" y="0" width="12" height="1040" rx="0" fill="#152a43"/>
+<text x="64" y="82" font-size="43" font-weight="700" fill="#152a43" text-anchor="start">给爱莉接入 LLM Wiki</text>
+<text x="66" y="124" font-size="22" font-weight="400" fill="#465b73" text-anchor="start">定位为可查证的工程与外部知识库。爱莉按需查阅，并沿引用核对结论。</text>
+<polyline points="64,984 1536,984" fill="none" stroke="#cbd9e7" stroke-width="2.35" stroke-linecap="round" stroke-linejoin="round"/>
+<text x="65" y="1016" font-size="16" font-weight="400" fill="#465b73" text-anchor="start">建议方案 · 结合 Spark 上的 ElyHarn 记忆与任务派发设计。</text>
+<rect x="64" y="186" width="478" height="533" rx="16" fill="#e7f3ef" stroke="#cbd9e7" stroke-width="1.5"/>
+<text x="89" y="224" font-size="24" font-weight="700" fill="#11665b" text-anchor="start">整理与发布  ·  首版</text>
+<rect x="90" y="251" width="426" height="152" rx="16" fill="#ffffff" stroke="#cbd9e7" stroke-width="1.5"/>
+<text x="111" y="287" font-size="24" font-weight="700" fill="#11665b" text-anchor="start">精选的工程资料</text>
+<text x="111" y="321" font-size="19" font-weight="400" fill="#465b73" text-anchor="start">ElyHarn 架构、运行手册、公共技术资料</text>
+<text x="111" y="350" font-size="19" font-weight="400" fill="#465b73" text-anchor="start">记录来源身份、版本和资料状态</text>
+<rect x="90" y="491" width="426" height="168" rx="16" fill="#ffffff" stroke="#cbd9e7" stroke-width="1.5"/>
+<text x="111" y="527" font-size="24" font-weight="700" fill="#11665b" text-anchor="start">桌面 LLM Wiki</text>
+<text x="111" y="561" font-size="19" font-weight="400" fill="#465b73" text-anchor="start">按受控规则编译 Wiki 页面</text>
+<text x="111" y="590" font-size="19" font-weight="400" fill="#465b73" text-anchor="start">人工审核引用、结论和发布范围</text>
+<text x="111" y="619" font-size="19" font-weight="400" fill="#465b73" text-anchor="start">生成可核对的 Markdown 版本</text>
+<polyline points="303,407 303,488" fill="none" stroke="#11665b" stroke-width="2.35" stroke-linecap="round" stroke-linejoin="round" marker-end="url(#arrow)"/>
+<rect x="238.5" y="431" width="129" height="31" rx="7" fill="#e7f3ef"/>
+<text x="303" y="452" font-size="16" font-weight="700" fill="#11665b" text-anchor="middle">显式收录</text>
+<rect x="644" y="186" width="892" height="533" rx="16" fill="#eaf1fb" stroke="#cbd9e7" stroke-width="1.5"/>
+<text x="669" y="224" font-size="24" font-weight="700" fill="#2357a1" text-anchor="start">Spark  ·  ElyHarn</text>
+<rect x="670" y="251" width="351" height="167" rx="16" fill="#ffffff" stroke="#cbd9e7" stroke-width="1.5"/>
+<text x="691" y="287" font-size="24" font-weight="700" fill="#11665b" text-anchor="start">已发布的只读 Wiki</text>
+<text x="691" y="321" font-size="19" font-weight="400" fill="#465b73" text-anchor="start">页面与可引用的原文片段</text>
+<text x="691" y="350" font-size="19" font-weight="400" fill="#465b73" text-anchor="start">版本、发布清单和来源引用</text>
+<text x="691" y="379" font-size="19" font-weight="400" fill="#465b73" text-anchor="start">按版本切换或撤回</text>
+<rect x="1104" y="251" width="405" height="167" rx="16" fill="#ffffff" stroke="#cbd9e7" stroke-width="1.5"/>
+<text x="1125" y="287" font-size="24" font-weight="700" fill="#2357a1" text-anchor="start">DSH 宿主查阅入口</text>
+<text x="1125" y="321" font-size="19" font-weight="400" fill="#465b73" text-anchor="start">宿主固定知识库和可见范围</text>
+<text x="1125" y="350" font-size="19" font-weight="400" fill="#465b73" text-anchor="start">搜索、读取，返回页面及出处</text>
+<text x="1125" y="379" font-size="19" font-weight="400" fill="#465b73" text-anchor="start">先复用受限的原生文件工具</text>
+<polyline points="1024,328 1101,328" fill="none" stroke="#2357a1" stroke-width="2.35" stroke-linecap="round" stroke-linejoin="round" marker-end="url(#arrow)"/>
+<rect x="1104" y="495" width="405" height="164" rx="16" fill="#ffffff" stroke="#cbd9e7" stroke-width="1.5"/>
+<text x="1125" y="531" font-size="24" font-weight="700" fill="#2357a1" text-anchor="start">爱莉 · 主意识</text>
+<text x="1125" y="565" font-size="19" font-weight="400" fill="#465b73" text-anchor="start">遇到工程问题时按需查 Wiki</text>
+<text x="1125" y="594" font-size="19" font-weight="400" fill="#465b73" text-anchor="start">结合当前问题回答，注明文档状态</text>
+<text x="1125" y="623" font-size="19" font-weight="400" fill="#465b73" text-anchor="start">必要时沿引用核对原文</text>
+<polyline points="1304,422 1304,492" fill="none" stroke="#2357a1" stroke-width="2.35" stroke-linecap="round" stroke-linejoin="round" marker-start="url(#arrow)" marker-end="url(#arrow)"/>
+<rect x="1239.0" y="443" width="130" height="31" rx="7" fill="#eaf1fb"/>
+<text x="1304" y="464" font-size="16" font-weight="700" fill="#2357a1" text-anchor="middle">按需查阅</text>
+<rect x="670" y="495" width="351" height="164" rx="16" fill="#efedf7" stroke="#cbd9e7" stroke-width="1.5"/>
+<text x="691" y="531" font-size="24" font-weight="700" fill="#5f4986" text-anchor="start">现有个人记忆路径</text>
+<text x="691" y="565" font-size="19" font-weight="400" fill="#465b73" text-anchor="start">DSH 历史保留会话与工具活动</text>
+<text x="691" y="594" font-size="19" font-weight="400" fill="#465b73" text-anchor="start">记忆 Session 自主写日记和笔记</text>
+<text x="691" y="623" font-size="19" font-weight="400" fill="#465b73" text-anchor="start">沿用现有授权与存储</text>
+<polyline points="519,573 588,573 588,331 667,331" fill="none" stroke="#11665b" stroke-width="2.35" stroke-linecap="round" stroke-linejoin="round" marker-end="url(#arrow)"/>
+<rect x="526.0" y="425" width="124" height="31" rx="7" fill="#f3f7fb"/>
+<text x="588" y="446" font-size="16" font-weight="700" fill="#11665b" text-anchor="middle">发布只读快照</text>
+<rect x="64" y="764" width="1472" height="189" rx="16" fill="#efedf7" stroke="#cbd9e7" stroke-width="1.5"/>
+<text x="89" y="802" font-size="24" font-weight="700" fill="#5f4986" text-anchor="start">试用确认后，再评估让爱莉参与整理</text>
+<rect x="89" y="817" width="398" height="112" rx="16" fill="#ffffff" stroke="#cbd9e7" stroke-width="1.5"/>
+<text x="110" y="853" font-size="24" font-weight="700" fill="#5f4986" text-anchor="start">明确的收录或更新请求</text>
+<text x="110" y="887" font-size="19" font-weight="400" fill="#465b73" text-anchor="start">发起一次获准的知识整理</text>
+<rect x="545" y="817" width="447" height="112" rx="16" fill="#ffffff" stroke="#cbd9e7" stroke-width="1.5"/>
+<text x="566" y="853" font-size="24" font-weight="700" fill="#5f4986" text-anchor="start">Router → Task / Mandate</text>
+<text x="566" y="887" font-size="19" font-weight="400" fill="#465b73" text-anchor="start">复用任务派发，固定资料与写入权限</text>
+<rect x="1050" y="817" width="461" height="112" rx="16" fill="#ffffff" stroke="#cbd9e7" stroke-width="1.5"/>
+<text x="1071" y="853" font-size="24" font-weight="700" fill="#5f4986" text-anchor="start">知识整理 → 修订与发布</text>
+<text x="1071" y="887" font-size="19" font-weight="400" fill="#465b73" text-anchor="start">草稿校验通过后，由单一入口发布</text>
+<polyline points="490,872 542,872" fill="none" stroke="#5f4986" stroke-width="2.35" stroke-linecap="round" stroke-linejoin="round" marker-end="url(#arrow)"/>
+<polyline points="995,872 1047,872" fill="none" stroke="#5f4986" stroke-width="2.35" stroke-linecap="round" stroke-linejoin="round" marker-end="url(#arrow)"/>
+</svg>

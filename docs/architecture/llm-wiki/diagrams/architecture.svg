@@ -1,0 +1,56 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="1600" height="1014" viewBox="0 0 1600 1014" role="img" aria-labelledby="title desc">
+<title id="title">爱莉的记忆与学习 · 总体架构</title><desc id="desc">记忆 Session 维护统一 Wiki。学习 Session 把可以复用的方法整理成 Skill，并检验修订效果。</desc>
+<style>text {font-family:"Microsoft YaHei","Noto Sans CJK SC","PingFang SC",sans-serif}</style>
+<defs><marker id="arrow" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse"><path d="M0 0L10 5L0 10Z" fill="context-stroke"/></marker></defs>
+<rect x="0" y="0" width="1600" height="1014" rx="0" fill="#f3f7fb"/>
+<rect x="0" y="0" width="12" height="1014" rx="0" fill="#152a43"/>
+<text x="64" y="82" font-size="43" font-weight="700" fill="#152a43" text-anchor="start">爱莉的记忆与学习 · 总体架构</text>
+<text x="66" y="124" font-size="22" font-weight="400" fill="#465b73" text-anchor="start">记忆 Session 维护统一 Wiki。学习 Session 把可以复用的方法整理成 Skill，并检验修订效果。</text>
+<polyline points="64,958 1536,958" fill="none" stroke="#cbd9e7" stroke-width="2.35" stroke-linecap="round" stroke-linejoin="round"/>
+<text x="65" y="990" font-size="16" font-weight="400" fill="#465b73" text-anchor="start">ElyHarn 建议架构 · 两个 Session 属于同一个爱莉，分别维护记忆正文和可调用的工作方法。</text>
+<rect x="64" y="165" width="1472" height="296" rx="16" fill="#e7f3ef" stroke="#cbd9e7" stroke-width="1.5"/>
+<text x="89" y="203" font-size="24" font-weight="700" fill="#11665b" text-anchor="start">记忆 · 发生过什么，我现在怎样理解</text>
+<rect x="64" y="578" width="1472" height="293" rx="16" fill="#efedf7" stroke="#cbd9e7" stroke-width="1.5"/>
+<text x="89" y="616" font-size="24" font-weight="700" fill="#5f4986" text-anchor="start">学习 · 下次遇到类似任务，我可以怎样做</text>
+<rect x="88" y="229" width="352" height="195" rx="16" fill="#ffffff" stroke="#cbd9e7" stroke-width="1.5"/>
+<text x="109" y="265" font-size="24" font-weight="700" fill="#11665b" text-anchor="start">经历与回顾机会</text>
+<text x="109" y="299" font-size="18" font-weight="400" fill="#465b73" text-anchor="start">DSH 历史保留对话、活动和结果</text>
+<text x="109" y="328" font-size="18" font-weight="400" fill="#465b73" text-anchor="start">她主动回顾，或收到明确请求</text>
+<text x="109" y="357" font-size="18" font-weight="400" fill="#465b73" text-anchor="start">按授权引用原始经历</text>
+<rect x="492" y="229" width="457" height="195" rx="16" fill="#ffffff" stroke="#cbd9e7" stroke-width="1.5"/>
+<text x="513" y="265" font-size="24" font-weight="700" fill="#11665b" text-anchor="start">记忆 Session</text>
+<text x="513" y="299" font-size="19" font-weight="400" fill="#465b73" text-anchor="start">记录日记、随手笔记和当前理解</text>
+<text x="513" y="328" font-size="19" font-weight="400" fill="#465b73" text-anchor="start">建立短入口和关联，必要时修订旧页</text>
+<text x="513" y="357" font-size="19" font-weight="400" fill="#465b73" text-anchor="start">给维护指南留下可复核的改进提案</text>
+<rect x="1001" y="229" width="510" height="195" rx="16" fill="#ffffff" stroke="#cbd9e7" stroke-width="1.5"/>
+<text x="1022" y="265" font-size="24" font-weight="700" fill="#11665b" text-anchor="start">LLM Wiki · 统一记忆系统</text>
+<text x="1022" y="299" font-size="19" font-weight="400" fill="#465b73" text-anchor="start">日记、笔记、主题页、短索引共用存储</text>
+<text x="1022" y="328" font-size="19" font-weight="400" fill="#465b73" text-anchor="start">正文保留各自的语境、出处与修订历史</text>
+<text x="1022" y="357" font-size="19" font-weight="400" fill="#465b73" text-anchor="start">主意识按需回忆，沿引用回到原始活动</text>
+<polyline points="443,328 489,328" fill="none" stroke="#11665b" stroke-width="2.35" stroke-linecap="round" stroke-linejoin="round" marker-end="url(#arrow)"/>
+<polyline points="952,328 998,328" fill="none" stroke="#11665b" stroke-width="2.35" stroke-linecap="round" stroke-linejoin="round" marker-end="url(#arrow)"/>
+<rect x="88" y="642" width="352" height="196" rx="16" fill="#ffffff" stroke="#cbd9e7" stroke-width="1.5"/>
+<text x="109" y="678" font-size="24" font-weight="700" fill="#5f4986" text-anchor="start">真实使用与反馈</text>
+<text x="109" y="712" font-size="18" font-weight="400" fill="#465b73" text-anchor="start">任务执行、用户反馈和反例</text>
+<text x="109" y="741" font-size="18" font-weight="400" fill="#465b73" text-anchor="start">Wiki 里值得复用的做法</text>
+<text x="109" y="770" font-size="18" font-weight="400" fill="#465b73" text-anchor="start">上次使用的 Skill 与实际结果</text>
+<rect x="492" y="642" width="457" height="196" rx="16" fill="#ffffff" stroke="#cbd9e7" stroke-width="1.5"/>
+<text x="513" y="678" font-size="24" font-weight="700" fill="#5f4986" text-anchor="start">学习 Session</text>
+<text x="513" y="712" font-size="19" font-weight="400" fill="#465b73" text-anchor="start">选择新建、更新、合并或退役 Skill</text>
+<text x="513" y="741" font-size="19" font-weight="400" fill="#465b73" text-anchor="start">用正例和反例验证候选版本</text>
+<text x="513" y="770" font-size="19" font-weight="400" fill="#465b73" text-anchor="start">由爱莉明确决定是否采用</text>
+<rect x="1001" y="642" width="510" height="196" rx="16" fill="#ffffff" stroke="#cbd9e7" stroke-width="1.5"/>
+<text x="1022" y="678" font-size="24" font-weight="700" fill="#5f4986" text-anchor="start">Skills 库 · 可加载的方法</text>
+<text x="1022" y="712" font-size="19" font-weight="400" fill="#465b73" text-anchor="start">用 DSH 原生机制发现并按需加载生效版</text>
+<text x="1022" y="741" font-size="19" font-weight="400" fill="#465b73" text-anchor="start">记忆维护指南及其他经过验证的做法</text>
+<text x="1022" y="770" font-size="19" font-weight="400" fill="#465b73" text-anchor="start">版本关联验证记录与当时的使用结果</text>
+<polyline points="443,741 489,741" fill="none" stroke="#5f4986" stroke-width="2.35" stroke-linecap="round" stroke-linejoin="round" marker-end="url(#arrow)"/>
+<polyline points="952,741 998,741" fill="none" stroke="#5f4986" stroke-width="2.35" stroke-linecap="round" stroke-linejoin="round" marker-end="url(#arrow)"/>
+<polyline points="611,427 611,639" fill="none" stroke="#11665b" stroke-width="2.35" stroke-linecap="round" stroke-linejoin="round" marker-end="url(#arrow)" stroke-dasharray="7 6"/>
+<rect x="517.5" y="494" width="187" height="31" rx="7" fill="#f3f7fb"/>
+<text x="611" y="515" font-size="16" font-weight="700" fill="#11665b" text-anchor="middle">提出维护指南修订</text>
+<polyline points="1256,639 1256,514 838,514 838,427" fill="none" stroke="#5f4986" stroke-width="2.35" stroke-linecap="round" stroke-linejoin="round" marker-end="url(#arrow)"/>
+<rect x="960.5" y="494" width="207" height="31" rx="7" fill="#f3f7fb"/>
+<text x="1064" y="515" font-size="16" font-weight="700" fill="#5f4986" text-anchor="middle">下次整理加载新版指南</text>
+<text x="89" y="921" font-size="20" font-weight="400" fill="#465b73" text-anchor="start">普通日记和笔记由记忆 Session 直接维护。可复用的做法才进入学习和验证。</text>
+</svg>
