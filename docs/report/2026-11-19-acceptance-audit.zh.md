@@ -29,7 +29,7 @@
 | `dsh-livestream` | 41/44、327 过 / 2 红 / 6 跳过 | 38/44、322/329 | **B** | 安全边界扎实；2 例真红（Windows 路径/cookie 源） |
 | `voice-call` | 11/15、159/177（18 红） | 8/15、123/139 | **B** | 已 `disabled`，但 18 例真红 + 与 gemini 代码耦合 |
 | `gemini-cascade` | 7/7、31/31 绿 | 5/7、26/30 | **C** | 唯一全绿的语音插件，但 Windows 上桌宠必然挂不上（P1） |
-| `conscious-mind` | 18/24、110/123（13 红） | 17/24、109/123 | **C** | 核心能力好，13 例真红 + guard 语义有洞 |
+| `conscious-mind` | 18/24、110/123（13 红） | 17/24、109/123 | **C** | 13 红里 **3 例是 stale 测试**（沿用上游 0.2.2 已删除的 `ToolRuntime { mode: 'native' }`，跨 commit 遗留），其余是行为/Windows 路径差异 + guard 语义有洞 |
 | `ayla-app` | 9/10、146/148（2 红） | 9/10、146/148 | **B** | 协议/重连是范本；HTTP 无超时（P1） |
 | `kook-bot` | **套件加载失败**（缺 `@deepseek-ai/cordis`） | 1/1、13/13 绿 | **B** | 入站已接 pending；超时当失败（P1） |
 | `qq-napcat` | 1 文件加载失败、2 例过 | 2/2、7/7 绿 | **C** | 入站未接 pending + 畸形帧可崩进程（P0） |
@@ -60,7 +60,9 @@
 `plugins/session-communication/src/participants.ts:17,39` 调用 `owner.session.ensureExisting()`；
 而生产侧 `subconsciousRouter.session` 是 `RouterSession`（`runtime.ts:24`），它只有 **private `ensure()`**（`router-session.ts:99`），全仓库 `ensureExisting` 只出现在本插件接口与测试 mock 里。
 
-- 运行时：`session_send(target=router)` → `TypeError` → 被 `runtime.ts` 吞成 `DELIVERY_UNKNOWN` → 按 60s 无限重试；消息存了但**永远不达**。
+- 运行时：`session_send(target=router)` → `TypeError: owner.session.ensureExisting is not a function` → 被 `runtime.ts:294-299` 吞成 `DELIVERY_UNKNOWN` → 按 60s 无限重试；消息存了但**永远不达**。
+- 该结论已用可执行方式复现（node22 `--experimental-transform-types`，导入真实 `RouterSession.prototype`）：`has ensureExisting: false`，调用即 `THROWN: TypeError`。
+- **服务器那 9 个未提交改动里也没有它**（服务器 grep 只命中 `session-communication` 自身与测试 mock），所以线上这一项同样必挂。
 - 测试：`tests/participants.spec.ts:15-21` 自己 mock 了 `ensureExisting`，所以 16/16 全绿也发现不了。
 - 同类风险：`main` 冷恢复时直接抛 `RESTORE_FAILED`（可接受），`memory` 走 `sessionController.resolveAgent` 会落到 `standard` preset（见 3.2）。
 
@@ -134,6 +136,7 @@
 - `context-inspector`：tokenizer 校验失败会在 `apply()` 抛出，连只读查看一起拖垮，已有 heuristic 回退未用。
 - `dsh-livestream`：`settings.json` 实测 0666 却存 `stageToken`；`allowedWriteActions: []` 与 `publisher=livehime` 的语义只写在文档里。
 - `voice-call`：`VoiceAgent` 缺当前 `Agent.model`（`runtime-types.ts:191-197`），tsc 11 处 TS2420/TS2345，会话不能参与模型选择/展示。
+- 跨 commit 遗留的 stale 测试：`conscious-mind` 的 3 个 `file-capabilities-integration` 用例仍在构造上游 0.2.2 已删除的 `ToolRuntime { mode: 'native' }`（源码侧已改成 `z.never`）。这类红不是本次改动引入，但会掩盖真正的回归信号。
 - `ayla-app`：设置页可把密码写进**被 git 跟踪**的 profile 补丁；`client/index.tsx:92` `Property 'secret'`（唯一与本机环境无关的 tsc 错误）。
 
 ## 四、架构文档与实现落差
