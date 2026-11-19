@@ -59,6 +59,12 @@ homes/shared/models.patch.yml
 # The example is the contract: a clone reads it to build its own real file.
 !homes/shared/models.patch.example.yml
 
+# ── Local instruction overlay ───────────────────────────────────────────────
+# A machine's private session context: DSH injects `AGENTS.local.md` (and
+# `CLAUDE.local.md`) automatically, but they must never enter history.
+**/AGENTS.local.md
+**/CLAUDE.local.md
+
 # ── Profile internals ───────────────────────────────────────────────────────
 # A profile's definition (package.json, cordis.patch.yml) is tracked: it is the
 # composition this repository exists to describe. What pnpm and the loader
