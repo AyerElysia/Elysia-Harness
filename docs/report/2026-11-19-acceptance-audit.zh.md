@@ -75,7 +75,11 @@
 4. DSH_HOME=<临时 home> node24 node_modules/tsx/dist/cli.mjs apps/cli/src/bin.ts --profile web --no-open --port 3417
 ```
 
-实测证据：`http://127.0.0.1:3417` 打开正常；新建会话 → 输入「本地部署验收：请只回复四个字」→ 模型真实回复「**验收通过**」，1 轮 1 步 41 tok/s、11.7K tok；request/header 工具表 **19 个**：`edit glob grep pass read read_image schedule_* send_text send_voice session_list session_read session_send skill web_fetch web_search write`。
+实测耗时：install 29.3s（npmmirror）、`build:lib` 8m35s、`build:web` 9.5s、**启动 14.9s**。
+
+实测证据：`http://127.0.0.1:3417` 打开正常；新建会话 → 输入「本地部署验收：请只回复四个字」→ 模型真实回复「**验收通过**」，1 轮 1 步 41 tok/s、11.7K tok；request/header 工具表 **19 个**：`edit glob grep pass read read_image schedule_* send_text send_voice session_list session_read session_send skill web_fetch web_search write`。主会话 `elysia-conscious-mind` 首启创建、之后 resume，并在其中真实回复。
+
+但同一次验收里，**首个 memory 派工失败**：`EPERM mkdir 'E:\home\ayerelysia\Elysia\Data\workspace\subconscious'`——`memoryWorkspaceDir` 回落到 `subconscious/src/dispatch.ts:17` 的 Linux 默认值；Windows 上该路径落到当前盘符根，且父目录创建被拒。这条是 D3（硬编码路径）的直接后果，不是模型或凭据问题。
 
 阻碍与缺陷：
 
