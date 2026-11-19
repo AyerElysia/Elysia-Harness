@@ -1,0 +1,223 @@
+<!doctype html>
+<html lang="zh-CN"><head><meta charset="utf-8">
+<style>
+  * { box-sizing: border-box; margin: 0; padding: 0; }
+  body { font-family: "Microsoft YaHei UI","Microsoft YaHei","Segoe UI",sans-serif;
+         background:#fbfafc; color:#2b2430; padding:40px 44px 34px; width:1360px; }
+  .head { display:flex; align-items:flex-end; justify-content:space-between;
+          border-bottom:2px solid #efe6ec; padding-bottom:16px; margin-bottom:24px; }
+  h1 { font-size:30px; font-weight:700; letter-spacing:.5px; }
+  h1 span { color:#b8738f; }
+  .sub { font-size:13.5px; color:#7c6b78; margin-top:7px; }
+  .tag { font-size:12px; color:#8a7786; text-align:right; line-height:1.9; }
+
+  .band { border:1px solid #e6dae2; border-radius:10px; background:#fff; overflow:hidden;
+          box-shadow:0 1px 2px rgba(90,60,80,.04); }
+  .band-h { display:flex; align-items:center; gap:10px; padding:8px 14px;
+            background:#f8f1f5; border-bottom:1px solid #eee1e8; }
+  .band-h .t { font-size:13px; font-weight:700; color:#5c4252; }
+  .band-h .d { font-size:11.5px; color:#9b8a95; }
+  .band-b { padding:14px; }
+
+  .arrow { display:flex; align-items:center; justify-content:center; gap:10px;
+           height:46px; color:#b094a6; font-size:11.5px; }
+  .arrow .line { width:2px; height:22px; background:#e4d5df; }
+  .arrow .tri { width:0; height:0; border-left:5px solid transparent;
+                border-right:5px solid transparent; border-top:7px solid #e4d5df; }
+
+  .sessions { display:grid; grid-template-columns:1fr 30px 1fr; gap:0; align-items:stretch; }
+  .form { border:1px dashed #e0cfda; border-radius:8px; padding:11px 12px; background:#fffdfe; }
+  .form-t { font-size:12.5px; font-weight:700; color:#7b5a6c; margin-bottom:8px;
+            display:flex; align-items:center; gap:7px; }
+  .badge { font-size:10px; font-weight:400; color:#8a7786; background:#f6eef3;
+           border:1px solid #e8d8e2; border-radius:8px; padding:1px 7px; }
+  .split { display:grid; place-items:center; font-size:11px; color:#b094a6; }
+  .sess { display:flex; flex-direction:column; gap:6px; }
+  .s { border:1px solid #e8dde4; border-radius:6px; padding:6px 9px; background:#fff;
+       display:flex; align-items:center; justify-content:space-between; }
+  .s .n { font-size:12px; color:#4a3a46; }
+  .s .id { font-family:Consolas,monospace; font-size:10.5px; color:#9a8792; }
+  .s.new { border-color:#c9b3c2; background:#fdf8fb; }
+
+  .reg { display:flex; gap:10px; flex-wrap:wrap; }
+  .chip { border:1px solid #e8dde4; border-radius:6px; padding:7px 11px; font-size:11.5px;
+          color:#5f5363; background:#fdfbfc; }
+  .chip b { color:#b8738f; }
+
+  .inner { display:grid; grid-template-columns:1fr 1fr 1fr 1fr; gap:10px; }
+  .box { border:1px solid #e8dde4; border-radius:7px; padding:9px 11px; background:#fff; }
+  .box .bt { font-size:12px; font-weight:700; color:#4a3a46; margin-bottom:4px; }
+  .box .bd { font-size:11px; color:#776878; line-height:1.6; }
+  .mono { font-family:Consolas,monospace; font-size:10.5px; }
+
+  .apps { display:flex; flex-wrap:wrap; gap:7px; }
+  .app { border:1px solid #dfd2da; border-radius:5px; padding:4px 9px; font-size:11px;
+         color:#5a4a56; background:#fbf8fa; }
+  .app b { font-family:Consolas,monospace; font-size:11.5px; color:#3d2f38; }
+  .app.hot { border-color:#c9b3c2; background:#fdf6fa; }
+
+  .edge { display:grid; grid-template-columns:1fr 1fr; gap:12px; }
+  .defer { border:1px dashed #d9a441; border-radius:8px; background:#fffdf5; padding:11px 13px; }
+  .defer .dt { font-size:12.5px; font-weight:700; color:#8a6414; margin-bottom:5px; }
+  .defer .dd { font-size:11.5px; color:#6d5a35; line-height:1.65; }
+  .defer .dd b { color:#a8761b; }
+
+  .foot { margin-top:14px; display:grid; grid-template-columns:repeat(3,1fr); gap:10px; }
+  .note { background:#f8f4f7; border:1px solid #ece0e7; border-radius:8px; padding:9px 11px;
+          font-size:11.5px; color:#5f5363; line-height:1.65; }
+  .note b { color:#b8738f; }
+</style></head>
+<body>
+  <div class="head">
+    <div>
+      <h1>Ayla<span>-use</span> 运行时架构</h1>
+      <div class="sub">四个 session 拿工具 · 一套 REST 通路 · 两条暂缓边界</div>
+    </div>
+    <div class="tag">插件由 DSH 主动拨 Ayla<br>不开端口 · 不改后端</div>
+  </div>
+
+  <div class="band">
+    <div class="band-h"><span class="t">① 主意识层</span><span class="d">工具只注册到这些 agent 作用域，不做全局注册</span></div>
+    <div class="band-b">
+      <div class="sessions">
+        <div class="form">
+          <div class="form-t">elyh 形态 <span class="badge">我们自己的部署 · 二选一</span></div>
+          <div class="sess">
+            <div class="s"><span class="n">聊天</span><span class="id">elysia-conscious-mind</span></div>
+            <div class="s"><span class="n">直播</span><span class="id">elysia-livestream</span></div>
+            <div class="s"><span class="n">通话</span><span class="id">elysia-voice-call</span></div>
+          </div>
+        </div>
+        <div class="split">或</div>
+        <div class="form">
+          <div class="form-t">standalone 形态 <span class="badge">发布给别人的 DSH · 二选一</span></div>
+          <div class="sess">
+            <div class="s"><span class="n">聊天</span><span class="id">elysia-conscious-mind</span></div>
+            <div class="s"><span class="n">直播</span><span class="id">elysia-livestream</span></div>
+            <div class="s"><span class="n">通话</span><span class="id">elysia-voice-call</span></div>
+            <div class="s new"><span class="n">收件箱（本插件建）</span><span class="id">ayla-channel</span></div>
+          </div>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <div class="arrow"><span class="line"></span><span class="tri"></span><span>agent/created 命中白名单 → 在该 agent 作用域注册</span></div>
+
+  <div class="band">
+    <div class="band-h"><span class="t">② 注册器</span><span class="d">白名单取并集；别人的自定义 id 用配置补</span></div>
+    <div class="band-b">
+      <div class="reg">
+        <div class="chip">白名单 = <b>四个 id 的并集</b>（elyh 用前三个）</div>
+        <div class="chip">挂载时对<b>已存在</b>的 agent 补注册一次</div>
+        <div class="chip">配置 <span class="mono">toolSessions: string[]</span> 覆盖默认</div>
+        <div class="chip">凭据缺失 → <b>零注册</b>、零连接、只记一行日志</div>
+      </div>
+    </div>
+  </div>
+
+  <div class="arrow"><span class="line"></span><span class="tri"></span><span>同一作用域内 20 个工具（本期）</span></div>
+
+  <div class="band">
+    <div class="band-h"><span class="t">③ @elysia/ayla-use 插件</span><span class="d">原 ayla-app；工具是叠加，不改既有通道行为</span></div>
+    <div class="band-b">
+      <div class="inner">
+        <div class="box"><div class="bt">鉴权</div><div class="bd">
+          <span class="mono">AylaAuth</span><br>登录换 access/refresh<br>refresh <b>旋转</b>后落盘 0600
+        </div></div>
+        <div class="box"><div class="bt">上传</div><div class="bd">
+          三步：建会话 → PUT → <span class="mono">:complete</span><br>
+          <b>expected_size 必须精确相等</b><br>kind 决定魔数嗅探
+        </div></div>
+        <div class="box"><div class="bt">工具层</div><div class="bd">
+          20 个 / 8 类<br>
+          id 校验 → 调用 → 错误翻译<br>
+          <b>不按名字寻址</b>
+        </div></div>
+        <div class="box"><div class="bt">既有入站通道</div><div class="bd">
+          <span class="mono">/ws/elysia-bridge/</span><br>
+          收消息、心跳、ack、补投<br>
+          <b>本次不改</b>
+        </div></div>
+      </div>
+    </div>
+  </div>
+
+  <div class="arrow"><span class="line"></span><span class="tri"></span><span>HTTP · Authorization: Bearer &lt;access&gt;</span></div>
+
+  <div class="band">
+    <div class="band-h"><span class="t">⑤ Ayla 后端 REST</span><span class="d">/api/v1 · 权限判定全在服务端，她受的约束与人类一致</span></div>
+    <div class="band-b">
+      <div class="apps">
+        <span class="app hot"><b>chat</b> 会话·消息·群·子群·申请邀请</span>
+        <span class="app hot"><b>accounts</b> 资料·好友·徽标</span>
+        <span class="app"><b>media</b> 上传·签名·缩略图</span>
+        <span class="app"><b>emoji</b> 个人包·系统包·群包</span>
+        <span class="app"><b>live</b> 频道·开播·弹幕·观众</span>
+        <span class="app"><b>voice</b> 频道·进房·成员·房内文字</span>
+        <span class="app"><b>posts</b> 帖子·评论·浏览</span>
+        <span class="app"><b>favorites</b> 收藏</span>
+        <span class="app"><b>boardgame</b> 房间框架</span>
+        <span class="app"><b>search</b> 聚合检索</span>
+        <span class="app"><b>releases</b> 客户端更新</span>
+        <span class="app"><b>elysia_bridge</b> 爱莉身份·通道健康</span>
+      </div>
+    </div>
+  </div>
+
+
+  <div class="arrow"><span class="line"></span><span class="tri"></span><span>入站与出站是两条链路：工具只管出站</span></div>
+
+  <div class="band">
+    <div class="band-h"><span class="t">④ 入站覆盖</span><span class="d">本期要扩：10 种消息类型全收，非消息通知可查</span></div>
+    <div class="band-b">
+      <div class="edge">
+        <div class="defer" style="border-color:#9ec1a3;background:#f7fbf7;">
+          <div class="dt" style="color:#3f6b46;">现在只到 text / image</div>
+          <div class="dd" style="color:#4a5f4e;">
+            <span class="mono">SUPPORTED_PART_TYPES = {text, image}</span>；
+            emoji/voice/file/video/share 一律标 <b>failed</b>，
+            poke/system <b>根本不入队</b>。<br>
+            扩后：全部 10 种都到；语音/文件/视频<b>只给元信息</b>（听不见也读不了）。
+          </div>
+        </div>
+        <div class="defer" style="border-color:#d9a441;">
+          <div class="dt">通知：现在只广播给应用 UI</div>
+          <div class="dd">
+            好友申请、群邀请、入群申请、帖子被评论……都进不了她的通道。
+            本期用 <span class="mono">ayla_notifications</span> 主动查（等价于人类看红点）；
+            要推送则后端加 <span class="mono">type:"event"</span> 帧。
+          </div>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <div class="arrow"><span class="line"></span><span class="tri"></span><span>REST 到此为止的部分 ≠ 用户看到的完整效果</span></div>
+
+  <div class="band">
+    <div class="band-h"><span class="t">⑥ 能力边界</span><span class="d">本期暂缓；工具必须如实返回「做到哪一步」</span></div>
+    <div class="band-b">
+      <div class="edge">
+        <div class="defer">
+          <div class="dt">直播出画面 · 暂缓</div>
+          <div class="dd"><span class="mono">:start</span> 只写乐观标记 → SRS 仍查 <b>idle</b>。
+            要出画面需另有推流端向 <span class="mono">rtmp://…/live/&lt;stream_key&gt;</span> 推流。
+            <b>本期直播间是黑的</b>，工具返回带 <span class="mono">streaming:false</span>。</div>
+        </div>
+        <div class="defer">
+          <div class="dt">语音房出声 · 暂缓</div>
+          <div class="dd"><span class="mono">join</span> 只落成员表并下发 LiveKit token，<b>音频不走 REST</b>。
+            要出声需 LiveKit 客户端发布音轨。<b>本期她只能在场 + 发文字</b>，
+            工具返回带 <span class="mono">audio:"unavailable"</span>。</div>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <div class="foot">
+    <div class="note"><b>为什么左右两条路</b><br>消息投递不同（意识队列 vs 自建收件箱），但工具所到之处相同：三个主意识 session 都要能操作 Ayla。</div>
+    <div class="note"><b>为什么不做全局注册</b><br>潜意识 router、临时会话、子 agent 不该拿到「替她操作账号」的能力；作用域注册让能力与主体绑定。</div>
+    <div class="note"><b>为什么错误要翻译</b><br>403 可能是「不是群主」「被禁言」「不是好友」，三者下一步动作完全不同，笼统的「失败」等于没说。</div>
+  </div>
+</body></html>
