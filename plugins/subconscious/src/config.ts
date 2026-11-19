@@ -16,6 +16,8 @@ export interface Config {
   triggerBatchCount?: number
   maxTasksPerTrigger?: number
   maxQueuedTasks?: number
+  maxDeliveryAttempts?: number
+  maxReportRelayAttempts?: number
   assignmentMaxRunMs?: number
   skillsDir?: string
   readOnlyDirs?: string[]
@@ -45,6 +47,8 @@ export const Config: z<Config> = z.object({
   triggerBatchCount: z.number().default(1),
   maxTasksPerTrigger: z.number().default(3),
   maxQueuedTasks: z.number().default(20),
+  maxDeliveryAttempts: z.number().default(5),
+  maxReportRelayAttempts: z.number().default(5),
   assignmentMaxRunMs: z.number().default(900000),
   skillsDir: z.string().default('/home/ayerelysia/Elysia/Data/workspace/skills'),
   readOnlyDirs: z.array(z.string()).default([]),

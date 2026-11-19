@@ -130,6 +130,12 @@ export class MemorySession {
     return this.handlePromise
   }
 
+  /** 供其它插件在需要真实会话时获取，返回已装配完成的 Agent。 */
+  async ensureAgent(): Promise<Agent> {
+    const { agent } = await this.ensure()
+    return agent
+  }
+
   private async completedTurn(assignmentId: string, deliveryId: string, from: number): Promise<boolean> {
     const reader = await this.ctx.sessionPersistence.open(MEMORY_SESSION_ID, 'read')
     try {

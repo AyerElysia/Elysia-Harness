@@ -22,6 +22,9 @@ const frameworkSources = new Set([
   'runtime-context',
   'time-context',
   'elysia-calendar-context',
+  // conscious-mind 的回复守卫会纠正主意识缺字段的外部发言；它是框架纠错而非用户输入，
+  // 若进入 Router 批次会被当成新的 conscious_input 反复研判。
+  'elysia-external-reply-guard',
 ])
 
 export type MainSessionEvent = SessionEvent

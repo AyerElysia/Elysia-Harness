@@ -134,6 +134,12 @@ export class RouterSession {
     return this.handlePromise
   }
 
+  /** 供其它插件在需要真实会话时获取，返回已装配完成的 Agent。 */
+  async ensureAgent(): Promise<Agent> {
+    const { agent } = await this.ensure()
+    return agent
+  }
+
   private async completedTurn(from: number, matches: (message: UserMessage) => boolean): Promise<{ turn: number; completedAt: number } | undefined> {
     const reader = await this.ctx.sessionPersistence.open(ROUTER_SESSION_ID, 'read')
     try {

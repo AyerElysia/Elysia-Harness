@@ -13,11 +13,23 @@ function user(source: Parameters<typeof createUserMessage>[0]['source']) {
   return { type: 'user/message', data: createUserMessage({ content: [{ type: 'text', text: 'fixture' }], source }) }
 }
 
-function tool(name: string, id: string, isError = false) {
+/** Persisted result content: one text block whose JSON is the tool value. */
+function content(value: unknown) {
+  return [{ type: 'text', text: JSON.stringify(value) }]
+}
+
+/** The result value a reply tool returns after it actually delivered. */
+function delivered(name: string) {
+  if (name === 'send_text') return content({ sent: [{ index: 0, text: 'fixture', messageId: 'm-1' }] })
+  if (name === 'send_voice') return content({ status: 'sent', messageId: 'm-1' })
+  return content({ passed: true, reason: 'fixture' })
+}
+
+function tool(name: string, id: string, isError = false, body = delivered(name)) {
   const callId = ToolCallId(id)
   return [
     { type: 'tool/call', data: { name, callId } },
-    { type: 'tool/result', data: { message: { toolCallId: callId, isError } } },
+    { type: 'tool/result', data: { message: { toolCallId: callId, isError, content: body } } },
   ]
 }
 
@@ -40,13 +52,63 @@ function guard() {
 }
 
 describe('external reply tool choice', () => {
-  it('recognizes either send tool and pass, including failed delivery attempts', () => {
+  it('recognizes either send tool and pass as an explicit choice', () => {
     for (const name of ['send_text', 'send_voice', 'pass']) {
       const { agent } = fixture(turnStart, user(platformMessageSource), ...tool(name, `call-${name}`), assistant)
       expect(hasExternalReplyToolChoice(agent)).toBe(true)
     }
-    const failed = fixture(turnStart, ...tool('send_text', 'failed', true), assistant)
-    expect(hasExternalReplyToolChoice(failed.agent)).toBe(true)
+  })
+
+  it('does not count a failed delivery attempt as a choice', () => {
+    const failed = fixture(turnStart,
+      ...tool('send_text', 'refused', true, [{ type: 'text', text: 'Error: 外发未获本次确认，未发送。' }]),
+      assistant)
+    expect(hasExternalReplyToolChoice(failed.agent)).toBe(false)
+  })
+
+  it('counts a send_text result only when at least one segment was sent', () => {
+    const partial = fixture(turnStart,
+      ...tool('send_text', 'partial', false, content({ sent: [{ index: 0, text: '第一段' }], stoppedAt: 1, error: '第二段发送失败' })),
+      assistant)
+    expect(hasExternalReplyToolChoice(partial.agent)).toBe(true)
+
+    for (const value of [{ sent: [], error: '渠道未登记: qq' }, { sent: [], stoppedAt: 0, error: '投递状态未知' }]) {
+      const dropped = fixture(turnStart, ...tool('send_text', 'dropped', false, content(value)), assistant)
+      expect(hasExternalReplyToolChoice(dropped.agent)).toBe(false)
+    }
+  })
+
+  it('keeps a send_text choice standing when its result content cannot be read', () => {
+    const pruned = fixture(turnStart, ...tool('send_text', 'pruned', false, [{ type: 'text', text: '[pruned tool result]' }]), assistant)
+    expect(hasExternalReplyToolChoice(pruned.agent)).toBe(true)
+    const missing = fixture(turnStart, ...tool('send_text', 'missing', false, []), assistant)
+    expect(hasExternalReplyToolChoice(missing.agent)).toBe(true)
+  })
+
+  it('counts an errored reply result as no choice whatever its content says', () => {
+    const errored = fixture(turnStart,
+      ...tool('send_text', 'errored', true, content({ sent: [{ index: 0, text: '部分' }], error: '投递状态未知' })),
+      assistant)
+    expect(hasExternalReplyToolChoice(errored.agent)).toBe(false)
+  })
+
+  it.each([
+    { status: 'sent', chosen: true },
+    { status: 'unknown', chosen: true },
+    { status: 'synthesis-failed', chosen: false },
+    { status: 'send-failed', chosen: false },
+  ])('treats send_voice status $status as chosen: $chosen', ({ status, chosen }) => {
+    const { agent } = fixture(turnStart,
+      ...tool('send_voice', `voice-${status}`, false, content({ status, ...(chosen ? {} : { error: 'fixture failure' }) })),
+      assistant)
+    expect(hasExternalReplyToolChoice(agent)).toBe(chosen)
+  })
+
+  it('accepts a delivered send after an earlier failure and keeps counting after a later failure', () => {
+    const retried = fixture(turnStart, ...tool('send_text', 'refused', true), ...tool('send_text', 'delivered'), assistant)
+    expect(hasExternalReplyToolChoice(retried.agent)).toBe(true)
+    const durable = fixture(turnStart, ...tool('send_text', 'delivered'), ...tool('send_text', 'refused-retry', true), assistant)
+    expect(hasExternalReplyToolChoice(durable.agent)).toBe(true)
   })
 
   it('ignores unrelated tools and completed turns', () => {
@@ -72,6 +134,51 @@ describe('external reply turn guard', () => {
     const { agent, steer } = fixture(turnStart, user(platformMessageSource), ...tool(name, `call-${name}`), assistant)
     await guard()(agent)
     expect(steer).not.toHaveBeenCalled()
+  })
+
+  it('reminds again after a refused send and accepts the delivered retry', async () => {
+    const refused = fixture(turnStart, user(platformMessageSource), ...tool('send_text', 'refused', true), assistant)
+    await guard()(refused.agent)
+    expect(refused.steer).toHaveBeenCalledOnce()
+
+    const retried = fixture(turnStart, user(platformMessageSource), ...tool('send_text', 'refused', true),
+      ...tool('send_text', 'delivered'), assistant)
+    await guard()(retried.agent)
+    expect(retried.steer).not.toHaveBeenCalled()
+  })
+
+  it('reminds only once when every delivery attempt in the turn fails', async () => {
+    const { agent, steer } = fixture(turnStart, user(platformMessageSource),
+      ...tool('send_text', 'refused-1', true), ...tool('send_voice', 'refused-2', true), assistant)
+    const stopping = guard()
+    await stopping(agent)
+    await stopping(agent)
+    expect(steer).toHaveBeenCalledOnce()
+  })
+
+  it('reminds after a channel-level send failure and accepts a partial delivery', async () => {
+    const dropped = fixture(turnStart, user(platformMessageSource),
+      ...tool('send_text', 'dropped', false, content({ sent: [], error: '渠道未登记: qq' })), assistant)
+    await guard()(dropped.agent)
+    expect(dropped.steer).toHaveBeenCalledOnce()
+
+    const partial = fixture(turnStart, user(platformMessageSource),
+      ...tool('send_text', 'partial', false, content({ sent: [{ index: 0, text: '第一段' }], stoppedAt: 1, error: '第二段发送失败' })),
+      assistant)
+    await guard()(partial.agent)
+    expect(partial.steer).not.toHaveBeenCalled()
+  })
+
+  it('reminds after a failed voice synthesis and accepts an unknown delivery', async () => {
+    const failed = fixture(turnStart, user(platformMessageSource),
+      ...tool('send_voice', 'voice-failed', false, content({ status: 'synthesis-failed', error: 'BreezeTTS 返回空音频' })), assistant)
+    await guard()(failed.agent)
+    expect(failed.steer).toHaveBeenCalledOnce()
+
+    const unknown = fixture(turnStart, user(platformMessageSource),
+      ...tool('send_voice', 'voice-unknown', false, content({ status: 'unknown', error: '投递状态未知' })), assistant)
+    await guard()(unknown.agent)
+    expect(unknown.steer).not.toHaveBeenCalled()
   })
 
   it('requires a choice for mixed input without blocking the later local text', async () => {

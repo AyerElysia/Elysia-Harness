@@ -65,7 +65,7 @@ flowchart LR
 
 第一版的 main、router、memory 默认相互可发现、可发送、可读取。它们继续保留各自工作目录、提示词、工具和历史。以后加入其他会话时，通过参与者登记扩展通讯集合。
 
-目标当前未运行时，交付层通过该目标原有的 preset 或 setup 恢复。主意识、Router 与记忆各自使用自己的装配。目录信息区分在线、忙碌、冷存储和恢复失败。
+目标当前未运行时，交付层向该目标的宿主取真实会话，而不是按 session header 里的 preset 做通用恢复：Router 与记忆分别调用 `subconsciousRouter.session.ensureAgent()` 与 `.memory.ensureAgent()`，主意识仍由 conscious-mind 宿主预热后返回。这条契约是必要的——记忆会话的 header 没有 preset，通用恢复会把记忆身份组装成 standard preset（bash / subagent / web 全部可用），既破坏身份也破坏派工。目录信息区分在线、忙碌、冷存储和恢复失败。
 
 ## 4. 消息交付
 
@@ -104,7 +104,7 @@ flowchart LR
 
 当前 DSH 的 `send_message` 通过同一子代理树查找目标，忙碌目标收到的是 `steer`。三个独立 Session 需要由本插件的参与者目录连接。
 
-当前实现复用 `ctx.agents`、`agent.followup()` 与原生持久 inbox。各目标的创建、恢复和工具装配归现有会话入口拥有。
+当前实现复用 `ctx.agents`、`agent.followup()` 与原生持久 inbox。各目标的创建、恢复和工具装配归现有会话入口拥有；本插件只依赖宿主暴露的 `ensureAgent()` 与 `store.resting()`，不直接调用 `sessionController.resolveAgent`。
 
 ### 6.2 历史
 

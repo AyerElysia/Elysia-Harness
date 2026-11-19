@@ -7,7 +7,7 @@ import { defaultParticipants } from './participants.ts'
 import { SessionCommunication } from './runtime.ts'
 
 export const name = 'elysia-session-communication'
-export const inject = ['agents', 'attachments', 'llm', 'sessionController', 'sessionQuery', 'sessions'] as const
+export const inject = ['agents', 'attachments', 'llm', 'sessionQuery', 'sessions'] as const
 
 export interface Config {
   stateDir: string

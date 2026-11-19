@@ -1,3 +1,5 @@
+// 「runs sandboxed Shell」用例依赖 Linux 的 /var/tmp 与 bash 内建语义（越界写入的落点与退出码），
+// 在 Windows 上沙箱行为不同；该用例只在 Linux 口径校验，因此 win32 显式 skip，断言本身不降级。
 import { mkdir, mkdtemp, readFile, rm, writeFile } from 'node:fs/promises'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
@@ -349,7 +351,8 @@ it('executes file, Skill, and Web tools through the real scoped tool pipeline', 
   expect(ctx.tools.get('send_voice', router)).toBeUndefined()
 }, 30000)
 
-it('runs sandboxed Shell and owns the complete background Job lifecycle', async () => {
+// skipIf 仅按平台跳过：Linux 上语义与断言保持原样。
+it.skipIf(process.platform === 'win32')('runs sandboxed Shell and owns the complete background Job lifecycle', async () => {
   const { ctx, router, config } = await readyRouter()
   const shell = await execute(ctx, router, 'bash', { command: 'printf "cwd=%s" "$PWD"', description: 'Verify Router shell cwd' })
   expect(shell.isError).toBe(false)
@@ -553,6 +556,9 @@ it('completes dispatch, memory write, Report and relay even when the post-Report
   expect(ctx.tools.get('subconscious_report', ctx.agents.get(ROUTER_SESSION_ID))).toBeUndefined()
   expect(ctx.tools.get('send_text', memory)).toBeUndefined()
   expect(ctx.tools.get('send_voice', memory)).toBeUndefined()
+  // 契约：其它插件通过公开 ensureAgent 取得这两个长期会话的已装配 Agent。
+  expect(await runtime.session.ensureAgent()).toBe(ctx.agents.get(ROUTER_SESSION_ID))
+  expect(await runtime.memory.ensureAgent()).toBe(ctx.agents.get(Subconscious.MEMORY_SESSION_ID))
 }, 30000)
 
 
@@ -635,4 +641,76 @@ it('prioritizes an accepted assignment and its report over an already queued bat
   expect(kinds.indexOf('task')).toBeLessThan(kinds.indexOf('second-batch'))
   expect(kinds.indexOf('report')).toBeLessThan(kinds.indexOf('second-batch'))
   await ctx.agents.get(ROUTER_SESSION_ID)?.whenIdle()
+}, 30000)
+
+it('retires a permanently failing delivery instead of retrying it forever', async () => {
+  const { ctx, adapter, main } = await readyRouter({ maxDeliveryAttempts: 1 })
+  const runtime = ctx.subconsciousRouter
+  const natural = (): StreamChunk[] => [
+    { type: 'block-start', index: 0, blockType: 'text' },
+    { type: 'text-delta', index: 0, text: '自然结束' },
+    { type: 'block-end', index: 0, block: { type: 'text', text: '自然结束' } },
+    { type: 'finish', reason: { kind: 'stop' } },
+  ]
+  const dispatched = new Set<string>()
+  adapter.handler = options => {
+    const raw = JSON.stringify(options.messages)
+    if (!raw.includes('[subconscious.batch]')) return natural()
+    const id = batchId(options)
+    // 第二批请求带着同一条 batch 历史；重复派工会让 Router 轮次永远结束不了。
+    if (dispatched.has(id)) return natural()
+    dispatched.add(id)
+    const observation = Array.from(raw.matchAll(/observation\/(obs_[a-f0-9]+)/g)).at(-1)?.[1]
+    if (observation === undefined) throw new Error('Missing Observation in Router batch')
+    return call('retire-delivery', 'subconscious_dispatch', {
+      trigger_ref: `batch/${id}`, kind: 'memory', title: '永久失败的派工',
+      reason: '验证不可恢复的投递错误不会无限重试。', instruction: '写日记并报告。',
+      source_refs: [`observation/${observation}`],
+    })
+  }
+  const run = vi.spyOn(runtime.memory, 'run').mockRejectedValue(new Error('ENSURE_EXISTING_FAILED'))
+  main.agent.session.append('user/message', createUserMessage({
+    content: [{ type: 'text', text: '请把这段经历交给记忆潜意识，但投递注定失败。' }],
+    source: { kind: 'user', rpcId: 'delivery-budget' },
+  }), { surfaceOp: 'append' })
+  await vi.waitFor(() => expect(runtime.health().dispatch, JSON.stringify(runtime.health())).toMatchObject({
+    tasks: 1, failedEffects: 1, pendingAssignments: 0, activeTasks: 0,
+  }), { timeout: 15000 })
+  await runtime.whenIdle()
+  expect(run).toHaveBeenCalledTimes(1)
+  const task = runtime.dispatch.listTasks()[0]!
+  expect(task).toMatchObject({ state: 'failed', closeReason: 'DELIVERY_ATTEMPTS_EXHAUSTED' })
+  const assignment = runtime.dispatch.getAssignment(task.currentAssignmentId)!
+  expect(assignment).toMatchObject({ state: 'interrupted' })
+  expect(assignment.lastError ?? '').toContain('DELIVERY_ATTEMPTS_EXHAUSTED')
+  expect(assignment.lastError ?? '').toContain('ENSURE_EXISTING_FAILED')
+  expect(runtime.dispatch.nextAssignment(Date.now() + 10_000_000)).toBeUndefined()
+}, 30000)
+
+it('keeps the serial delivery worker alive across a transient DB read failure', async () => {
+  const { ctx, adapter, main } = await readyRouter()
+  const runtime = ctx.subconsciousRouter
+  runtime.setResting(true)
+  main.agent.session.append('user/message', createUserMessage({
+    content: [{ type: 'text', text: '读取失败后仍应被研判的真实输入' }],
+    source: { kind: 'user', rpcId: 'db-read-failure' },
+  }), { surfaceOp: 'append' })
+  await vi.waitFor(() => expect(runtime.health().observations).toBe(2), { timeout: 5000 })
+  runtime.store.formBatches(20, 65536)
+  // work() 过去在 try 之外读 nextReportRelay：一次 SQLITE_BUSY 就会 reject 掉串行 worker，
+  // 此后所有派工与研判都不再启动。
+  const relay = runtime.dispatch.nextReportRelay.bind(runtime.dispatch)
+  let failed = false
+  vi.spyOn(runtime.dispatch, 'nextReportRelay').mockImplementation((now?: number) => {
+    if (!failed) {
+      failed = true
+      throw new Error('SQLITE_BUSY: database is locked')
+    }
+    return relay(now)
+  })
+  runtime.setResting(false)
+  await vi.waitFor(() => expect(adapter.requests).toHaveLength(2), { timeout: 20000 })
+  await runtime.whenIdle()
+  expect(failed).toBe(true)
+  expect(JSON.stringify(adapter.requests[1]!.messages)).toContain('读取失败后仍应被研判的真实输入')
 }, 30000)

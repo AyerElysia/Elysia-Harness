@@ -201,3 +201,44 @@
 ### 7.5 复核结论
 
 这批提交是**真实进步且文档属实**（服务器 25/25 已复验），修复方向与本报告 2.1 一致。但**上一轮报告的两个 P0 一个都没动**（router 投递、profile 依赖），并新增一个 P1（provider `a6` 未定义）。因此总体评级不变：仍不能判通过。
+## 八、第二轮修复（2026-11-20）
+
+本轮修 P0 与同源的 P1，范围限于 `session-communication`、`subconscious`、`conscious-mind` 三个插件。QQ、飞书相关项按用户要求排后。
+
+### 8.1 契约：会话由宿主取，不按 preset 通用恢复
+
+`RouterRuntime` 暴露的 `RouterSession` 与 `MemorySession` 现在各提供公开 `ensureAgent(): Promise<Agent>`（内部复用原有私有 `ensure()`）。`session-communication` 的参与者解析改为：Router 走 `session.ensureAgent()`（保留休息中保留消息、宿主未就绪可重试两段语义），记忆走 `memory.ensureAgent()`，**删除 `sessionController.resolveAgent` 回退**，主意识仍由 conscious-mind 宿主预热。
+
+删除回退的理由不是风格：记忆会话的 header 没有 preset，通用恢复会把它按 `standard` 组装（bash / subagent / web 全开），随后 `MemorySession` 因 scope 不符抛错。这条同时是 P1 的越权问题。
+
+契约守卫放在生产侧——`subconscious` 的集成测试断言两个 Session 的 `ensureAgent` 返回的正是注册表里的 Agent；消费侧只保留 mock 形状与断言。早期版本曾用跨插件 `type import` + `workspace:*` devDependency 做编译期守卫，但当前安装布局无法满足该依赖（dsh workspace 已不含 `plugins/*`），会让干净 checkout 的 tsc 失败，已回收。
+
+### 8.2 派工循环：有界重试与异常隔离
+
+- 投递与回传各有尝试预算（`maxDeliveryAttempts` / `maxReportRelayAttempts`，默认 5）。耗尽后 Effect 置 `failed`、Assignment 置 `interrupted`、Task 置 `failed` 并释放去重键；`health().failedEffects` 计入，`pendingAssignments` 不再把 failed 算成待办。若此时已有终态 Report，则把该投递 Effect 收敛为 `completed` 而不是误判失败。
+- `work()` 拆出 `step()` 并把数据库读取与 Effect 记账包进 try/catch：一次 `SQLITE_BUSY` 只记日志并退避，不再 reject 串行 worker。
+- `model.ts` 的 `frameworkSources` 加入 `elysia-external-reply-guard`，避免 guard 的纠正通知被当作主意识输入进入 Router 批次。
+
+### 8.3 外发守卫：失败不算「已选择」
+
+`external-reply-guard` 不再只看 `isError`，而是解析工具结果内容：`send_text` 的 `sent` 为空数组、`send_voice` 的 `synthesis-failed` / `send-failed` 都判为失败；`send_voice` 的 `unknown` 按「投递未知≠失败」算已选择；`pass` 非错误即算；内容解析不出（被剪枝改写成散文）保守算已选择。同一 turn 仍最多纠错一次。
+
+### 8.4 验证结果（node22，本机）
+
+| 插件 | 测试 | tsc |
+|---|---|---|
+| session-communication | 4 文件 / **19 通过** | **exit 0** |
+| subconscious | 3 文件 / **28 通过 + 1 跳过**（跳过项为 Linux 专用 sandbox shell 用例，Windows 显式 skip） | exit 2，10 条均为 `plugins/conscious-mind/lib/types` 未构建的 TS6305（既有环境问题） |
+| conscious-mind | **122 通过 / 14 失败**，失败集合与改前基线逐条一致（guard 用例 8→21 全绿） | exit 2，6 条均为既有环境/配置问题（`current-time.ts` TS2345、`proactive-system/lib` 未构建 TS6305、`skill-capabilities.ts` TS6059） |
+
+### 8.5 本轮之后仍未修
+
+- 部署面：profile 未声明 `@elysia/subconscious`；tracked profile 引用未定义的 provider `a6`；安装树旧副本。
+- QQ 畸形帧崩溃、QQ 空 token、飞书无投递未知语义（按要求排后）。
+- `gemini-cascade` 的 Windows POSIX 权限检查；`ayla-app` 无 HTTP 超时；`request-archive` O(N²)；24 处硬编码路径与 4 个不可配置 session cwd。
+- `subconscious` 的 batch 分支仍是无限退避重试（预算只覆盖投递与回传）；事件 worker / 心跳 / 通用 worker 仍未实现。
+- `reply-origin` 把内部消息判为 local 的设计问题仍待定；guard 现在能纠错一次，但模型重试仍可能被本地确认守卫拒绝。
+
+### 8.6 本轮未验收
+
+真实平台渠道（KOOK / 飞书 / QQ）、Ayla 后端、语音链路、真实重启恢复，以及 B 站相关全部未测，结论仅限单元与集成测试。

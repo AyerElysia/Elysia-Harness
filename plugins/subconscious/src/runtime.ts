@@ -60,8 +60,12 @@ export class RouterRuntime extends Service {
     this.bootstrapPromise ??= this.bootstrap()
   }
 
+  private errorText(error: unknown): string {
+    return error instanceof Error ? error.message : String(error)
+  }
+
   private error(error: unknown): void {
-    this.lastErrorText = error instanceof Error ? error.message : String(error)
+    this.lastErrorText = this.errorText(error)
     process.stderr.write(`潜意识 Router：${this.lastErrorText}\n`)
   }
 
@@ -166,52 +170,72 @@ export class RouterRuntime extends Service {
   private async work(): Promise<void> {
     for (;;) {
       if (this.stopped || this.store.resting()) return
-      // Finish work already dispatched before consuming more surface traffic. Otherwise a
-      // continuously active main Session can starve every Assignment and Report indefinitely.
-      // Reports come first so each specialist result returns before another Assignment starts.
-      const report = this.dispatch.nextReportRelay()
-      if (report !== undefined) {
-        try {
-          await this.session.runReport(report.id)
-          this.dispatch.completeReportRelay(report.id)
-          this.succeeded()
-        } catch (error) {
-          this.error(error)
-          const delay = this.retryDelay()
-          this.dispatch.failReportRelay(report.id, error instanceof Error ? error.message : String(error), Date.now() + delay)
-          await this.wait(delay)
-        }
-        continue
+      try {
+        if (!await this.step()) return
+      } catch (error) {
+        // SQLite reads and Effect bookkeeping sit outside every delivery boundary; a locked or
+        // damaged read must not reject the serial worker Promise and end all future work.
+        this.error(error)
+        await this.wait(this.retryDelay())
       }
-      const assignment = this.dispatch.nextAssignment()
-      if (assignment !== undefined) {
-        try {
-          await this.memory.run(assignment.id)
-          this.dispatch.completeDelivery(assignment.id)
-          this.succeeded()
-        } catch (error) {
-          this.error(error)
-          const delay = this.retryDelay()
-          this.dispatch.failDelivery(assignment.id, error instanceof Error ? error.message : String(error), Date.now() + delay)
-          await this.wait(delay)
-        }
-        continue
-      }
-      const batch = this.store.nextBatch()
-      if (batch !== undefined) {
-        try {
-          this.store.markPresenting(batch.id)
-          const { turn, completedAt } = await this.session.run(batch)
-          this.store.markCompleted(batch.id, turn, completedAt)
-          this.succeeded()
-        } catch (error) {
-          this.error(error)
-          await this.wait(this.retryDelay())
-        }
-        continue
-      }
-      return
     }
+  }
+
+  /** Run at most one eligible delivery step; false means no work is currently eligible. */
+  private async step(): Promise<boolean> {
+    // Finish work already dispatched before consuming more surface traffic. Otherwise a
+    // continuously active main Session can starve every Assignment and Report indefinitely.
+    // Reports come first so each specialist result returns before another Assignment starts.
+    const report = this.dispatch.nextReportRelay()
+    if (report !== undefined) {
+      try {
+        await this.session.runReport(report.id)
+        this.dispatch.completeReportRelay(report.id)
+        this.succeeded()
+      } catch (error) {
+        this.error(error)
+        const message = this.errorText(error)
+        const delay = this.retryDelay()
+        this.dispatch.failReportRelay(report.id, message, Date.now() + delay)
+        // A permanent failure (for example an unrestorable Router identity) would otherwise
+        // consume this Report forever; the budget retires the Effect and health counts it.
+        if (this.dispatch.reportRelayAttempts(report.id) >= this.config.maxReportRelayAttempts) {
+          this.dispatch.abandonReportRelay(report.id, `REPORT_RELAY_ATTEMPTS_EXHAUSTED: ${message}`)
+        } else await this.wait(delay)
+      }
+      return true
+    }
+    const assignment = this.dispatch.nextAssignment()
+    if (assignment !== undefined) {
+      try {
+        await this.memory.run(assignment.id)
+        this.dispatch.completeDelivery(assignment.id)
+        this.succeeded()
+      } catch (error) {
+        this.error(error)
+        const message = this.errorText(error)
+        const delay = this.retryDelay()
+        this.dispatch.failDelivery(assignment.id, message, Date.now() + delay)
+        if (this.dispatch.deliveryAttempts(assignment.id) >= this.config.maxDeliveryAttempts) {
+          this.dispatch.abandonDelivery(assignment.id, `DELIVERY_ATTEMPTS_EXHAUSTED: ${message}`)
+        } else await this.wait(delay)
+      }
+      return true
+    }
+    const batch = this.store.nextBatch()
+    if (batch !== undefined) {
+      try {
+        this.store.markPresenting(batch.id)
+        const { turn, completedAt } = await this.session.run(batch)
+        this.store.markCompleted(batch.id, turn, completedAt)
+        this.succeeded()
+      } catch (error) {
+        this.error(error)
+        await this.wait(this.retryDelay())
+      }
+      return true
+    }
+    return false
   }
 
   private wait(milliseconds: number): Promise<void> {

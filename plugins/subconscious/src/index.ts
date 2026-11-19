@@ -35,6 +35,8 @@ export function apply(ctx: Context, config: Config): void {
     triggerBatchCount: config.triggerBatchCount ?? 1,
     maxTasksPerTrigger: config.maxTasksPerTrigger ?? 3,
     maxQueuedTasks: config.maxQueuedTasks ?? 20,
+    maxDeliveryAttempts: config.maxDeliveryAttempts ?? 5,
+    maxReportRelayAttempts: config.maxReportRelayAttempts ?? 5,
     assignmentMaxRunMs: config.assignmentMaxRunMs ?? 900_000,
     skillsDir: config.skillsDir ?? '/home/ayerelysia/Elysia/Data/workspace/skills',
     readOnlyDirs: config.readOnlyDirs ?? [],

@@ -768,6 +768,9 @@ DSH Session 历史继续由 DSH 自己保存；Task Store 不复制一份伪 Ses
 
 - 有效 Report 已持久化，就证明专业执行已经到达终态；它优先于其后模型轮次的结束回执。即使后续步骤发生上下文溢出，也不得重新执行同一 Assignment。
 - 重启恢复时，已存在 Report 但尚未完成的 `deliver_assignment` Effect 应协调为 `completed`，清除旧投递错误并保留真实尝试次数；之后只推进尚未完成的 `relay_report`。
+- 投递与回传各有尝试预算（`maxDeliveryAttempts`、`maxReportRelayAttempts`，默认 5）。预算耗尽时 Effect 置 `failed`、Assignment 置 `interrupted`、Task 置 `failed` 并释放去重键；`health().failedEffects` 计入。永久性错误（例如目标会话无法恢复）因此不会无限重试。要再试只能重新派工。
+- 工作循环每一步的数据库读取与记账都在 try 内：一次 `SQLITE_BUSY` 之类失败只记日志并退避，不终止串行 worker。
+- `RouterSession` 与 `MemorySession` 暴露 `ensureAgent()`，供其他插件在需要真实会话时经宿主取得；其它入口不得按 header preset 通用恢复这两个身份。
 
 ### 12.4 休息与卸载
 
@@ -969,7 +972,7 @@ node ../../dsh/node_modules/typescript/bin/tsc --noEmit --incremental false --co
 node ../../dsh/node_modules/vitest/vitest.mjs run
 ```
 
-结果：类型检查通过，3 个测试文件、25／25 测试通过。除权限、幂等、状态与恢复外，真实 AgentLoop 集成测试还覆盖 `dispatch → write/edit → report → Router relay`、“后续 Batch 已排队时，Assignment 和 Report 仍优先完成”，以及“Report 已持久化后发生上下文溢出，仍能完成投递与回传”的回归情况。测试显式使用临时 `memoryWorkspaceDir` 与 `memoryBackupDir`，不会把测试日记写进正式记忆目录。
+结果：类型检查通过，3 个测试文件、29／29 测试通过（Linux 口径；Windows 上 1 例 Linux 专用 sandbox shell 用例显式跳过，其余 28 例通过）。新增覆盖「投递预算耗尽后 retirement」「回传预算耗尽」「数据库读取失败后 worker 仍存活」以及 `ensureAgent` 契约断言。除权限、幂等、状态与恢复外，真实 AgentLoop 集成测试还覆盖 `dispatch → write/edit → report → Router relay`、“后续 Batch 已排队时，Assignment 和 Report 仍优先完成”，以及“Report 已持久化后发生上下文溢出，仍能完成投递与回传”的回归情况。测试显式使用临时 `memoryWorkspaceDir` 与 `memoryBackupDir`，不会把测试日记写进正式记忆目录。
 
 ### 20.3 正式服务真实闭环
 

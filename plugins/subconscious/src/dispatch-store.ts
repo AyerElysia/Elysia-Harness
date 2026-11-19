@@ -626,6 +626,49 @@ export class DispatchStore {
       available_at = ?, last_error = ? WHERE kind = 'relay_report' AND aggregate_id = ?`).run(retryAt, message, reportId)
   }
 
+  /** Attempts already recorded on the delivery Effect of this Assignment. */
+  deliveryAttempts(assignmentId: string): number {
+    return this.attempts('deliver_assignment', assignmentId)
+  }
+
+  /** Attempts already recorded on the relay Effect of this Report. */
+  reportRelayAttempts(reportId: string): number {
+    return this.attempts('relay_report', reportId)
+  }
+
+  private attempts(kind: 'deliver_assignment' | 'relay_report', aggregateId: string): number {
+    const row = this.db.prepare('SELECT attempt_count FROM dispatch_effect WHERE kind = ? AND aggregate_id = ?')
+      .get(kind, aggregateId) as { attempt_count: number } | undefined
+    return row?.attempt_count ?? 0
+  }
+
+  /** End a delivery whose retry budget is spent: the Effect is terminal and the Assignment stops retrying. */
+  abandonDelivery(assignmentId: string, message: string): void {
+    this.transaction(() => {
+      const now = Date.now()
+      // A terminal Report proves the specialist was reached; that Effect is a success, not a failure.
+      if (this.getReportByAssignment(assignmentId) !== undefined) {
+        this.db.prepare(`UPDATE dispatch_effect SET state = 'completed', completed_at = ?, last_error = NULL
+          WHERE kind = 'deliver_assignment' AND aggregate_id = ?`).run(now, assignmentId)
+        return
+      }
+      this.db.prepare(`UPDATE dispatch_effect SET state = 'failed', available_at = ?, last_error = ?
+        WHERE kind = 'deliver_assignment' AND aggregate_id = ?`).run(now, message, assignmentId)
+      this.db.prepare(`UPDATE task_assignment SET state = 'interrupted', last_error = ? WHERE id = ? AND state != 'ended'`)
+        .run(message, assignmentId)
+      // Leaving the Task active would keep blocking its dedupe key and inflate activeTasks forever.
+      this.db.prepare(`UPDATE subconscious_task SET state = 'failed', updated_at = ?, closed_at = ?,
+        close_reason = 'DELIVERY_ATTEMPTS_EXHAUSTED'
+        WHERE current_assignment_id = ? AND state IN ('assigned','running','report_pending')`).run(now, now, assignmentId)
+    })
+  }
+
+  /** End a Report relay whose retry budget is spent; the Report itself stays readable. */
+  abandonReportRelay(reportId: string, message: string): void {
+    this.db.prepare(`UPDATE dispatch_effect SET state = 'failed', available_at = ?, last_error = ?
+      WHERE kind = 'relay_report' AND aggregate_id = ?`).run(Date.now(), message, reportId)
+  }
+
   recover(): void {
     this.transaction(() => {
       const now = Date.now()
@@ -660,8 +703,10 @@ export class DispatchStore {
       tasks: count('SELECT COUNT(*) AS count FROM subconscious_task'),
       activeTasks: count(`SELECT COUNT(*) AS count FROM subconscious_task WHERE state IN ('assigned','running','report_pending')`),
       completedTasks: count(`SELECT COUNT(*) AS count FROM subconscious_task WHERE state = 'completed'`),
-      pendingAssignments: count(`SELECT COUNT(*) AS count FROM dispatch_effect WHERE kind = 'deliver_assignment' AND state != 'completed'`),
-      pendingReportRelays: count(`SELECT COUNT(*) AS count FROM dispatch_effect WHERE kind = 'relay_report' AND state != 'completed'`),
+      pendingAssignments: count(`SELECT COUNT(*) AS count FROM dispatch_effect
+        WHERE kind = 'deliver_assignment' AND state IN ('pending','running','retry_wait')`),
+      pendingReportRelays: count(`SELECT COUNT(*) AS count FROM dispatch_effect
+        WHERE kind = 'relay_report' AND state IN ('pending','running','retry_wait')`),
       failedEffects: count(`SELECT COUNT(*) AS count FROM dispatch_effect WHERE state = 'failed'`),
       ...lastTask.time === null ? {} : { lastTaskAt: new Date(lastTask.time).toISOString() },
       ...lastReport.time === null ? {} : { lastReportAt: new Date(lastReport.time).toISOString() },

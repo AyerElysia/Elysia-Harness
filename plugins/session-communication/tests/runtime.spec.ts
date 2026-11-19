@@ -5,6 +5,7 @@ import { DatabaseSync } from 'node:sqlite'
 import { Context } from '@deepseek-ai/cordis'
 import { LlmAdapter, ToolCallId, createUserMessage } from '@deepseek-ai/dsh-llm'
 import type { GenerateOptions, LlmResolvedModelInfo, StreamChunk } from '@deepseek-ai/dsh-llm'
+import type { Agent } from '@deepseek-ai/dsh-agent'
 import { SessionId } from '@deepseek-ai/dsh-session'
 import { describe, expect, it, onTestFinished, vi } from 'vitest'
 import { mountAgentLoopTestDependencies, mountAgentLoopTestHarness } from '../../../dsh/packages/test-support/agent-loop-testkit/src/index.ts'
@@ -85,6 +86,20 @@ async function setup() {
   ctx.provide('sessionController', {
     resolveAgent: vi.fn(async () => { throw new Error('Fixture targets are already live') }),
   } as never)
+  // The memory identity is owned by the subconscious Router runtime, so this fixture
+  // stands in for its published service shape instead of relying on generic resume.
+  const owned = { memory: undefined as Agent | undefined, memoryCalls: 0 }
+  ctx.provide('subconsciousRouter', {
+    session: { ensureAgent: async () => { throw new Error('This fixture has no Router Session') } },
+    memory: {
+      ensureAgent: async () => {
+        if (owned.memory === undefined) throw new Error('Memory fixture not created')
+        owned.memoryCalls += 1
+        return owned.memory
+      },
+    },
+    store: { resting: () => false },
+  } as never)
   await mountAgentLoopTestHarness(ctx)
   const adapter = new DialogueAdapter()
   ctx.llm.registerAdapter(['mock'], adapter)
@@ -95,7 +110,8 @@ async function setup() {
   })
   const main = await create(MAIN, join(home, 'main'))
   const memory = await create(MEMORY, join(home, 'memory'))
-  return { ctx, home, adapter, stateDir, communication, create, main, memory }
+  owned.memory = memory.agent
+  return { ctx, home, adapter, stateDir, communication, create, main, memory, owned }
 }
 
 function receipts(stateDir: string) {
@@ -120,6 +136,8 @@ describe('real Session communication runtime', () => {
       expect(rows.every(row => row.accepted_at !== null && row.presented_at !== null && typeof row.request_ref === 'string' && row.ended_at !== null)).toBe(true)
     }, { timeout: 10000 })
     await Promise.all([f.main.agent.whenIdle(), f.memory.agent.whenIdle()])
+    // Memory delivery resolves through the subconscious owner, not the live registry.
+    expect(f.owned.memoryCalls).toBeGreaterThan(0)
     const rows = receipts(f.stateDir)
     const request = rows.find(row => row.sender_session_id === MAIN)!
     const reply = rows.find(row => row.sender_session_id === MEMORY)!

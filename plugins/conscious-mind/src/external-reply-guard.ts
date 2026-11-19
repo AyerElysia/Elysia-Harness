@@ -1,6 +1,6 @@
 import type { Context } from '@deepseek-ai/cordis'
 import type { Agent } from '@deepseek-ai/dsh-agent'
-import { createUserMessage } from '@deepseek-ai/dsh-llm'
+import { createUserMessage, type ToolResultMessage } from '@deepseek-ai/dsh-llm'
 import type { SessionSeq } from '@deepseek-ai/dsh-session'
 import { hasPlatformDialogueInput } from './reply-origin.ts'
 
@@ -21,18 +21,61 @@ declare module '@deepseek-ai/dsh-llm' {
   }
 }
 
-/** Whether the active turn has completed any explicit external-reply tool choice. */
+/**
+ * The tool value a result message renders as its single text block, or undefined
+ * when the content is not JSON: pruning and surface replacement may rewrite an
+ * old result into prose, and no reply tool puts a second text block there.
+ */
+function parseToolValue(message: ToolResultMessage): Record<string, unknown> | undefined {
+  const block = message.content.find(entry => entry.type === 'text')
+  if (block?.type !== 'text') return undefined
+  try {
+    const value: unknown = JSON.parse(block.text)
+    return value !== null && typeof value === 'object' ? value as Record<string, unknown> : undefined
+  } catch {
+    // Unreadable content is not evidence of failure; the caller keeps the choice standing.
+    return undefined
+  }
+}
+
+/**
+ * Whether one reply tool result proves that nothing was delivered. A channel-level
+ * full failure reports `sent: []` on an otherwise successful call, so isError alone
+ * would let a dropped platform message end the turn silently.
+ */
+function showsFailedDelivery(name: string, message: ToolResultMessage): boolean {
+  if (message.isError === true) return true
+  if (name === 'pass') return false
+  const value = parseToolValue(message)
+  if (value === undefined) return false
+  if (name === 'send_text') {
+    const sent = value['sent']
+    return Array.isArray(sent) && sent.length === 0
+  }
+  // 'unknown' is an undelivered-but-not-failed outcome; only these two statuses lose the message.
+  const status = value['status']
+  return status === 'synthesis-failed' || status === 'send-failed'
+}
+
+/**
+ * Whether the active turn has completed any explicit external-reply tool choice.
+ * A refused, failed, or wholly undelivered send is not a choice: the turn must stay
+ * able to retry, otherwise the platform message is dropped without a visible reply.
+ */
 export function hasExternalReplyToolChoice(agent: Pick<Agent, 'session'>): boolean {
   const { session } = agent
-  const results = new Set<string>()
+  const results = new Map<string, ToolResultMessage>()
   for (let seq = Number(session.seq) - 1; seq >= 0; seq--) {
     const event = session.eventAt(seq as SessionSeq)
     if (event?.type === 'turn/end' || event?.type === 'turn/start') return false
     if (event?.type === 'tool/result') {
-      results.add(String(event.data.message.toolCallId))
+      results.set(String(event.data.message.toolCallId), event.data.message)
       continue
     }
-    if (event?.type === 'tool/call' && REPLY_TOOLS.has(event.data.name) && results.has(String(event.data.callId))) return true
+    if (event?.type === 'tool/call' && REPLY_TOOLS.has(event.data.name)) {
+      const message = results.get(String(event.data.callId))
+      if (message !== undefined && !showsFailedDelivery(event.data.name, message)) return true
+    }
   }
   return false
 }

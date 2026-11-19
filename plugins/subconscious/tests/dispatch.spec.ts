@@ -149,6 +149,53 @@ it('reconciles a stale delivery Effect after its terminal Report survives a late
   expect(dispatch.nextReportRelay(Date.now() + 61_000)?.id).toBe(saved.report.id)
 })
 
+it('retires an Assignment and its Task once the delivery attempt budget is spent', async () => {
+  const { dispatch, input, formation } = await fixture()
+  const created = dispatch.createTask(input, formation)
+  let retryAt = Date.now()
+  for (let attempt = 1; attempt <= 3; attempt++) {
+    expect(dispatch.nextAssignment(retryAt)?.id).toBe(created.assignment_id)
+    retryAt += 60_000
+    dispatch.failDelivery(created.assignment_id, 'ENSURE_EXISTING_FAILED', retryAt)
+  }
+  expect(dispatch.deliveryAttempts(created.assignment_id)).toBe(3)
+  expect(dispatch.health()).toMatchObject({ pendingAssignments: 1, failedEffects: 0 })
+
+  dispatch.abandonDelivery(created.assignment_id, 'DELIVERY_ATTEMPTS_EXHAUSTED: ENSURE_EXISTING_FAILED')
+
+  expect(dispatch.getAssignment(created.assignment_id)).toMatchObject({
+    state: 'interrupted', lastError: 'DELIVERY_ATTEMPTS_EXHAUSTED: ENSURE_EXISTING_FAILED',
+  })
+  expect(dispatch.getTask(created.task_id)).toMatchObject({ state: 'failed', closeReason: 'DELIVERY_ATTEMPTS_EXHAUSTED' })
+  expect(dispatch.nextAssignment(retryAt + 10_000_000)).toBeUndefined()
+  expect(dispatch.nextWakeAt()).toBeUndefined()
+  // 终态 Effect 不再算作待投递，否则健康快照会永远显示有活任务。
+  expect(dispatch.health()).toMatchObject({ pendingAssignments: 0, activeTasks: 0, failedEffects: 1 })
+})
+
+it('retires a Report relay once its own budget is spent and keeps the Report readable', async () => {
+  const { dispatch, input, formation } = await fixture()
+  const created = dispatch.createTask(input, formation)
+  dispatch.markAssignmentPresented(created.assignment_id, 1, 1)
+  const saved = dispatch.saveReport({
+    task_id: created.task_id, assignment_id: created.assignment_id, status: 'completed',
+    summary: '日记已写入，但 Router 回传始终失败', output_refs: [],
+  }, { sessionId: 'elysia-subconscious-memory', toolCallId: 'report-relay-budget', turn: 1 })
+  let retryAt = Date.now()
+  for (let attempt = 1; attempt <= 2; attempt++) {
+    retryAt += 1_000
+    dispatch.failReportRelay(saved.report.id, 'ROUTER_UNRESTORABLE', retryAt)
+  }
+  expect(dispatch.reportRelayAttempts(saved.report.id)).toBe(2)
+  expect(dispatch.health()).toMatchObject({ pendingReportRelays: 1, failedEffects: 0 })
+
+  dispatch.abandonReportRelay(saved.report.id, 'REPORT_RELAY_ATTEMPTS_EXHAUSTED: ROUTER_UNRESTORABLE')
+
+  expect(dispatch.nextReportRelay(retryAt + 10_000_000)).toBeUndefined()
+  expect(dispatch.getReport(saved.report.id)?.status).toBe('completed')
+  expect(dispatch.health()).toMatchObject({ pendingReportRelays: 0, failedEffects: 1 })
+})
+
 it('allows dispatch from any Observation in a stable multi-Batch trigger', async () => {
   const { dispatch, batch, input, formation } = await fixture(2)
   expect(batch.batchIds).toHaveLength(2)

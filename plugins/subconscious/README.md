@@ -26,6 +26,8 @@
 - 有效 Report 优先于后续轮次回执：报告保存后即使模型发生上下文溢出，也不重新执行 Assignment；重启会协调遗留的投递 Effect，只继续未完成的报告回传。
 - Batch 自然结束与 Task 完成完全分离。调度顺序为 **待回传 Report → 待执行 Assignment → 新 Batch**，避免持续聊天或大量任务让闭环饥饿。
 - Task、Mandate、Assignment、Report、Effect 与 Observation／Batch 统一保存在 `router.sqlite`，由插件领域层单写；DSH Session 历史仍由 DSH 自己持久化。
+- 投递与回传各有尝试预算（默认各 5 次）；耗尽后 Effect 置 `failed`、Task 失败并释放去重键，`health().failedEffects` 可观测，永久错误不再无限重试。
+- `RouterSession` 与 `MemorySession` 暴露 `ensureAgent()`：其它插件需要真实会话时经宿主取，不得按 header preset 通用恢复这两个身份。
 - 未实现自动续接、长任务 `progress / waiting`、模型可见的取消／重试、主动机会和其他专业类型。
 
 ### 提示词与模型
@@ -92,7 +94,7 @@ node ../../dsh/node_modules/typescript/bin/tsc --noEmit --incremental false --co
 node ../../dsh/node_modules/vitest/vitest.mjs run
 ```
 
-2026-11-18 最终结果：类型检查通过，**3 个测试文件、25／25 测试通过**。覆盖多来源去重、四类主意识事件、过滤与迁移、完整观察、自然轮次收尾、离线补漏、通用工具、派工权限与幂等、真实记忆写入、报告回传、持续 Batch 下的 Assignment／Report 优先调度，以及 Report 后上下文溢出的恢复。测试使用临时记忆目录，不写正式日记，不向真实渠道发送测试消息。
+最终结果：类型检查通过，**3 个测试文件、29／29 测试通过**（Linux 口径；Windows 上 1 例 Linux 专用 sandbox shell 用例显式跳过）。覆盖多来源去重、四类主意识事件、过滤与迁移、完整观察、自然轮次收尾、离线补漏、通用工具、派工权限与幂等、真实记忆写入、报告回传、持续 Batch 下的 Assignment／Report 优先调度，以及 Report 后上下文溢出的恢复。测试使用临时记忆目录，不写正式日记，不向真实渠道发送测试消息。
 
 ### 真实闭环证据
 
