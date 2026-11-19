@@ -6,6 +6,7 @@ import { Context } from '@deepseek-ai/cordis'
 import type { Agent } from '@deepseek-ai/dsh-agent'
 import { mountAgentLoopTestDependencies, mountAgentLoopTestHarness } from '@deepseek-ai/dsh-agent-loop-testkit'
 import LocalAttachmentStore from '@deepseek-ai/dsh-attachment-local'
+import CommandRuntime from '@deepseek-ai/dsh-commands'
 import { LlmAdapter, ToolCallId, createUserMessage } from '@deepseek-ai/dsh-llm'
 import BasicCompactionEngine from '@deepseek-ai/dsh-compaction-basic'
 import SandboxBashExecutor from '@deepseek-ai/dsh-bash-sandbox'
@@ -86,6 +87,7 @@ async function harness(overrides: Partial<Subconscious.Config> = {}) {
     await rm(home, { recursive: true, force: true })
   })
   await mountAgentLoopTestDependencies(ctx, { workingDirectory: true })
+  await ctx.plugin(CommandRuntime)
   // Match the real Web Host: these services already exist and may have probed
   // their backend before the Router is composed. Router must isolate, not replace.
   await ctx.plugin(SandboxPolicyService, { mode: 'workspace-write', workspaceRoot: home })
@@ -281,6 +283,13 @@ it('feeds real main Session input through a real Router AgentLoop with scoped to
   }), { surfaceOp: 'append' })
   await new Promise(resolve => setTimeout(resolve, 20))
   expect(adapter.requests).toHaveLength(2)
+  // Manual compaction and external Session operations can reattach the Router through a fresh
+  // plugin scope before the next runtime resumes its durable work.
+  await ctx.agents.resume({
+    resumeSessionId: ROUTER_SESSION_ID,
+    agentOptions: { provider: 'mock', model: 'fixture' },
+    setup: async () => {},
+  })
   routerFiber = await ctx.plugin(Subconscious, config)
   await vi.waitFor(() => expect(ctx.subconsciousRouter).toBeDefined())
   await vi.waitFor(() => expect(adapter.requests.length, JSON.stringify({
@@ -443,7 +452,7 @@ it('isolates Schedule ownership and delivers a real scheduled prompt to the Rout
   expect((await execute(ctx, router, 'schedule_edit', { id, action: 'delete' })).value).toEqual({ id, deleted: true })
 }, 30000)
 
-it('completes a real Router dispatch, memory write, structured report, and Router relay', async () => {
+it('completes dispatch, memory write, Report and relay even when the post-Report turn overflows', async () => {
   const { ctx, adapter, main } = await readyRouter()
   const runtime = ctx.subconsciousRouter
   const diary = join(runtime.config.memoryWorkspaceDir, 'diary.md')
@@ -466,7 +475,11 @@ it('completes a real Router dispatch, memory write, structured report, and Route
           content: '# 派工闭环测试日记\n\n今天收到了一段值得留下的经历，并亲自写下了这篇日记。',
         })
       }
-      if (submittedReport) return natural()
+      if (submittedReport) {
+        return [{ type: 'finish', reason: { kind: 'error', error: {
+          code: 'CONTEXT_WINDOW_EXCEEDED', message: 'Synthetic overflow after the durable Report',
+        } } }]
+      }
       submittedReport = true
       const taskId = Array.from(raw.matchAll(/task_id: (task_[a-f0-9-]+)/g)).at(-1)?.[1]
       const assignmentId = Array.from(raw.matchAll(/assignment_id: (assignment_[a-f0-9-]+)/g)).at(-1)?.[1]
@@ -497,6 +510,14 @@ it('completes a real Router dispatch, memory write, structured report, and Route
     }
     return natural()
   }
+  // Model selection and other external Session operations can reattach the durable memory
+  // Session before its next Assignment. The host must restore the complete scoped composition.
+  await ctx.agents.create({
+    sessionId: Subconscious.MEMORY_SESSION_ID,
+    agentOptions: { provider: 'mock', model: 'fixture' },
+    meta: { cwd: runtime.config.memoryWorkspaceDir },
+    setup: async () => {},
+  })
   main.agent.session.append('user/message', createUserMessage({
     content: [{ type: 'text', text: '爱莉，请把这段真实经历留给记忆潜意识整理。' }],
     source: { kind: 'user', rpcId: 'dispatch-full-flow' },

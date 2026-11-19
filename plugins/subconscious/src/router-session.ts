@@ -100,8 +100,9 @@ export class RouterSession {
     this.handlePromise ??= (async () => {
       const live = this.ctx.agents.get(ROUTER_SESSION_ID)
       if (live !== undefined) {
-        if (!composed.has(live.ctx)) throw new Error('已存在的 Router 实例没有本插件的提示词与工具隔离装配')
-        this.selectModel(live)
+        // Manual compaction and other external Session operations may reattach the durable
+        // Router through a fresh plugin scope. Restore our complete composition in place.
+        await this.setup(live.ctx, live)
         return { agent: live, dispose: async () => {} }
       }
       const agentOptions = this.ctx.agentDefaultModel.currentSelection()
@@ -118,8 +119,7 @@ export class RouterSession {
       } catch (error) {
         const concurrent = this.ctx.agents.get(ROUTER_SESSION_ID)
         if (concurrent !== undefined) {
-          if (!composed.has(concurrent.ctx)) throw new Error('并发恢复的 Router 实例作用域不符', { cause: error })
-          this.selectModel(concurrent)
+          await this.setup(concurrent.ctx, concurrent)
           return { agent: concurrent, dispose: async () => {} }
         }
         if (!(error instanceof SessionPersistenceNotFoundError)) throw error

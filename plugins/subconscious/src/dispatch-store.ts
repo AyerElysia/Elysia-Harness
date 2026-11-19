@@ -627,8 +627,16 @@ export class DispatchStore {
   }
 
   recover(): void {
-    this.db.prepare(`UPDATE task_assignment SET state = 'interrupted' WHERE state = 'delivering'`).run()
-    this.db.prepare(`UPDATE dispatch_effect SET state = 'pending' WHERE state = 'running'`).run()
+    this.transaction(() => {
+      const now = Date.now()
+      // A Report already ends its Assignment. Reconcile any stale delivery Effect left by a
+      // crash or a later context-overflow instead of waiting forever for an ineligible retry.
+      this.db.prepare(`UPDATE dispatch_effect SET state = 'completed', completed_at = ?, last_error = NULL
+        WHERE kind = 'deliver_assignment' AND state != 'completed'
+          AND EXISTS (SELECT 1 FROM task_report r WHERE r.assignment_id = dispatch_effect.aggregate_id)`).run(now)
+      this.db.prepare(`UPDATE task_assignment SET state = 'interrupted' WHERE state = 'delivering'`).run()
+      this.db.prepare(`UPDATE dispatch_effect SET state = 'pending' WHERE state = 'running'`).run()
+    })
   }
 
   listTasks(): SubconsciousTask[] {

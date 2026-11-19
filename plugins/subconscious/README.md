@@ -23,6 +23,7 @@
 - 记忆 Session 通过真实 `write` / `edit` 写日记，再用 `subconscious_report` 提交 `completed / dropped / blocked / failed` 终态报告。
 - `memory completed` 必须具有当前 Assignment 实际写入的非空文件；无需写入时可以合理 `dropped`。正文声称完成或 `whenIdle()` 都不能替代 Report。
 - Report、Task／Assignment 状态和 `relay_report` Effect 同事务保存；宿主随后把 `[subconscious.report]` 真正投回同一个 Router Session。
+- 有效 Report 优先于后续轮次回执：报告保存后即使模型发生上下文溢出，也不重新执行 Assignment；重启会协调遗留的投递 Effect，只继续未完成的报告回传。
 - Batch 自然结束与 Task 完成完全分离。调度顺序为 **待回传 Report → 待执行 Assignment → 新 Batch**，避免持续聊天或大量任务让闭环饥饿。
 - Task、Mandate、Assignment、Report、Effect 与 Observation／Batch 统一保存在 `router.sqlite`，由插件领域层单写；DSH Session 历史仍由 DSH 自己持久化。
 - 未实现自动续接、长任务 `progress / waiting`、模型可见的取消／重试、主动机会和其他专业类型。
@@ -91,7 +92,7 @@ node ../../dsh/node_modules/typescript/bin/tsc --noEmit --incremental false --co
 node ../../dsh/node_modules/vitest/vitest.mjs run
 ```
 
-2026-11-18 最终结果：类型检查通过，**3 个测试文件、21／21 测试通过**。覆盖多来源去重、四类主意识事件、过滤与迁移、完整观察、自然轮次收尾、离线补漏、通用工具、派工权限与幂等、真实记忆写入、报告回传，以及持续 Batch 下的 Assignment／Report 优先调度。测试使用临时记忆目录，不写正式日记，不向真实渠道发送测试消息。
+2026-11-18 最终结果：类型检查通过，**3 个测试文件、25／25 测试通过**。覆盖多来源去重、四类主意识事件、过滤与迁移、完整观察、自然轮次收尾、离线补漏、通用工具、派工权限与幂等、真实记忆写入、报告回传、持续 Batch 下的 Assignment／Report 优先调度，以及 Report 后上下文溢出的恢复。测试使用临时记忆目录，不写正式日记，不向真实渠道发送测试消息。
 
 ### 真实闭环证据
 
@@ -111,5 +112,9 @@ node ../../dsh/node_modules/vitest/vitest.mjs run
 两份 Mandate 均为 `dispatch-v1`，读写根为记忆工作区，输入上限 64 KiB、运行上限 15 分钟。两份 Report 的 `output_refs` 都指向正式 `diary.md`，文件内容包含对应 Task、Assignment 与 Observation 线索。
 
 Router 真实请求归档 `2026-11-18T01-08-01-553Z-634e2059.json` 同时包含上述两份 `[subconscious.report]`；这证明报告已经实际进入 Router 模型输入，而不只是数据库中存在记录。正式服务仍监听 3299，主意识随后继续取得真实 `send_text` 成功回执。
+
+第三次真实验收由 Router 在 turn 720 自主调用 `subconscious_dispatch`（`call_2896296264157928191`）产生，来源为 `observation/obs_6917a42cee9e636b8aa4aacf`，触发 Batch 为 `batch_a6249ecd-6ed5-4c7e-a4e8-9b52251863da`。Task `task_12e79315-9711-4f84-b854-25a0416b77b7`、Assignment `assignment_14b0c8b9-9084-4a8f-ad56-96b081229203`、Report `report_c20d2eea-2a57-435a-8527-4979d0d7c046` 均已完成对应生命周期。记忆 Session 在 turn 120 自己调用 `edit` 更新正式 `diary.md`，文件由 141 行增长到 178 行，再亲自提交 Report；没有由主意识或脚本代派、代写。
+
+本次还实际经过 Router 原生 Compact、外部重挂载和持久队列恢复。最终 Task 为 `completed`、Assignment 为 `ended`，`deliver_assignment` 与 `relay_report` 两个 Effect 均为 `completed` 且 `last_error = null`。最新 Router 请求归档 `2026-11-18T15-27-05-532Z-a6c5a217.json` 的消息索引 19 包含目标 `[subconscious.report]`，证明目标报告已重新真实呈现给 Router。
 
 详细设计见 [REQUIREMENTS.zh.md](REQUIREMENTS.zh.md)、[TOOLS.zh.md](TOOLS.zh.md) 与 [DISPATCH.zh.md](DISPATCH.zh.md)。主动机会、自动任务续接、其他专业 Session 与长期记忆语义仍属于后续工作，未因本次闭环完成而提前宣称实现。

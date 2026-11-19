@@ -95,8 +95,10 @@ export class MemorySession {
     this.handlePromise ??= (async () => {
       const live = this.ctx.agents.get(MEMORY_SESSION_ID)
       if (live !== undefined) {
-        if (!composed.has(live.ctx)) throw new Error('已存在的记忆 Session 没有本插件的提示词与工具隔离装配')
-        this.selectModel(live)
+        // External Session operations (for example model selection) may attach the durable
+        // Session through a fresh plugin scope. Reapply the complete isolation composition
+        // instead of either adopting unscoped tools or permanently deadlocking its Assignments.
+        await this.setup(live.ctx, live)
         return { agent: live, dispose: async () => {} }
       }
       const agentOptions = this.ctx.agentDefaultModel.currentSelection()
@@ -113,8 +115,7 @@ export class MemorySession {
       } catch (error) {
         const concurrent = this.ctx.agents.get(MEMORY_SESSION_ID)
         if (concurrent !== undefined) {
-          if (!composed.has(concurrent.ctx)) throw new Error('并发恢复的记忆 Session 作用域不符', { cause: error })
-          this.selectModel(concurrent)
+          await this.setup(concurrent.ctx, concurrent)
           return { agent: concurrent, dispose: async () => {} }
         }
         if (!(error instanceof SessionPersistenceNotFoundError)) throw error
@@ -162,6 +163,9 @@ export class MemorySession {
     agent.followup(createUserMessage({ content, source: taskMessageSource(assignmentId, deliveryId) }))
     await agent.whenIdle()
     await this.ctx.sessions.flush(agent.session)
+    // A durable terminal Report is stronger evidence than the later turn receipt: the model
+    // may overflow after successfully writing its outputs and submitting that Report.
+    if (this.store.getReportByAssignment(assignmentId) !== undefined) return
     if (!await this.completedTurn(assignmentId, deliveryId, from)) {
       throw new Error(`记忆 Assignment ${assignmentId} 没有正常结束的 DSH 轮次`)
     }

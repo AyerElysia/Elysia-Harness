@@ -319,7 +319,7 @@ describe('durable Router store', () => {
       expect(resumed.id).toBe(grouped.id)
       expect(resumed.batchIds).toEqual(originalIds)
       expect(resumed.observations.map(item => item.eventSeq)).toEqual([1, 2, 3])
-      expect(resumed.state).toBe('presenting')
+      expect(resumed.state).toBe('presented')
       store.markCompleted(resumed.id, 1, 3000)
       expect(originalIds.map(id => store.getBatch(id)?.state)).toEqual(['decided', 'decided', 'decided'])
       expect(store.health()).toMatchObject({ pendingObservations: 0, completedBatches: 3, triggerBatchCount: 3 })

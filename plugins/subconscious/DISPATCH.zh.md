@@ -23,7 +23,7 @@
 
 ### 1.2 需要解决的问题
 
-引入派工闭环前，Router 能阅读、调查和亲自完成简单工作，但缺少可靠交给长期专业 Session 的工作入口。缺少的不只是一个“转发消息”的工具，而是：
+目前 Router 能阅读、调查和亲自完成简单工作，但不能把一项持续性工作可靠地交给另一个专业 Session。缺少的不只是一个“转发消息”的工具，而是：
 
 1. 一项工作的稳定身份和生命周期。
 2. 工作由哪次真实 Router 运行产生的轨迹。
@@ -766,6 +766,9 @@ DSH Session 历史继续由 DSH 自己保存；Task Store 不复制一份伪 Ses
 
 恢复必须先核对真实状态，再执行副作用。不能因为内存队列为空，就当作没有工作。
 
+- 有效 Report 已持久化，就证明专业执行已经到达终态；它优先于其后模型轮次的结束回执。即使后续步骤发生上下文溢出，也不得重新执行同一 Assignment。
+- 重启恢复时，已存在 Report 但尚未完成的 `deliver_assignment` Effect 应协调为 `completed`，清除旧投递错误并保留真实尝试次数；之后只推进尚未完成的 `relay_report`。
+
 ### 12.4 休息与卸载
 
 - 专业 Session 休息时，Task、Assignment 和 Effect 可以持久保存，但不启动新模型轮。
@@ -966,20 +969,61 @@ node ../../dsh/node_modules/typescript/bin/tsc --noEmit --incremental false --co
 node ../../dsh/node_modules/vitest/vitest.mjs run
 ```
 
-结果：类型检查通过，3 个测试文件、21／21 测试通过。除权限、幂等、状态与恢复外，真实 AgentLoop 集成测试还覆盖 `dispatch → write/edit → report → Router relay`，以及“后续 Batch 已排队时，Assignment 和 Report 仍优先完成”的回归情况。测试显式使用临时 `memoryWorkspaceDir` 与 `memoryBackupDir`，不会把测试日记写进正式记忆目录。
+结果：类型检查通过，3 个测试文件、25／25 测试通过。除权限、幂等、状态与恢复外，真实 AgentLoop 集成测试还覆盖 `dispatch → write/edit → report → Router relay`、“后续 Batch 已排队时，Assignment 和 Report 仍优先完成”，以及“Report 已持久化后发生上下文溢出，仍能完成投递与回传”的回归情况。测试显式使用临时 `memoryWorkspaceDir` 与 `memoryBackupDir`，不会把测试日记写进正式记忆目录。
 
 ### 20.3 正式服务真实闭环
 
-2026-11-18 在 Spark Web 验收了两项由真实主意识输出触发的记忆任务。Router 根据 Observation 自主派工，两项任务均完成，并由记忆 Session 分别提交有效的结构化 Report。宿主核对了以下记录：
+验收材料来自正式主意识 Session 对共同约定的自然回应，不是直接向 Router 写入任务，也不是工程者手补 Report。两个真实任务均完成：
 
-- Task、Mandate、Assignment 和 `deliver_assignment` Effect 已持久化，记忆 Session 的模型请求包含完整获准材料。
-- 两项任务均在当前 Assignment 中实际写入或编辑了记忆工作区内的产物，Report 的产物引用通过宿主验收。
-- 两项 `relay_report` Effect 均已完成，Router 模型请求中可以核对对应的状态、摘要和源引用。
-- 验收后主意识的渠道回复仍有成功回执。潜意识的工具域没有渠道发送能力。
+| 证据 | 第一次 | 第二次 |
+|---|---|---|
+| Task | `task_c1314504-2d59-4b0f-a1df-43b092ddf2d1` | `task_2e8ef3d0-dc83-4b9b-9b9b-a3c4487eaacc` |
+| 触发 Batch | `batch_80bfc5de-a246-4885-80c1-f1262c94c640` | `batch_ebe05168-929f-4c28-b795-f1a86e3591ad` |
+| Observation | `obs_680d2491f297e6d14d32efe5` | `obs_db073f9ee7d02bf7230500ed` |
+| Mandate | `mandate_068a4778-462d-43e8-a1d8-48afba1860d4` | `mandate_9c10e50f-48eb-4421-851a-4445c7bc65cf` |
+| Assignment | `assignment_d7e46e6b-123e-484d-80e3-762a197014b9` | `assignment_d4f7070d-7779-467e-9a72-3da890b773b0` |
+| 实际记忆活动 | turn 12，`write` 创建 `diary.md` | turn 13，`edit` 更新 `diary.md` |
+| Report | `report_e9f1ff0c-dd69-4d03-9407-4e3841702e94` | `report_8eca3544-b4ad-4fd3-ada7-33dcf820819f` |
+| 业务与工程状态 | Task `completed`；Assignment `ended`；两个 Effect `completed` | Task `completed`；Assignment `ended`；两个 Effect `completed` |
 
-完整请求、会话样本和记忆产物保存在 Spark 的受限运行记录中。
+两份 Mandate 的策略版本均为 `dispatch-v1`，允许工具为六个文件／图像工具与 `subconscious_report`，允许结果为 `file / tool`，输入上限 65536 字节，运行上限 900000 毫秒。任务包中直接出现完整 Observation 正文与 `task_id / assignment_id / kind / title / reason / instruction / visibility / allowed_outputs`，不是只有 ID。
 
-### 20.4 尚未因此完成的能力
+两份 Report 都引用：
+
+```text
+file:/home/ayerelysia/Elysia/Data/workspace/subconscious/memory/diary.md
+```
+
+真实请求归档证明对应 `write`、`edit` 和 `subconscious_report` 工具调用由记忆 Session 自己产生。Router 归档：
+
+```text
+/home/ayerelysia/Elysia/Elysium/Elysia-Harness/homes/web/requests/2026-11-18T01-08-01-553Z-634e2059.json
+```
+
+其中的消息索引 1318 与 1321 分别是上述两份 `[subconscious.report]`，包含 Report、Task、Assignment、状态、摘要、产物与原始来源。对应 `relay_report` Effect 均为 `completed`，因此“Router 已收到”有真实模型输入证据，不只是数据库推断。
+
+验收后正式服务仍监听 `127.0.0.1:3299`，主意识继续产生真实 `send_text` 成功回执。潜意识没有获得 QQ／KOOK 渠道发送工具。
+
+### 20.4 第三次真实验收：自主派工、记忆写入与恢复后回传
+
+本次严格由 Router 自主派工，未由主意识或脚本代派，也未直接修改 Store 伪造闭环：
+
+- Router 在 turn 720 调用 `subconscious_dispatch`，工具调用为 `call_2896296264157928191`；来源是 `observation/obs_6917a42cee9e636b8aa4aacf`，触发为 `batch/batch_a6249ecd-6ed5-4c7e-a4e8-9b52251863da`。
+- Task：`task_12e79315-9711-4f84-b854-25a0416b77b7`；Mandate：`mandate_a47a396f-5c5c-413c-9991-b8e61fb41a99`；Assignment：`assignment_14b0c8b9-9084-4a8f-ad56-96b081229203`。
+- 记忆 Session 在 turn 120 收到任务，自己调用 `edit` 写入正式 `diary.md`，再调用 `subconscious_report` 提交 `report_c20d2eea-2a57-435a-8527-4979d0d7c046`。日记从 141 行增长到 178 行，新增 37 行，末尾包含目标 Task、Assignment 与 Observation 线索。
+- 记忆请求归档 `2026-11-18T15-12-17-490Z-cb616a32.json` 包含目标 Assignment、`edit` 与成功的 `subconscious_report`；工程审计保存于 `dispatch-live-test/diary.before-target.md` 与 `diary.after-target.md`。
+
+执行后实际进行了 Router 原生 Compact（`abf2a73f-e17f-4164-b014-35db533e359d`）与受控重启，用来覆盖外部重挂载及持久恢复，而非另造一次任务。最终 Task 为 `completed`，Assignment 为 `ended`；`deliver_assignment` 和 `relay_report` 均为 `completed`，`last_error` 均为 `null`。目标报告回传完成时间为 `1795015599792`。
+
+最终 Router 请求归档：
+
+```text
+/home/ayerelysia/Elysia/Elysium/Elysia-Harness/homes/web/requests/2026-11-18T15-27-05-532Z-a6c5a217.json
+```
+
+其消息索引 19 包含目标 `[subconscious.report]`。因此这次不仅有 Report 数据库记录，也有报告重新进入 Router 真实模型输入的证据；队列中此前的报告均已回传完成。
+
+### 20.5 尚未因此完成的能力
 
 - 自动 Subscription、新消息续接既有 Task、跨任务语义归并。
 - 长任务 `progress / waiting`、显式取消、人工或模型重试与返工。

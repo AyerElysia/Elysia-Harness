@@ -6,10 +6,10 @@ import { DispatchError, DispatchStore } from '../src/dispatch-store.ts'
 import type { DispatchInput } from '../src/dispatch.ts'
 import { RouterStore } from '../src/store.ts'
 
-async function fixture() {
+async function fixture(triggerBatchCount = 1) {
   const home = await mkdtemp(join(tmpdir(), 'elysia-dispatch-store-'))
   const stateDir = join(home, 'state')
-  const store = new RouterStore(stateDir)
+  const store = new RouterStore(stateDir, triggerBatchCount)
   const dispatch = new DispatchStore(stateDir, { memoryWorkspaceDir: join(home, 'memory') })
   onTestFinished(async () => {
     dispatch.close()
@@ -22,6 +22,14 @@ async function fixture() {
     content: [{ type: 'text', text: '请记住这件事' }], threadRefs: ['kook:direct:one'], visibilityRef: 'kook:direct:one',
   })
   store.formBatches(20, 65_536)
+  if (triggerBatchCount > 1) {
+    store.recordObservation({
+      source: { kind: 'fixture', instance: 'one', eventId: 'event-2' },
+      kind: 'external_input', occurredAt: Date.now(), payload: { text: '同一批组的后续材料' },
+      content: [{ type: 'text', text: '同一批组的后续材料' }], threadRefs: ['kook:direct:one'], visibilityRef: 'kook:direct:one',
+    })
+    store.formBatches(20, 65_536)
+  }
   const batch = store.nextBatch()!
   const observation = batch.observations[0]!
   const input: DispatchInput = {
@@ -119,4 +127,33 @@ it('recovers interrupted delivery and uses persisted retry times', async () => {
   expect(dispatch.nextAssignment()).toBeUndefined()
   expect(dispatch.nextWakeAt()).toBeGreaterThan(Date.now())
   expect(dispatch.nextAssignment(Date.now() + 61_000)?.id).toBe(created.assignment_id)
+})
+
+it('reconciles a stale delivery Effect after its terminal Report survives a later overflow', async () => {
+  const { dispatch, input, formation } = await fixture()
+  const created = dispatch.createTask(input, formation)
+  dispatch.markAssignmentPresented(created.assignment_id, 1, 1)
+  const saved = dispatch.saveReport({
+    task_id: created.task_id, assignment_id: created.assignment_id, status: 'completed',
+    summary: '日记已经写入，随后模型轮次发生上下文溢出', output_refs: ['file:diary.md'],
+  }, { sessionId: 'elysia-subconscious-memory', toolCallId: 'report-before-overflow', turn: 1 })
+  dispatch.failDelivery(created.assignment_id, 'CONTEXT_WINDOW_EXCEEDED', Date.now() + 60_000)
+  expect(dispatch.health()).toMatchObject({ pendingAssignments: 1, pendingReportRelays: 1 })
+
+  dispatch.recover()
+
+  expect(dispatch.nextAssignment(Date.now() + 61_000)).toBeUndefined()
+  expect(dispatch.health()).toMatchObject({ pendingAssignments: 0, pendingReportRelays: 1 })
+  expect(dispatch.getAssignment(created.assignment_id)).toMatchObject({ state: 'ended' })
+  expect(dispatch.getAssignment(created.assignment_id)?.lastError).toBeUndefined()
+  expect(dispatch.nextReportRelay(Date.now() + 61_000)?.id).toBe(saved.report.id)
+})
+
+it('allows dispatch from any Observation in a stable multi-Batch trigger', async () => {
+  const { dispatch, batch, input, formation } = await fixture(2)
+  expect(batch.batchIds).toHaveLength(2)
+  const second = batch.observations[1]!
+  const created = dispatch.createTask({ ...input, source_refs: [`observation/${second.id}`] }, formation)
+  expect(created.idempotent_replay).toBe(false)
+  expect(dispatch.getTaskPackage(created.assignment_id).observations.map(item => item.id)).toEqual([second.id])
 })
