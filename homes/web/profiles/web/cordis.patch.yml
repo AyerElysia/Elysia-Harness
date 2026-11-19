@@ -112,8 +112,8 @@
     - id: elysia-subconscious
       name: '@elysia/subconscious'
       config:
-        provider: nexus-a6-gemini
-        model: gemini-3.8-flash
+        provider: a6
+        model: deepseek-v4.1-flash
         baseDir: !!js process.env.ELYSIA_PROMPTS_DIR ?? process.env.DSH_HOME +
           '/standing-prompts'
         files:
@@ -127,6 +127,8 @@
         stateDir: /home/ayerelysia/Elysia/Data/subconscious/router
         workspaceDir: /home/ayerelysia/Elysia/Data/workspace/subconscious/router
         skillsDir: /home/ayerelysia/Elysia/Data/workspace/skills
+        readOnlyDirs:
+          - /home/ayerelysia/Elysia/Data/workspace/diaries
         backupDir: /home/ayerelysia/Elysia/Data/subconscious/router/standing-prompt-backups
         maxBackgroundJobs: 4
         maxJobAgeMs: 1800000
@@ -267,5 +269,5 @@
 - id: agent-default-model
   name: "@deepseek-ai/dsh-agent-default-model"
   config:
-    provider: d1api
+    provider: a6
     model: deepseek-v4.1-flash
