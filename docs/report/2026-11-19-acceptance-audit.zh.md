@@ -169,3 +169,35 @@
 5. **Windows 修正**：`desktop-host.ts` 的 POSIX 权限检查、4 个不可配置的 session cwd、24 处硬编码路径（B1/D3）。
 6. **补文档**：删掉已被删除的 `vitest.elysia.config.ts` 引用、修正插件数量与验收数字、同步 guard 行为（D4/3.3）。
 7. **决定 `plugins/memory` 的去留**：删掉或明确标注「由 subconscious 内部实现替代」。
+
+## 七、复核记录：2026-11-19 23:28 远端 4 个提交
+
+拉取 `556c6a99e7..eb24d6f14f`（快进），新增内容：`66b4662b03 fix(subconscious): recover durable report delivery`、`0b26467bde chore(web): update model and diary access configuration`、`ca37ea186a docs: record desktop and prompt management designs`，以及一个 merge 提交。
+
+### 7.1 修好的
+
+- **本报告 2.1 的「HEAD 不自洽」已解决**：服务器此前那 9 个未提交改动已提交入库。本地 HEAD 上 subconscious 从 14/23 变为 **24/25**；服务器同一提交实测 **3 个文件、25/25 全绿**，与 DISPATCH／README 宣称一致。
+- 恢复语义补齐：`recover()` 同事务化并把「已有终态 Report 的 stale 投递 Effect」协调为 `completed`（`dispatch-store.ts:627-641`）；记忆／Router 被外部 reattach 时就地重新 `setup`，不再抛错；`deliver()` 在持久 Report 存在时直接返回。DISPATCH §12 也补了对应规则。
+
+### 7.2 没修的
+
+- **`session_send → router` 的 P0 原样存在**：`plugins/session-communication` 本轮未改动，`subconscious/src` 里 `ensureExisting` 命中数为 0。仍是静默黑洞。
+- **profile 仍未声明 `@elysia/subconscious`**（`git show HEAD:homes/web/profiles/web/package.json` 无该依赖），干净 checkout 解析挂载行依旧失败。
+
+### 7.3 新发现
+
+| # | 级别 | 问题 |
+|---|---|---|
+| N1 | **P1** | `homes/web/profiles/web/cordis.patch.yml` 把 subconscious 与 `agent-default-model` 的 provider 都改成 `a6`，但**任何 tracked 配置都没有定义 `a6`**（`homes/shared/models.patch.example.yml` 用的是 `example-provider`，`homes/web/cordis.patch.yml` 是未跟踪的本机文件）。干净 checkout 上 provider 不可解析。本次改动让 tracked profile 与单台机器的未跟踪配置耦合得更紧。 |
+| N2 | P2 | `plugins/subconscious/` 新增 3 个一次性脚本 `compact-router-live.mjs` / `prompt-main-dispatch.mjs` / `run-meaningful-memory.mjs`：硬编码 `/home/ayerelysia/...`、读取服务器日志提取 web token、连 `127.0.0.1:3299`。仓库对这类脚本的既定约定是放 `scripts/` 并从环境取路径（`.gitignore` 甚至为此忽略 `homes/*/*.mjs`）。无凭据泄漏，但它们只对那台主机有意义。 |
+| N3 | P2 | DISPATCH／README 的「25／25 通过」是 **Linux 口径**。Windows 上第 25 个用例 `router-integration.spec.ts:352` 必红：断言 `exitCode: 0` 且 `cwd` 等于 workspace，命令用 `printf "%s" "$PWD"` 与 `/var/tmp`，Windows 无 bash 时为 `exitCode: 1`。测试需要平台条件，否则 Windows 上永远红一条。 |
+
+### 7.4 文档
+
+- `docs/desktop-pet.zh.md`：需求草案，明确「尚未开始实现」。
+- `docs/prompt-management.zh.md`：多 Session 提示词管理页需求。
+- `plugins/subconscious/CONTINUATION.zh.md`：任务续接最小版需求；与 README「未实现自动续接」一致，未虚报。
+
+### 7.5 复核结论
+
+这批提交是**真实进步且文档属实**（服务器 25/25 已复验），修复方向与本报告 2.1 一致。但**上一轮报告的两个 P0 一个都没动**（router 投递、profile 依赖），并新增一个 P1（provider `a6` 未定义）。因此总体评级不变：仍不能判通过。
