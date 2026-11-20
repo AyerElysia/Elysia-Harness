@@ -27,6 +27,8 @@
 - Batch 自然结束与 Task 完成完全分离。调度顺序为 **待回传 Report → 待执行 Assignment → 新 Batch**，避免持续聊天或大量任务让闭环饥饿。
 - Task、Mandate、Assignment、Report、Effect 与 Observation／Batch 统一保存在 `router.sqlite`，由插件领域层单写；DSH Session 历史仍由 DSH 自己持久化。
 - 投递与回传各有尝试预算（默认各 5 次）；耗尽后 Effect 置 `failed`、Task 失败并释放去重键，`health().failedEffects` 可观测，永久错误不再无限重试。
+- Router 批次运行也有预算（`maxBatchAttempts`，默认 5 次）；耗尽后批次置 `decided` 并写入 `ignore` Decision（原因 `BATCH_ATTEMPTS_EXHAUSTED`），输入仍可按 Decision 查询，`health().failedBatches` 可观测。上下文溢出、鉴权或 provider 5xx 这类永久失败不再让 `readyBatches` 无限堆积。
+- 记忆 Assignment 按 Mandate 的 `maxRunMs` 施加墙钟预算；超时以 `ASSIGNMENT_TIMEOUT` 失败并交给投递失败预算。超时不 dispose、不 abort 耐久 Session：仍在进行的模型回合由下一次投递等待，不并发写同一 Session。
 - `RouterSession` 与 `MemorySession` 暴露 `ensureAgent()`：其它插件需要真实会话时经宿主取，不得按 header preset 通用恢复这两个身份。
 - 未实现自动续接、长任务 `progress / waiting`、模型可见的取消／重试、主动机会和其他专业类型。
 
@@ -73,15 +75,28 @@ read、read_image、write、edit、glob、grep、subconscious_report
 
 ## 运行位置
 
+部署路径**全部来自 profile**，插件不内置任何主机绝对路径；缺失时挂载阶段直接抛 `CONFIG_PATH_REQUIRED`。记忆工作区未显式配置时取 Router `workspaceDir` 的同级 `memory` 目录。
+
+```text
+配置文件：homes/web/profiles/web/cordis.patch.yml（部署根由它决定）
+stateDir：Router／派工状态库目录，库文件为 router.sqlite
+workspaceDir：Router Session cwd
+memoryWorkspaceDir：记忆 Session cwd（未显式给出时取 workspaceDir 的同级 memory）
+skillsDir：Skill 根目录
+Memory Session：elysia-subconscious-memory
+Router 提示词：<prompts>/SUBCONSCIOUS-ROUTER.md
+Memory 提示词：<prompts>/SUBCONSCIOUS-MEMORY.md
+正式日记：<memoryWorkspaceDir>/diary.md
+```
+
+本机 Linux 正式部署值（同上一节配置文件）：
+
 ```text
 插件：/home/ayerelysia/Elysia/Elysium/Elysia-Harness/plugins/subconscious
-Router cwd：/home/ayerelysia/Elysia/Data/workspace/subconscious/router
-Router 状态库：/home/ayerelysia/Elysia/Data/subconscious/router/router.sqlite
-Router 提示词：/home/ayerelysia/Elysia/Data/standing-prompts/SUBCONSCIOUS-ROUTER.md
-Memory Session：elysia-subconscious-memory
-Memory cwd：/home/ayerelysia/Elysia/Data/workspace/subconscious/memory
-Memory 提示词：/home/ayerelysia/Elysia/Data/standing-prompts/SUBCONSCIOUS-MEMORY.md
-正式日记：/home/ayerelysia/Elysia/Data/workspace/subconscious/memory/diary.md
+stateDir：/home/ayerelysia/Elysia/Data/subconscious/router
+workspaceDir：/home/ayerelysia/Elysia/Data/workspace/subconscious/router
+memoryWorkspaceDir：/home/ayerelysia/Elysia/Data/workspace/subconscious/memory
+skillsDir：/home/ayerelysia/Elysia/Data/workspace/skills
 ```
 
 Web 在 `homes/web/profiles/web/cordis.patch.yml` 中挂载插件，正式服务监听 `127.0.0.1:3299`。
@@ -94,7 +109,7 @@ node ../../dsh/node_modules/typescript/bin/tsc --noEmit --incremental false --co
 node ../../dsh/node_modules/vitest/vitest.mjs run
 ```
 
-最终结果：类型检查通过，**3 个测试文件、29／29 测试通过**（Linux 口径；Windows 上 1 例 Linux 专用 sandbox shell 用例显式跳过）。覆盖多来源去重、四类主意识事件、过滤与迁移、完整观察、自然轮次收尾、离线补漏、通用工具、派工权限与幂等、真实记忆写入、报告回传、持续 Batch 下的 Assignment／Report 优先调度，以及 Report 后上下文溢出的恢复。测试使用临时记忆目录，不写正式日记，不向真实渠道发送测试消息。
+最终结果：类型检查通过，**5 个测试文件、37 例**；Linux 口径全部通过，Windows 上 1 例 Linux 专用 sandbox shell 用例显式跳过，其余 36 例通过。覆盖多来源去重、四类主意识事件、过滤与迁移、完整观察、自然轮次收尾、离线补漏、通用工具、派工权限与幂等、真实记忆写入、报告回传、持续 Batch 下的 Assignment／Report 优先调度、Report 后上下文溢出的恢复、Batch 预算耗尽后写入 ignore Decision、`maxRunMs` 超时到 `ASSIGNMENT_TIMEOUT`，以及部署路径必配与记忆工作区推导。测试使用临时记忆目录，不写正式日记，不向真实渠道发送测试消息。
 
 ### 真实闭环证据
 

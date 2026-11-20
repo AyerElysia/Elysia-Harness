@@ -20,4 +20,6 @@ Web profile 的 `mainSessionVoice: true` 只允许已运行并装配好的 `elys
 
 独立 broker 和 worker 复用已经运行的 Spark LiveKit 试验实例；只用回环端口。本地 ASR 的模型准备和 18796 服务见 [ASR-LOCAL](../../services/voice-livekit-pilot/ASR-LOCAL.md)。先启动 ASR，再用 `gemini_broker.py --local-asr`；启动预览 DSH 时设置 `ELYSIA_GEMINI_CASCADE_LOCAL_ASR=1`。两端模式不一致会在取得麦克风权限前拒绝开房。健康 18792，私有 DSH 事件 18793，私有 broker 18794。两端使用同一个 owner-only 0600 随机桥接文件；OpenAI 试验凭据与 A6 凭据互不复用。Broker 仅从既有 Elysium 私有 TOML 内存读取网关引用，不复制或输出凭据。正式 Web、Breeze 和模型网关都无需重启。
 
+`bridgeKeyFile` 缺失不等于配置错误：没有部署语音桥的机器上插件仍会正常挂载，只记一条 warn 并停用语音与桌宠能力；需要「缺 key 直接失败」的部署把 `strictBridgeKey` 设为 true。桌宠的 `desktopKeyFile` 在 POSIX 上要求 0600 且属主为本进程，在 Windows 上改为校验「非符号链接 + 文件不超过 65 字节 + 64 位十六进制内容」——Windows 的 stat 没有 POSIX 权限位语义，照搬会让桌宠在其唯一有意义的平台上永远挂不上。
+
 正式接入和消息时序见 [正式会话验收](../../docs/report/2026-11-13-dsh-native-voice-timeline.zh.md)。详见 [初版实施记录](../../docs/report/2026-11-12-gemini-cascade-session.zh.md) 和 [本地 ASR 级联验收](../../docs/report/2026-11-13-gemini-cascade-local-asr.zh.md)。

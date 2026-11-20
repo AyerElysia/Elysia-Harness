@@ -14,7 +14,6 @@ declare module '@deepseek-ai/dsh-llm' {
 }
 
 export const MEMORY_SESSION_ID = brandString<SessionId>('elysia-subconscious-memory')
-export const DEFAULT_MEMORY_SESSION_CWD = '/home/ayerelysia/Elysia/Data/workspace/subconscious/memory'
 
 export type TaskState = 'assigned' | 'running' | 'report_pending'
   | 'completed' | 'blocked' | 'failed' | 'dropped' | 'cancelled'

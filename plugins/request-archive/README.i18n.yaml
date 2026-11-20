@@ -5,6 +5,12 @@
 /elysia-request-archive:
   en: 7b09ac5ca6597e93
   zh: c3d2fe9b1aafa32f
+/elysia-request-archive/storage:
+  en: dc308ac912b19a40
+  zh: 95c40777090f40a9
+/elysia-request-archive/retention:
+  en: b8692632a72928c2
+  zh: b51701cb39b2c735
 /elysia-request-archive/latest-request-index:
   en: 853285d876f1ea3f
   zh: c77ebaa0e806edad

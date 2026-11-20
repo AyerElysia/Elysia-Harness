@@ -10,12 +10,63 @@ import * as FileCapabilities from '@elysia/conscious-mind/file-capabilities'
 import { restoreDirectSessionModel } from '@elysia/conscious-mind/src/restore-direct-session-model.ts'
 import type { Config } from './config.ts'
 import { MEMORY_SESSION_ID, reminderContent, taskContent, taskMessageSource } from './dispatch.ts'
-import type { DispatchStore } from './dispatch-store.ts'
+import { DispatchError, type DispatchStore } from './dispatch-store.ts'
 import { defineSubconsciousReportTool } from './dispatch-tools.ts'
 import { guardStandingPromptWrites } from './general-capabilities.ts'
 
 const contextSources = new Set(['agent-instructions', 'runtime-context'])
 const composed = new WeakSet<Context>()
+
+/**
+ * 单次 Assignment 的墙钟预算。超时只让这一次 run 失败：不 dispose、不 abort 耐久 Session，
+ * 因为模型回合可能正在真实写文件，强行打断会留下半成品；是否再派由 runtime 的失败预算决定。
+ * 超时后仍会结束的旧 run 通过 `hit` 检查不再推进 Task 状态，避免与下一次投递并发改同一 Session。
+ */
+export class AssignmentRunBudget {
+  private readonly startedAt = Date.now()
+  private timer: ReturnType<typeof setTimeout> | undefined
+  private expiredAt: number | undefined
+  private delivering = false
+  private settled = false
+  readonly expired: Promise<never>
+
+  constructor(readonly assignmentId: string, readonly maxRunMs: number) {
+    this.expired = new Promise<never>((_, reject) => {
+      this.timer = setTimeout(() => {
+        this.expiredAt = Date.now()
+        const used = this.expiredAt - this.startedAt
+        // 日志必须说清职责：回合仍在跑时，下一次投递会等它，不与它并发写同一 Session。
+        const running = this.delivering && !this.settled
+        process.stderr.write(`潜意识记忆：Assignment ${assignmentId} 已用 ${used}ms 超过上限 ${maxRunMs}ms；`
+          + '本次 run 以 ASSIGNMENT_TIMEOUT 失败，'
+          + (running
+            ? '模型回合仍在进行，下一个 Assignment 会等它结束后再投递，不会并发写同一 Session。\n'
+            : this.delivering ? '模型回合已结束，超时仍按 deadline 生效。\n' : '尚未开始模型回合，无需等待。\n'))
+        reject(new DispatchError('ASSIGNMENT_TIMEOUT', `Assignment ${assignmentId} 已用 ${used}ms，超过上限 ${maxRunMs}ms`, true))
+      }, maxRunMs)
+      this.timer.unref()
+    })
+  }
+
+  get hit(): boolean {
+    return this.expiredAt !== undefined
+  }
+
+  /** 第一次把任务真正投给模型前调用；超时日志据此区分「回合仍在跑」和「还没开始」。 */
+  beginDelivery(): void {
+    this.delivering = true
+  }
+
+  /** 真实工作已经结束；超时日志据此判断模型回合是否仍在进行。 */
+  markSettled(): void {
+    this.settled = true
+  }
+
+  clear(): void {
+    if (this.timer !== undefined) clearTimeout(this.timer)
+    this.timer = undefined
+  }
+}
 
 function isTaskMessage(message: UserMessage, assignmentId: string, deliveryId: string): boolean {
   return message.source.kind === 'elysia-subconscious-task'
@@ -179,13 +230,27 @@ export class MemorySession {
 
   async run(assignmentId: string): Promise<void> {
     if (this.store.getReportByAssignment(assignmentId) !== undefined) return
-    const { task, assignment, mandate, observations } = this.store.getTaskPackage(assignmentId)
-    const { agent } = await this.ensure()
-    await this.deliver(agent, assignmentId, assignment.deliveryId, taskContent(task, assignment, mandate, observations))
-    if (this.store.getReportByAssignment(assignmentId) !== undefined) return
-    this.store.markReportPending(assignmentId)
-    await this.deliver(agent, assignmentId, `${assignment.deliveryId}:reminder`, reminderContent(task, assignment))
-    if (this.store.getReportByAssignment(assignmentId) === undefined) this.store.failMissingReport(assignmentId)
+    const pkg = this.store.getTaskPackage(assignmentId)
+    const budget = new AssignmentRunBudget(assignmentId, pkg.mandate.maxRunMs)
+    const work = (async () => {
+      const { agent } = await this.ensure()
+      if (budget.hit) return
+      budget.beginDelivery()
+      await this.deliver(agent, assignmentId, pkg.assignment.deliveryId,
+        taskContent(pkg.task, pkg.assignment, pkg.mandate, pkg.observations))
+      // 超时后的旧 run 不再推进 Task 状态；下一次投递会重新走完整流程。
+      if (budget.hit || this.store.getReportByAssignment(assignmentId) !== undefined) return
+      this.store.markReportPending(assignmentId)
+      await this.deliver(agent, assignmentId, `${pkg.assignment.deliveryId}:reminder`,
+        reminderContent(pkg.task, pkg.assignment))
+      if (budget.hit) return
+      if (this.store.getReportByAssignment(assignmentId) === undefined) this.store.failMissingReport(assignmentId)
+    })().finally(() => budget.markSettled())
+    try {
+      await Promise.race([work, budget.expired])
+    } finally {
+      budget.clear()
+    }
   }
 
   async dispose(): Promise<void> {

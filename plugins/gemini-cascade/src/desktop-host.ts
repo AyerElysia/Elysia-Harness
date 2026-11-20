@@ -1,4 +1,5 @@
 import { createHash } from 'node:crypto'
+import type { Stats } from 'node:fs'
 import { createServer } from 'node:http'
 import { lstat, readFile } from 'node:fs/promises'
 import { isAbsolute, join } from 'node:path'
@@ -19,12 +20,40 @@ type Driver = {
   stop(deviceId: string, roomName: unknown, token: unknown): Promise<void>
 }
 
-export async function mountDesktopHost(ctx: Context, keyFile: string, driver: Driver, port = 18797): Promise<number> {
+const KEY_LIMIT = 65
+
+type KeyStat = Pick<Stats, 'isFile' | 'size' | 'mode' | 'uid'>
+
+/**
+ * 桌宠只在 Windows 上有意义，但 Windows 的 stat.mode 没有 POSIX 的
+ * group/other 语义（普通文件同样带 0o066），process.getuid 也不存在。
+ * 照搬 POSIX 检查会让桌宠在任何 Windows 机器上都挂不上，因此按平台分开校验：
+ * 能表达私密性的平台保留严格检查，其余平台退回可验证的约束。
+ */
+export function assertDesktopKeyFile(stat: KeyStat, platform: NodeJS.Platform = process.platform): void {
+  // lstat 不跟随链接；链接意味着密钥来源可被替换，两个平台都不接受。
+  if (!stat.isFile()) throw new Error('desktop_key_permissions')
+  if (platform === 'win32') {
+    // Windows 无法从 stat 读到 ACL，所以这里只保留大小上限；内容格式由
+    // readDesktopOwnerKey 的 64 位 hex 校验保证，未放宽。
+    if (stat.size > KEY_LIMIT) throw new Error('desktop_key_format')
+    return
+  }
+  if ((stat.mode & 0o077) !== 0 || stat.uid !== process.getuid?.()) throw new Error('desktop_key_permissions')
+  if (stat.size > KEY_LIMIT) throw new Error('desktop_key_permissions')
+}
+
+export async function readDesktopOwnerKey(keyFile: string, platform: NodeJS.Platform = process.platform): Promise<string> {
   if (!isAbsolute(keyFile)) throw new Error('desktop_key_path')
   const stat = await lstat(keyFile)
-  if (!stat.isFile() || (stat.mode & 0o077) || stat.uid !== process.getuid?.() || stat.size > 65) throw new Error('desktop_key_permissions')
+  assertDesktopKeyFile(stat, platform)
   const key = (await readFile(keyFile, 'utf8')).trim()
   if (!/^[a-f0-9]{64}$/.test(key)) throw new Error('desktop_key_format')
+  return key
+}
+
+export async function mountDesktopHost(ctx: Context, keyFile: string, driver: Driver, port = 18797): Promise<number> {
+  const key = await readDesktopOwnerKey(keyFile)
   const deviceId = createHash('sha256').update('elysia-desktop-device-v1:').update(key).digest('hex').slice(0, 32)
   const instruction = await readFile(join(import.meta.dirname, 'DESKTOP-TOOLS.md'), 'utf8')
   const avatar = new DesktopPerform()

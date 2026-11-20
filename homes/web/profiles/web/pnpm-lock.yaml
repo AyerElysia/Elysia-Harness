@@ -44,6 +44,9 @@ importers:
       '@elysia/session-compaction':
         specifier: file:../../../../plugins/session-compaction
         version: file:../../../../plugins/session-compaction
+      '@elysia/subconscious':
+        specifier: link:../../../../plugins/subconscious
+        version: link:../../../../plugins/subconscious
       '@elysia/voice-call':
         specifier: file:../../../../plugins/voice-call
         version: file:../../../../plugins/voice-call(@elysia/conscious-mind@file:../../../../plugins/conscious-mind(@elysia/proactive-system@file:../../../../plugins/proactive-system))

@@ -11,7 +11,6 @@ declare module '@deepseek-ai/dsh-llm' {
 
 export const ROUTER_SESSION_ID = brandString<SessionId>('elysia-subconscious-router')
 export const MAIN_SESSION_ID = brandString<SessionId>('elysia-conscious-mind')
-export const ROUTER_SESSION_CWD = '/home/ayerelysia/Elysia/Data/workspace/subconscious/router'
 export const MAIN_SOURCE_KIND = 'conscious_session'
 export const MAIN_SOURCE_INSTANCE = 'elysia-conscious-mind'
 export const routerMessageSource = (batchId: string) => ({ kind: 'elysia-subconscious-router', form: 'relay', batchId }) as const

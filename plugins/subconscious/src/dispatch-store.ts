@@ -4,7 +4,7 @@ import { join } from 'node:path'
 import { DatabaseSync } from 'node:sqlite'
 import type { ContentBlock } from '@deepseek-ai/dsh-llm'
 import {
-  DEFAULT_MEMORY_SESSION_CWD, MEMORY_SESSION_ID,
+  MEMORY_SESSION_ID,
   type AssignmentState, type DispatchHealth, type DispatchInput, type Formation, type ReportInput,
   type ReportStatus, type SubconsciousTask, type TaskAssignment, type TaskMandate, type TaskReport, type TaskState,
 } from './dispatch.ts'
@@ -18,7 +18,8 @@ export class DispatchError extends Error {
 }
 
 export interface DispatchStoreOptions {
-  memoryWorkspaceDir?: string
+  // 记忆工作区由宿主部署配置决定；Store 不再持有任何默认绝对路径。
+  memoryWorkspaceDir: string
   maxInputBytes?: number
   maxRunMs?: number
   maxTasksPerTrigger?: number
@@ -189,9 +190,9 @@ export class DispatchStore {
   readonly maxTasksPerTrigger: number
   readonly maxQueuedTasks: number
 
-  constructor(stateDir: string, options: DispatchStoreOptions = {}) {
+  constructor(stateDir: string, options: DispatchStoreOptions) {
     mkdirSync(stateDir, { recursive: true })
-    this.memoryWorkspaceDir = options.memoryWorkspaceDir ?? DEFAULT_MEMORY_SESSION_CWD
+    this.memoryWorkspaceDir = options.memoryWorkspaceDir
     this.maxInputBytes = options.maxInputBytes ?? 65_536
     this.maxRunMs = options.maxRunMs ?? 900_000
     this.maxTasksPerTrigger = options.maxTasksPerTrigger ?? 3

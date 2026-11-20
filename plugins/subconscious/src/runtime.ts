@@ -5,7 +5,7 @@ import type { Config } from './config.ts'
 import { MAIN_SESSION_ID, type MainSessionEvent } from './model.ts'
 import { RouterSession } from './router-session.ts'
 import { MemorySession } from './memory-session.ts'
-import { RouterStore, type RouterHealth } from './store.ts'
+import { BATCH_ATTEMPTS_EXHAUSTED, RouterStore, type RouterHealth } from './store.ts'
 import { DispatchStore } from './dispatch-store.ts'
 import type { DispatchHealth } from './dispatch.ts'
 
@@ -60,8 +60,11 @@ export class RouterRuntime extends Service {
     this.bootstrapPromise ??= this.bootstrap()
   }
 
+  /** 结构化 code 必须落进 last_error，否则运维只能看到一句无分类的文案。 */
   private errorText(error: unknown): string {
-    return error instanceof Error ? error.message : String(error)
+    const message = error instanceof Error ? error.message : String(error)
+    const code = (error as { code?: unknown } | null | undefined)?.code
+    return typeof code === 'string' && code.length > 0 && !message.startsWith(`${code}:`) ? `${code}: ${message}` : message
   }
 
   private error(error: unknown): void {
@@ -231,7 +234,13 @@ export class RouterRuntime extends Service {
         this.succeeded()
       } catch (error) {
         this.error(error)
-        await this.wait(this.retryDelay())
+        const attempts = this.store.batchAttempts(batch.id)
+        // 上下文溢出、鉴权或 provider 5xx 可能是永久性的；没有上限会让 Router 永远卡死在同一批，
+        // 且 readyBatches 只增不减。耗尽预算后把输入保留为可查的 ignore Decision，再停止重试。
+        if (attempts >= this.config.maxBatchAttempts) {
+          this.store.abandonBatch(batch.id, BATCH_ATTEMPTS_EXHAUSTED)
+          this.error(new Error(`批次 ${batch.id} 已用 ${attempts} 次到达上限 ${this.config.maxBatchAttempts}，已标记 ${BATCH_ATTEMPTS_EXHAUSTED} 并停止重试：${this.errorText(error)}`))
+        } else await this.wait(this.retryDelay())
       }
       return true
     }

@@ -35,7 +35,13 @@ No counting request or private context is sent to another provider.
 Metrics use a removable native projection, numeric/hash-only checkpoints and
 a scope-owned bounded tokenizer cache. Configure metrics.enabled to disable
 the meter, metrics.tokenizerEnabled to use weighted estimates, and modelIds /
-providerIds to control reference-tokenizer matching. The narrowly scoped CSS
+providerIds to control reference-tokenizer matching. Tokenizer assets are
+validated before use: by default a missing, unreadable or mismatched asset logs
+a warning with its failure code and pinned asset revision, then the meter stays
+mounted on weighted estimates and displays the known English bias (1.59× by
+default, configurable through metrics.heuristicBiasRatio). Set
+metrics.tokenizerStrict=true only when a mount must fail instead of degrading.
+The narrowly scoped CSS
 adapter hides the native composer meter only while this slot is available;
 it does not replace InputBar or modify native DSH. Refresh the browser after
 deployment to clear a previously open native portal.

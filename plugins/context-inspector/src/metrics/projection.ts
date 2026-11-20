@@ -19,6 +19,17 @@ const priceSchema = z.object({
   tokenizerTokens: count, heuristicTokens: count, fallback: z.boolean(),
   tokenizerParts: count, fallbackParts: count, incompleteTypes: z.array(z.string()),
 }).strict()
+const failureCodeSchema = z.enum([
+  'assets-missing', 'assets-unreadable', 'manifest-invalid',
+  'asset-integrity', 'asset-invalid', 'asset-policy', 'runtime-unavailable',
+])
+const counterSchema = z.object({
+  mode: z.enum(['tokenizer', 'heuristic']),
+  heuristicBiasRatio: z.number().min(1).max(4).optional(),
+  failure: z.object({
+    code: failureCodeSchema, message: z.string().min(1), assetRevision: z.string().min(1).optional(),
+  }).strict().optional(),
+}).strict()
 const estimateSchema = z.object({
   systemTokens: count, toolsTokens: count, messageTokens: count, totalTokens: count,
   method: z.enum(['tokenizer', 'heuristic', 'mixed']), tokenizerLabel: z.string().optional(),
@@ -36,7 +47,7 @@ const reportRawSchema = z.object({
 const reportSchema = z.custom<ReportedRequestUsage>(value => reportRawSchema.safeParse(value).success)
 const viewRawSchema = z.object({
   observedSeq: z.number().int().min(-1), route: routeSchema.optional(), contextWindow: z.number().int().positive().optional(),
-  estimate: estimateSchema, latestReported: reportRawSchema.optional(),
+  estimate: estimateSchema, latestReported: reportRawSchema.optional(), counter: counterSchema.optional(),
 }).strict()
 const viewSchema = z.custom<ContextMetrics>(value => viewRawSchema.safeParse(value).success)
 const stateBaseSchema = z.object({
@@ -95,6 +106,12 @@ function makeView(counter: TextCounter, state: ContextMetricsState): ContextMetr
   const method = !supported || (fallbackParts > 0 && tokenizerParts === 0)
     ? 'heuristic'
     : fallbackParts > 0 ? 'mixed' : 'tokenizer'
+  const status = counter.status
+  const counterView = {
+    mode: status.mode,
+    ...status.heuristicBiasRatio === undefined ? {} : { heuristicBiasRatio: status.heuristicBiasRatio },
+    ...status.failure === undefined ? {} : { failure: { ...status.failure } },
+  }
   return {
     observedSeq: state.observedSeq,
     ...state.route === undefined ? {} : { route: state.route },
@@ -104,6 +121,7 @@ function makeView(counter: TextCounter, state: ContextMetricsState): ContextMetr
       method, ...method === 'heuristic' ? {} : { tokenizerLabel: counter.label },
       incomplete: incompleteTypes.size > 0, incompleteTypes: [...incompleteTypes].sort(),
     },
+    counter: counterView,
     ...state.reported === undefined ? {} : {
       latestReported: { ...state.reported.value, relationship: reportedRelationship(state) },
     },

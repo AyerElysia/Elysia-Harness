@@ -6,7 +6,7 @@ import { createUserMessage } from '@deepseek-ai/dsh-llm'
 import { SessionSeq, type SessionEvent } from '@deepseek-ai/dsh-session'
 import { afterAll, describe, expect, it } from 'vitest'
 import { MAIN_SOURCE_INSTANCE, MAIN_SOURCE_KIND, batchContent, observationFromMainEvent } from '../src/model.ts'
-import { RouterStore } from '../src/store.ts'
+import { BATCH_ATTEMPTS_EXHAUSTED, RouterStore } from '../src/store.ts'
 
 const home = mkdtempSync(join(tmpdir(), 'elysia-router-store-'))
 afterAll(() => rmSync(home, { recursive: true, force: true }))
@@ -325,6 +325,30 @@ describe('durable Router store', () => {
       expect(store.health()).toMatchObject({ pendingObservations: 0, completedBatches: 3, triggerBatchCount: 3 })
       expect(store.nextBatch()).toBeUndefined()
       expect(() => store.setTriggerBatchCount(0)).toThrow('正整数')
+    } finally { store.close() }
+  })
+
+  it('retires an exhausted Batch with a queryable ignore decision', () => {
+    const store = new RouterStore(join(home, 'batch-budget'))
+    try {
+      store.recordEvent(input(1, '需要研判但会永久失败的材料'))
+      expect(store.formBatches(20, 65536)).toBe(1)
+      const batch = store.nextBatch()!
+      store.markPresenting(batch.id)
+      store.markPresenting(batch.id)
+      expect(store.batchAttempts(batch.id)).toBe(2)
+      expect(store.health()).toMatchObject({ readyBatches: 1, failedBatches: 0, pendingObservations: 1 })
+
+      store.abandonBatch(batch.id, BATCH_ATTEMPTS_EXHAUSTED)
+
+      expect(store.getBatch(batch.id)).toMatchObject({ state: 'decided' })
+      expect(store.decision(batch.id)).toEqual({ action: 'ignore', reason: BATCH_ATTEMPTS_EXHAUSTED })
+      expect(store.nextBatch()).toBeUndefined()
+      expect(store.health()).toMatchObject({ readyBatches: 0, pendingObservations: 0, failedBatches: 1 })
+      // 重复退役不能覆盖已经登记的真实决定。
+      store.abandonBatch(batch.id, 'ANOTHER_REASON')
+      expect(store.decision(batch.id)?.reason).toBe(BATCH_ATTEMPTS_EXHAUSTED)
+      expect(store.health().failedBatches).toBe(1)
     } finally { store.close() }
   })
 })
