@@ -50,11 +50,11 @@
         requestImagePixelBudget: 4194304
         requestImageMaxBytes: 1048576
 
-# The web profile mounts Elysia's plugins with `provider: a6` and
-# `model: deepseek-v4.1-flash` (`homes/web/profiles/web/cordis.patch.yml`).
-# Those ids are deployment values: declare a provider with that key here (or point
-# the profile rows at a key you declare) before starting the surface, otherwise the
-# first model request fails with an unknown provider.
+# The web profile declares its own providers in its own patch
+# (`homes/web/profiles/web/cordis.patch.yml`), not here: the Settings page writes
+# only that profile patch, and a home-layer row with the same id would shadow the
+# edited one. This file therefore serves the other surfaces and shared overrides.
+# Keep provider ids unique across the two layers.
 #
 # Which model a surface starts with. Omit to keep the bundle default.
 - id: agent-default-model

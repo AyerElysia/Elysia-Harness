@@ -121,6 +121,9 @@ handoff/
 
 # Local market indexes and retained session backups are runtime state.
 homes/*/profiles/*/.dsh-market/
+# The market loader also materialises installed bundles beside the home, one
+# directory per surface; it is downloaded state, not a source of the build.
+homes/*/dsh-market/
 homes/*/session-backups/
 
 # Upstream livestream operational settings include a private stage capability.
