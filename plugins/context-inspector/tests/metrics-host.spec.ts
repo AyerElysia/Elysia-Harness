@@ -6,13 +6,18 @@ import type { ContentBlock, TokenUsage } from '@deepseek-ai/dsh-llm'
 import { Session, SessionId, SessionLogOffset, SessionSeq } from '@deepseek-ai/dsh-session'
 import type { SessionEvent } from '@deepseek-ai/dsh-session'
 import ProjectionRegistry from '@deepseek-ai/dsh-session-projection'
+import { randomUUID } from 'node:crypto'
+import { tmpdir } from 'node:os'
+import { join } from 'node:path'
 import { describe, expect, it } from 'vitest'
+import { MetricsConfig } from '../src/metrics/config.ts'
+import { createTextCounter } from '../src/metrics/counter.ts'
 import { createContextMetricsProjection } from '../src/metrics/projection.ts'
 import type { ContextMetricsState } from '../src/metrics/projection.ts'
 import type { TextCounter } from '../src/metrics/counter-types.ts'
 
 const counter: TextCounter = {
-  id: 'mock-v1', label: 'Fixture reference tokenizer',
+  id: 'mock-v1', label: 'Fixture reference tokenizer', status: { mode: 'tokenizer' },
   supports: (provider, model) => provider === 'fixture' && model === 'supported',
   count: text => ({ tokenizerTokens: Array.from(text).length, heuristicTokens: Math.ceil(text.length / 4), fallback: false }),
 }
@@ -236,6 +241,23 @@ describe('retained context metrics projection', () => {
     expect(JSON.stringify(restored)).not.toContain('fixture checkpoint text')
   })
 
+  it('exposes a degraded counter and its known bias in the public view', () => {
+    const degraded: TextCounter = {
+      ...counter,
+      status: {
+        mode: 'heuristic', heuristicBiasRatio: 1.59,
+        failure: { code: 'assets-missing', message: '参考分词器资产文件缺失', assetRevision: '314113f8a7dadb388215396ba5fbee2c610a04d6' },
+      },
+      supports: () => false,
+    }
+    const f = fixture(degraded)
+    f.header()
+    f.user('hello world')
+    const value = f.view()
+    expect(value.estimate.method).toBe('heuristic')
+    expect(value.counter).toEqual(degraded.status)
+  })
+
   it('keeps missing report identity unknown and retains a provider request id when supplied', () => {
     const f = fixture()
     f.session.append('assistant/attempt', { turn: 2, step: 3, stream: [
@@ -248,6 +270,31 @@ describe('retained context metrics projection', () => {
     expect(f.view().latestReported).not.toHaveProperty('provider')
     expect(f.view().latestReported).not.toHaveProperty('model')
     expect(f.view().latestReported).not.toHaveProperty('attemptId')
+  })
+
+  it('mounts a degraded counter in the native registry and serves weighted counts', async () => {
+    const degraded = await createTextCounter({
+      ...MetricsConfig({}), enabled: true, assetDirectory: join(tmpdir(), 'elysia-absent-' + randomUUID()),
+    })
+    const ctx = new Context()
+    try {
+      await ctx.plugin(ProjectionRegistry)
+      const mount = await ctx.plugin({ inject: ['sessionProjections'], apply(scope: Context) {
+        scope.sessionProjections.register(createContextMetricsProjection(degraded, degraded.id))
+      } })
+      const session = Session.create(SessionId('degraded-metrics-fixture'))
+      session.append('request/header', { reason: 'change', header: { config: { provider: 'fixture', model: 'supported' }, tools } })
+      session.append('user/message', createUserMessage({ content: [{ type: 'text', text: 'weighted text' }], source: { kind: 'user' } }),
+        { surfaceOp: 'append' })
+      const value = ctx.sessionProjections.snapshot(session).values.elysiaContextMetrics
+      expect(value.estimate.method).toBe('heuristic')
+      expect(value.estimate.messageTokens).toBeGreaterThan(0)
+      expect(value.counter).toMatchObject({ mode: 'heuristic', failure: { code: 'assets-missing' } })
+      await mount.dispose()
+    } finally {
+      degraded.dispose()
+      await ctx.fiber.dispose()
+    }
   })
 
   it('registers and removes the metrics key through an owned native registry effect', async () => {

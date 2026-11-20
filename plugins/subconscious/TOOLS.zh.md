@@ -1,6 +1,6 @@
 # 潜意识工具设计需求
 
-状态：**Router 的 17 个通用工具、`subconscious_dispatch`，以及记忆 Session 的六个文件／图像工具、`subconscious_report` 均已实现；3 个测试文件共 21 项测试通过，真实记忆派工与报告回传已验收。**旧的 `subconscious_read` 与 `subconscious_route` 已移除。本文规定中枢及各专业潜意识 Session 的通用能力和当前领域工具；不同 Session 不自动继承彼此权限。
+状态：**Router 的 17 个通用工具、`subconscious_dispatch`，以及记忆 Session 的六个文件／图像工具、`subconscious_report` 均已实现；5 个测试文件共 36 项通过（Windows 口径另有 1 项 Linux 专用用例显式跳过），真实记忆派工与报告回传已验收。**旧的 `subconscious_read` 与 `subconscious_route` 已移除。本文规定中枢及各专业潜意识 Session 的通用能力和当前领域工具；不同 Session 不自动继承彼此权限。
 
 ## 1. 目标与定位
 
@@ -399,7 +399,7 @@ Schedule 用于明确的未来唤醒、复查和持续安排，不用于每秒�
 
 16. Router 和记忆 Session 均没有渠道发送工具，通用工具与派工测试不向 QQ、KOOK 等真实渠道发送消息。
 17. 原有 Observation、Batch、原生轮次收尾、恢复与去重测试全部保持通过，不再要求 `ignore/defer`。
-18. 类型检查、插件隔离测试与真实 AgentLoop 验证通过；最终以 3 个测试文件、21／21 测试通过为准，不以静态配置文件或工具列表截图代替实际调用验收。
+18. 类型检查、插件隔离测试与真实 AgentLoop 验证通过；最终以 5 个测试文件、36 项通过为准，不以静态配置文件或工具列表截图代替实际调用验收。
 19. 四份实施文档与当前真实工具状态一致，未通过的项目明确保留为未完成，不提前宣称全部交付。
 20. Router 真实调用 `subconscious_dispatch` 后，宿主持久化 Task、Mandate、Assignment 与投递 Effect；任务包直接包含完整 Observation，不依赖旧读取工具。
 21. 记忆 Session 真实调用 `write` 或 `edit` 后提交 `subconscious_report`；完成状态具有真实文件证据，合理 `dropped` 不强制写日记。

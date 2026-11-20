@@ -5,7 +5,10 @@ import type { CounterOptions } from './counter.ts'
 
 export interface MetricsConfig {
   enabled?: boolean
+  /** Read the pinned reference tokenizer. Disable to always use weighted estimates. */
   tokenizerEnabled?: boolean
+  /** Fail the mount instead of degrading when the reference tokenizer cannot load. */
+  tokenizerStrict?: boolean
   assetDirectory?: string
   modelIds?: string[]
   providerIds?: string[]
@@ -14,14 +17,18 @@ export interface MetricsConfig {
   asciiTokensPerCharacter?: number
   cjkTokensPerCharacter?: number
   otherTokensPerByte?: number
+  /** Known multiplicative overestimate of the weighted fallback for English. */
+  heuristicBiasRatio?: number
 }
-export interface ResolvedMetricsConfig extends Omit<CounterOptions, 'enabled'> {
+export interface ResolvedMetricsConfig extends Omit<CounterOptions, 'enabled' | 'requireExact'> {
   enabled: boolean
   tokenizerEnabled: boolean
+  tokenizerStrict: boolean
 }
 export const MetricsConfig: z<MetricsConfig, ResolvedMetricsConfig> = z.object({
   enabled: z.boolean().default(true),
   tokenizerEnabled: z.boolean().default(true),
+  tokenizerStrict: z.boolean().default(false),
   assetDirectory: z.string().default(fileURLToPath(new URL('../../tokenizers/deepseek-v4.1-flash/', import.meta.url))),
   modelIds: z.array(z.string()).default(['deepseek-v4.1-flash', 'deepseek-flash', 'deepseek-v4-flash']),
   providerIds: z.array(z.string()).default([]),
@@ -30,4 +37,5 @@ export const MetricsConfig: z<MetricsConfig, ResolvedMetricsConfig> = z.object({
   asciiTokensPerCharacter: z.number().min(0.01).max(4).default(0.3),
   cjkTokensPerCharacter: z.number().min(0.01).max(4).default(0.6),
   otherTokensPerByte: z.number().min(0.01).max(4).default(0.5),
+  heuristicBiasRatio: z.number().min(1).max(4).default(1.59),
 })

@@ -54,8 +54,17 @@ export async function apply(ctx: Context, config: Config): Promise<void> {
         metricsOwners.add(registry)
         return () => { metricsOwners.delete(registry) }
       }, 'context-inspector.metrics-owner')
-      const activeCounter = await createTextCounter({ ...metrics, enabled: metrics.tokenizerEnabled })
+      const activeCounter = await createTextCounter({
+        ...metrics, enabled: metrics.tokenizerEnabled, requireExact: metrics.tokenizerStrict,
+      })
       counter = activeCounter
+      const failure = activeCounter.status.failure
+      if (failure !== undefined) {
+        ctx.logger('context-inspector').warn(
+          '参考分词器不可用（%s，资产版本 %s）：%s；上下文统计已降级为加权字符估算',
+          failure.code, failure.assetRevision ?? '未知', failure.message,
+        )
+      }
       removeMetrics = ctx.effect(() => {
         let unregister: (() => void) | undefined
         try { unregister = registry.register(createContextMetricsProjection(activeCounter, activeCounter.id)) }

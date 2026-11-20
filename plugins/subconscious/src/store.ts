@@ -1,6 +1,6 @@
 import { mkdirSync } from 'node:fs'
 import { join } from 'node:path'
-import { randomUUID } from 'node:crypto'
+import { createHash, randomUUID } from 'node:crypto'
 import { DatabaseSync } from 'node:sqlite'
 import type { ContentBlock } from '@deepseek-ai/dsh-llm'
 import {
@@ -15,12 +15,16 @@ export class RouteError extends Error {
   }
 }
 
+/** 批次耗尽运行预算后的固定放弃原因：输入保留为可查的 Decision，不静默丢弃。 */
+export const BATCH_ATTEMPTS_EXHAUSTED = 'BATCH_ATTEMPTS_EXHAUSTED'
+
 export interface RouterHealth {
   observations: number
   pendingObservations: number
   readyBatches: number
   deferredBatches: number
   completedBatches: number
+  failedBatches: number
   triggerBatchCount: number
   sourceCursor?: number
   sourceCursors: Record<string, number>
@@ -593,6 +597,43 @@ export class RouterStore {
     return row.next ?? undefined
   }
 
+  /** 本次触发组已经历的 Router 运行次数（markPresenting 每次 +1）。 */
+  batchAttempts(id: string): number {
+    const row = this.db.prepare(`SELECT MAX(attempt_count) AS attempts FROM batches
+      WHERE trigger_group_id = ? OR id = ?`).get(id, id) as { attempts: number | null }
+    return row.attempts ?? 0
+  }
+
+  decision(batchId: string): { action: 'ignore' | 'defer'; reason: string } | undefined {
+    return this.db.prepare('SELECT action, reason FROM decisions WHERE batch_id = ?').get(batchId) as
+      { action: 'ignore' | 'defer'; reason: string } | undefined
+  }
+
+  /**
+   * 运行预算耗尽后退役整个触发组：批次置 decided、输入置 reviewed、并写入 ignore Decision。
+   * 这样输入仍可按 Decision 查询与复盘，而不是被静默丢掉或让 readyBatches 永远堆积。
+   */
+  abandonBatch(id: string, reason: string): void {
+    this.transaction(() => {
+      const now = Date.now()
+      const rows = this.db.prepare(`SELECT id FROM batches WHERE trigger_group_id = ? OR id = ?
+        ORDER BY created_at, rowid`).all(id, id) as { id: string }[]
+      for (const row of rows) {
+        // Decision 与批次一一对应；重复放弃不能覆盖已经存在的真实决定。
+        if (this.decision(row.id) === undefined) {
+          this.db.prepare(`INSERT INTO decisions(id, batch_id, action, reason, not_before, request_hash, created_at)
+            VALUES (?, ?, 'ignore', ?, NULL, ?, ?)`).run(
+            `decision_${randomUUID()}`, row.id, reason,
+            createHash('sha256').update(`${reason}:${row.id}`).digest('hex'), now,
+          )
+        }
+        this.db.prepare("UPDATE batches SET state = 'decided', available_at = ? WHERE id = ?").run(now, row.id)
+        this.db.prepare(`UPDATE surface_observations SET review_state = 'reviewed'
+          WHERE id IN (SELECT observation_id FROM batch_items WHERE batch_id = ?)`).run(row.id)
+      }
+    })
+  }
+
   markPresenting(id: string): void {
     this.db.prepare(`UPDATE batches SET state = 'presenting', attempt_count = attempt_count + 1
       WHERE (trigger_group_id = ? OR id = ?) AND state IN ('ready', 'presenting', 'presented')`).run(id, id)
@@ -653,6 +694,8 @@ export class RouterStore {
       readyBatches: count(`SELECT COUNT(*) AS count FROM batches WHERE state IN ('ready', 'presenting', 'presented')`),
       deferredBatches: count(`SELECT COUNT(*) AS count FROM batches WHERE state = 'deferred'`),
       completedBatches: count('SELECT COUNT(*) AS count FROM batches WHERE completed_turn IS NOT NULL'),
+      failedBatches: (this.db.prepare('SELECT COUNT(*) AS count FROM decisions WHERE reason = ?')
+        .get(BATCH_ATTEMPTS_EXHAUSTED) as { count: number }).count,
       triggerBatchCount: this.triggerBatchCount(),
       ...cursor === undefined ? {} : { sourceCursor: cursor },
       sourceCursors: Object.fromEntries(cursors.map(row => [row.key.slice('source_cursor:'.length), Number(row.value)])),

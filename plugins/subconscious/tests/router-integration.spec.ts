@@ -30,6 +30,7 @@ import { expect, it, onTestFinished, vi } from 'vitest'
 import * as StandingPrompt from '@elysia/conscious-mind/standing-prompts'
 import * as Subconscious from '../src/index.ts'
 import { MAIN_SESSION_ID, ROUTER_SESSION_ID } from '../src/model.ts'
+import { BATCH_ATTEMPTS_EXHAUSTED } from '../src/store.ts'
 
 function call(id: string, name: string, args: object): StreamChunk[] {
   const block = { type: 'tool-call' as const, id: ToolCallId(id), name, arguments: JSON.stringify(args) }
@@ -714,3 +715,74 @@ it('keeps the serial delivery worker alive across a transient DB read failure', 
   expect(failed).toBe(true)
   expect(JSON.stringify(adapter.requests[1]!.messages)).toContain('读取失败后仍应被研判的真实输入')
 }, 30000)
+
+it('retires a permanently failing Batch as an ignore decision once its run budget is spent', async () => {
+  const { ctx, adapter, main } = await readyRouter({ maxBatchAttempts: 1 })
+  const runtime = ctx.subconsciousRouter
+  adapter.handler = () => [{
+    type: 'finish', reason: { kind: 'error', error: { code: 'CONTEXT_WINDOW_EXCEEDED', message: '批次永久失败 fixture' } },
+  }]
+  main.agent.session.append('user/message', createUserMessage({
+    content: [{ type: 'text', text: '这批材料会让 Router 永久失败' }], source: { kind: 'user', rpcId: 'batch-budget' },
+  }), { surfaceOp: 'append' })
+  await vi.waitFor(() => expect(runtime.health(), JSON.stringify(runtime.health())).toMatchObject({
+    readyBatches: 0, failedBatches: 1, pendingObservations: 0,
+  }), { timeout: 15000 })
+  await runtime.whenIdle()
+  const id = batchId(adapter.requests[1]!)
+  expect(runtime.store.getBatch(id)).toMatchObject({ state: 'decided' })
+  expect(runtime.store.decision(id)).toEqual({ action: 'ignore', reason: BATCH_ATTEMPTS_EXHAUSTED })
+  expect(runtime.store.batchAttempts(id)).toBe(1)
+  expect(runtime.store.nextBatch(Date.now())).toBeUndefined()
+  expect(runtime.health().lastError ?? '').toContain(BATCH_ATTEMPTS_EXHAUSTED)
+}, 30000)
+
+it('fails an over-budget memory run with ASSIGNMENT_TIMEOUT and hands it to the delivery budget', async () => {
+  const { ctx, adapter, main } = await readyRouter({ assignmentMaxRunMs: 600, maxDeliveryAttempts: 1 })
+  const runtime = ctx.subconsciousRouter
+  const natural = (): StreamChunk[] => [
+    { type: 'block-start', index: 0, blockType: 'text' },
+    { type: 'text-delta', index: 0, text: '自然结束' },
+    { type: 'block-end', index: 0, block: { type: 'text', text: '自然结束' } },
+    { type: 'finish', reason: { kind: 'stop' } },
+  ]
+  const dispatched = new Set<string>()
+  adapter.handler = options => {
+    const raw = JSON.stringify(options.messages)
+    if (!raw.includes('[subconscious.batch]')) return natural()
+    const id = batchId(options)
+    if (dispatched.has(id)) return natural()
+    dispatched.add(id)
+    const observation = Array.from(raw.matchAll(/observation\/(obs_[a-f0-9]+)/g)).at(-1)?.[1]
+    if (observation === undefined) throw new Error('Missing Observation in Router batch')
+    return call('run-budget-dispatch', 'subconscious_dispatch', {
+      trigger_ref: `batch/${id}`, kind: 'memory', title: '运行预算验证任务',
+      reason: '验证 maxRunMs 被执行而不是只写进 Mandate。', instruction: '写日记并报告。',
+      source_refs: [`observation/${observation}`],
+    })
+  }
+  // 让记忆回合慢于预算，但不做长时间挂起；超时后仍要等这个回合自然结束再回收 fixture。
+  const original = adapter.stream.bind(adapter)
+  vi.spyOn(adapter, 'stream').mockImplementation(async function* (options: GenerateOptions) {
+    if (JSON.stringify(options.messages).includes('[subconscious.task]')) {
+      await new Promise(resolve => setTimeout(resolve, 1_500))
+    }
+    yield* original(options)
+  })
+  main.agent.session.append('user/message', createUserMessage({
+    content: [{ type: 'text', text: '请把这段经历交给记忆专业，但它的回合会超出运行预算。' }],
+    source: { kind: 'user', rpcId: 'run-budget' },
+  }), { surfaceOp: 'append' })
+  await vi.waitFor(() => expect(runtime.health().dispatch, JSON.stringify(runtime.health())).toMatchObject({
+    failedEffects: 1, pendingAssignments: 0, activeTasks: 0,
+  }), { timeout: 15000 })
+  await runtime.whenIdle()
+  const task = runtime.dispatch.listTasks()[0]!
+  expect(task).toMatchObject({ state: 'failed', closeReason: 'DELIVERY_ATTEMPTS_EXHAUSTED' })
+  const assignment = runtime.dispatch.getAssignment(task.currentAssignmentId)!
+  expect(assignment).toMatchObject({ state: 'interrupted' })
+  expect(assignment.lastError ?? '').toContain('ASSIGNMENT_TIMEOUT')
+  expect(assignment.lastError ?? '').toMatch(/已用 \d+ms，超过上限 600ms/u)
+  // 已开始的记忆回合会在超时后自然结束；等它结束再回收 Context，避免中断半截回合。
+  await new Promise(resolve => setTimeout(resolve, 1_700))
+}, 40000)

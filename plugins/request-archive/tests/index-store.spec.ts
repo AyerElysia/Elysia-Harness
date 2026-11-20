@@ -57,9 +57,10 @@ describe('RequestArchiveIndex', () => {
     const dir = await directory()
     let observed: ArchiveIndexEntry | undefined
     const options: GenerateOptions = { provider: 'test', model: 'fixture', sessionId: 'a', messages: [] }
-    const path = archiveRequest(dir, options, value => { observed = value })
+    const written = archiveRequest(dir, options, value => { observed = value })
     expect(observed?.sessionId).toBe('a')
-    expect(observed?.bytes).toBe(Buffer.byteLength(await readFile(path, 'utf8')))
+    expect(observed?.bytes).toBe(written.bytes)
+    expect(observed?.bytes).toBe(Buffer.byteLength(await readFile(written.path, 'utf8')))
     expect(JSON.stringify(observed)).not.toContain('"messages"')
   })
   it('preserves RequestArchiveError when serialization fails', async () => {

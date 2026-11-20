@@ -242,3 +242,43 @@
 ### 8.6 本轮未验收
 
 真实平台渠道（KOOK / 飞书 / QQ）、Ayla 后端、语音链路、真实重启恢复，以及 B 站相关全部未测，结论仅限单元与集成测试。
+## 九、第三轮修复（2026-11-20）
+
+范围：`gemini-cascade`、`subconscious`、`request-archive`、`context-inspector`，以及部署面 P0。工具权限另见 [tool-permissions-audit.zh.md](../architecture/tool-permissions-audit.zh.md)。QQ、飞书、ayla-app、voice-call、dsh-livestream 本轮不动。
+
+### 9.1 部署面（P0）
+
+- `homes/web/profiles/web/package.json` 补 `@elysia/subconscious: link:../../../../plugins/subconscious`，`pnpm-lock.yaml` 由 pnpm 重新生成（净增 3 行）。此前该插件被 profile 挂载却未声明依赖，干净 checkout 解析失败。
+- profile 头部注释纠正：它曾声称 `dsh/pnpm-workspace.yaml` 带 `../plugins/*`，而那条在 0.2.2-rc.2 同步时已删除。
+- provider `a6` / `deepseek-v4.1-flash` 的归属写清：它们是部署值，由运维在未跟踪的 `homes/shared/models.patch.yml` 定义（`models.patch.example.yml` 里补了对应说明）。签入配置不再假装自带 provider。
+- profile 给 subconscious 补上 `memoryWorkspaceDir`（该插件已改为路径必配）。
+
+### 9.2 插件修复
+
+| 插件 | 修复 |
+|---|---|
+| gemini-cascade | key 权限校验分平台：POSIX 保留「0600 + 属主」，Windows 改用「非符号链接 + 大小上限 + 64 位 hex」，桌宠在其唯一有意义的平台上不再必然挂不上。bridge key 缺失由「挂载期抛错」改为 warn + 降级（`strictBridgeKey` 可恢复旧行为）。`desktop.integration` 由 4 红转 5/5 全绿。 |
+| subconscious | `maxRunMs` 真正执行（`ASSIGNMENT_TIMEOUT`，不中断耐久 Session，下一次投递会等旧回合结束）；批次研判加 `maxBatchAttempts`（默认 5），耗尽后写 `ignore` Decision 并退役，`health().failedBatches` 可观测；`stateDir`/`workspaceDir`/`skillsDir` 改为必须由 profile 提供，删除 `ROUTER_SESSION_CWD`/`DEFAULT_MEMORY_SESSION_CWD` 等 Linux 常量。 |
+| request-archive | 补保留策略（`maxFiles`/`maxBytes`/`maxAgeDays`，摊销扫描不阻塞写入）；落盘默认紧凑（实测单条 114 752 → 79 737 B，−30.5%）；目录收成 0700。**先前报告的「每次重写全部历史」是误判**：该插件一直是每条一文件、只追加。真正随会话增长的是记录内嵌的完整 `messages`（语义层 O(N²) 字节），不改读取方无法消除。 |
+| context-inspector | tokenizer 资产/运行时失败不再抛穿 `apply()`：分类成结构化 code、记 warn 后降级到加权估算继续挂载；`metrics.tokenizerStrict` 可恢复「必须精确」的旧语义；降级状态进入 projection 与 UI，并标注已知偏差比例。 |
+
+### 9.3 验证（node22，本机）
+
+| 插件 | 测试 | tsc |
+|---|---|---|
+| gemini-cascade | 37 通过；1 个套件 0 test（`livekit-client` 悬空链接，既有环境问题） | 17 条，全部既有（`livekit-client` TS2307、`voice-call` 的 `VoiceAgent.model`） |
+| subconscious | **36 通过**（Windows 另有 1 条 Linux 专用用例显式跳过） | 10 条，全部既有 TS6305 |
+| request-archive | **24 通过 + 1 跳过** | **exit 0** |
+| context-inspector | 65 通过 / 14 失败，失败集合与改前基线逐条一致（新增 4 例全绿） | 829 条，全部既有环境/依赖错配（`lib` 未构建、zod 4.4.3 vs DSH 4.6.6） |
+
+### 9.4 本轮之后仍未修
+
+- 部署面：`homes/web` 里仍是 Linux 绝对路径（这是服务器部署值），Windows 本机验收需自备临时 home；`profiles/web/node_modules` 旧副本需重装。
+- QQ 畸形帧崩溃、QQ 空 token、飞书无投递未知语义（按要求排后）。
+- ayla-app 无 HTTP 超时、凭据可写进被跟踪配置；voice-call 缺 `Agent.model`；dsh-livestream 的 `settings.json` 权限；24 处硬编码路径中的其余部分。
+- context-inspector 的 zod 版本与 DSH 不一致（4.4.3 vs 4.6.6），需决定是否对齐依赖。
+- 工具权限模型（外发工全局注册、Router 执行面）按用户要求先留档，未改动。
+
+### 9.5 本轮未验收
+
+真实平台渠道、Ayla 后端、语音链路、真实重启恢复，以及 B 站相关全部未测；`request-archive` 的保留策略只在测试目录验证过，未在正式数据上跑过淘汰。

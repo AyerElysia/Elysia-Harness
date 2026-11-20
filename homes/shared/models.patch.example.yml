@@ -50,6 +50,12 @@
         requestImagePixelBudget: 4194304
         requestImageMaxBytes: 1048576
 
+# The web profile mounts Elysia's plugins with `provider: a6` and
+# `model: deepseek-v4.1-flash` (`homes/web/profiles/web/cordis.patch.yml`).
+# Those ids are deployment values: declare a provider with that key here (or point
+# the profile rows at a key you declare) before starting the surface, otherwise the
+# first model request fails with an unknown provider.
+#
 # Which model a surface starts with. Omit to keep the bundle default.
 - id: agent-default-model
   name: "@deepseek-ai/dsh-agent-default-model"

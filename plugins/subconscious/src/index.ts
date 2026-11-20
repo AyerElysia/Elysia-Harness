@@ -1,10 +1,11 @@
 import type { Context } from '@deepseek-ai/cordis'
 import type {} from '@deepseek-ai/dsh-commands'
-import { Config } from './config.ts'
+import { Config, resolveDeploymentPaths } from './config.ts'
 import { RouterRuntime } from './runtime.ts'
 
-export { Config } from './config.ts'
-export { MAIN_SESSION_ID, ROUTER_SESSION_CWD, ROUTER_SESSION_ID, batchContent, isExternalInput } from './model.ts'
+export { Config, ConfigError, resolveDeploymentPaths } from './config.ts'
+export type { DeploymentPaths } from './config.ts'
+export { MAIN_SESSION_ID, ROUTER_SESSION_ID, batchContent, isExternalInput } from './model.ts'
 export { MEMORY_SESSION_ID } from './dispatch.ts'
 export type { DispatchHealth, SubconsciousTask, TaskAssignment, TaskMandate, TaskReport } from './dispatch.ts'
 export { DispatchError, DispatchStore } from './dispatch-store.ts'
@@ -18,14 +19,15 @@ export { Config as ConfigSchema }
 
 /** Mount the durable collector, one long Router, and the long memory specialist. */
 export function apply(ctx: Context, config: Config): void {
-  const stateDir = config.stateDir ?? '/home/ayerelysia/Elysia/Data/subconscious/router'
+  // 所有部署路径都来自 profile；缺失时在挂载阶段明确失败，不退回任何主机绝对路径。
+  const { stateDir, workspaceDir, memoryWorkspaceDir, skillsDir } = resolveDeploymentPaths(config)
   const resolved: Required<Config> = {
     baseDir: config.baseDir,
     files: config.files,
     required: config.required ?? ['SOUL.md', 'SUBCONSCIOUS-ROUTER.md'],
     stateDir,
-    workspaceDir: config.workspaceDir ?? '/home/ayerelysia/Elysia/Data/workspace/subconscious/router',
-    memoryWorkspaceDir: config.memoryWorkspaceDir ?? '/home/ayerelysia/Elysia/Data/workspace/subconscious/memory',
+    workspaceDir,
+    memoryWorkspaceDir,
     memoryFiles: config.memoryFiles ?? ['SOUL.md', 'USER.md', 'MEMORY.md', 'SUBCONSCIOUS-MEMORY.md'],
     memoryRequired: config.memoryRequired ?? ['SOUL.md', 'SUBCONSCIOUS-MEMORY.md'],
     memoryBackupDir: config.memoryBackupDir ?? `${stateDir}/memory-standing-prompt-backups`,
@@ -35,10 +37,11 @@ export function apply(ctx: Context, config: Config): void {
     triggerBatchCount: config.triggerBatchCount ?? 1,
     maxTasksPerTrigger: config.maxTasksPerTrigger ?? 3,
     maxQueuedTasks: config.maxQueuedTasks ?? 20,
+    maxBatchAttempts: config.maxBatchAttempts ?? 5,
     maxDeliveryAttempts: config.maxDeliveryAttempts ?? 5,
     maxReportRelayAttempts: config.maxReportRelayAttempts ?? 5,
     assignmentMaxRunMs: config.assignmentMaxRunMs ?? 900_000,
-    skillsDir: config.skillsDir ?? '/home/ayerelysia/Elysia/Data/workspace/skills',
+    skillsDir,
     readOnlyDirs: config.readOnlyDirs ?? [],
     backupDir: config.backupDir ?? `${stateDir}/standing-prompt-backups`,
     maxBackgroundJobs: config.maxBackgroundJobs ?? 4,

@@ -35,6 +35,7 @@ export function ContextMetricsDisplay({ metrics, t }: { metrics: ContextMetrics 
   if (metrics === undefined) return null
   const valid = consistentEstimate(metrics)
   const estimate = valid ? metrics.estimate : undefined
+  const counter = metrics.counter
   const capacity = metrics?.contextWindow
   const knownCapacity = capacity !== undefined && Number.isSafeInteger(capacity) && capacity > 0
   const percentage = estimate !== undefined && !estimate.incomplete && knownCapacity
@@ -44,6 +45,7 @@ export function ContextMetricsDisplay({ metrics, t }: { metrics: ContextMetrics 
     ? t(metrics === undefined ? 'metrics.pending' : 'metrics.invalid')
     : t('metrics.trigger', { tokens: '~' + compactTokens(estimate.totalTokens) })
       + (estimate.incomplete ? ' · ' + t('metrics.partial') : '')
+      + (counter?.failure === undefined ? '' : ' · ' + t('metrics.degradedShort'))
       + (percentage === undefined ? '' : ` · ~${percentage}%`)
   const report = metrics?.latestReported
 
@@ -78,6 +80,15 @@ export function ContextMetricsDisplay({ metrics, t }: { metrics: ContextMetrics 
                   {t(`metrics.method.${estimate.method}`)}
                   {estimate.tokenizerLabel === undefined ? '' : ` · ${estimate.tokenizerLabel}`}
                 </p>
+                {counter?.failure !== undefined && <p className={css.warning}>
+                  {t('metrics.counter.degraded', {
+                    code: counter.failure.code,
+                    revision: counter.failure.assetRevision ?? t('metrics.unknown'),
+                  })}
+                </p>}
+                {counter?.heuristicBiasRatio !== undefined && estimate.method !== 'tokenizer' && <p className={css.note}>
+                  {t('metrics.counter.bias', { ratio: String(counter.heuristicBiasRatio) })}
+                </p>}
                 <p className={css.note}>{t('metrics.estimateOnly')}</p>
                 {estimate.incomplete && <p className={css.warning}>
                   {t('metrics.incomplete')}

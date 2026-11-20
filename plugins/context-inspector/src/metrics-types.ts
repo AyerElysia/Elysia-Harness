@@ -1,4 +1,8 @@
 /** Consistent estimates of the retained context, separate from actual past API usage. */
+import type { CounterStatus, TokenizerFailure, TokenizerFailureCode } from './metrics/counter-types.ts'
+
+export type { CounterStatus, TokenizerFailure, TokenizerFailureCode }
+
 export interface MetricsRoute {
   provider: string
   model: string
@@ -41,6 +45,8 @@ export interface ContextMetrics {
   contextWindow?: number
   estimate: CurrentContextEstimate
   latestReported?: ReportedRequestUsage
+  /** Counting quality for this mount; absent only on checkpoints written before it existed. */
+  counter?: CounterStatus
 }
 declare module '@deepseek-ai/dsh-session-projection/types' {
   interface SessionProjectionMap {

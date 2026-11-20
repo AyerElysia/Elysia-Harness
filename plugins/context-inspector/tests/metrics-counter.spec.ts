@@ -1,4 +1,5 @@
 import { afterAll, describe, expect, it } from 'vitest'
+import { randomUUID } from 'node:crypto'
 import { mkdtemp, rm, writeFile } from 'node:fs/promises'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
@@ -8,6 +9,10 @@ import { createTextCounter } from '../src/metrics/counter.ts'
 const defaults = MetricsConfig({})
 const counter = await createTextCounter({ ...defaults, enabled: defaults.tokenizerEnabled })
 afterAll(() => { counter.dispose() })
+
+function absentAssetDirectory(): string {
+  return join(tmpdir(), 'elysia-tokenizer-absent-' + randomUUID())
+}
 
 describe('offline reference tokenizer', () => {
   it('matches independent native-tokenizer public reference counts without padding', () => {
@@ -45,6 +50,7 @@ describe('offline reference tokenizer', () => {
   it('can explicitly disable tokenization without reading absent assets', async () => {
     const fallback = await createTextCounter({ ...defaults, enabled: false, assetDirectory: '/no-assets', cacheEntries: 0 })
     try {
+      expect(fallback.status).toMatchObject({ mode: 'heuristic', heuristicBiasRatio: 1.59 })
       expect(fallback.supports('d1api', 'deepseek-v4.1-flash')).toBe(false)
       expect(fallback.count('a'.repeat(1000))).toEqual({
         tokenizerTokens: 300, heuristicTokens: 300, fallback: false,
@@ -52,15 +58,46 @@ describe('offline reference tokenizer', () => {
     } finally { fallback.dispose() }
   })
 
-  it('rejects corrupted static model assets before using an unverified encoder', async () => {
+  it('keeps metrics mountable with weighted counts when tokenizer assets are missing', async () => {
+    const degraded = await createTextCounter({
+      ...defaults, enabled: true, assetDirectory: absentAssetDirectory(), cacheEntries: 0,
+    })
+    try {
+      expect(degraded.status).toMatchObject({
+        mode: 'heuristic', heuristicBiasRatio: 1.59, failure: { code: 'assets-missing' },
+      })
+      expect(degraded.status.failure?.assetRevision).toBeUndefined()
+      expect(degraded.supports('d1api', 'deepseek-v4.1-flash')).toBe(false)
+      expect(degraded.count('a'.repeat(1000))).toEqual({
+        tokenizerTokens: 300, heuristicTokens: 300, fallback: false,
+      })
+    } finally { degraded.dispose() }
+  })
+
+  it('still fails when exact reference counting is explicitly required', async () => {
+    await expect(createTextCounter({
+      ...defaults, enabled: true, requireExact: true, assetDirectory: absentAssetDirectory(),
+    })).rejects.toMatchObject({ code: 'assets-missing' })
+  })
+
+  it('degrades on corrupted assets by default and rejects only when exact counting is required', async () => {
     const directory = await mkdtemp(join(tmpdir(), 'elysia-tokenizer-assets-'))
     try {
       await writeFile(join(directory, 'manifest.json'), JSON.stringify({
+        source: { revision: 'fixture-asset-revision' },
         assets: [{ file: 'tokenizer.json', sha256: 'invalid', bytes: 2 }],
       }))
       await writeFile(join(directory, 'tokenizer.json'), '{}')
-      await expect(createTextCounter({ ...defaults, enabled: true, assetDirectory: directory }))
-        .rejects.toThrow('integrity mismatch')
+      const degraded = await createTextCounter({ ...defaults, enabled: true, assetDirectory: directory })
+      try {
+        expect(degraded.status).toMatchObject({
+          mode: 'heuristic', failure: { code: 'asset-integrity', assetRevision: 'fixture-asset-revision' },
+        })
+        expect(degraded.count('a'.repeat(1000)).tokenizerTokens).toBe(300)
+      } finally { degraded.dispose() }
+      await expect(createTextCounter({
+        ...defaults, enabled: true, requireExact: true, assetDirectory: directory,
+      })).rejects.toMatchObject({ code: 'asset-integrity' })
     } finally { await rm(directory, { recursive: true }) }
   })
 })

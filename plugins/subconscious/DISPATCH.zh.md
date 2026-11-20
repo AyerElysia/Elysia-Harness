@@ -684,7 +684,8 @@ kind：memory
 逻辑 ID：memory
 DSH Session ID：elysia-subconscious-memory
 Agent Preset：elysia-subconscious-memory
-工作目录：/home/ayerelysia/Elysia/Data/workspace/subconscious/memory
+工作目录：由 profile 的 memoryWorkspaceDir 提供（未显式给出时取 workspaceDir 的同级 memory；
+          本机 Linux 部署为 /home/ayerelysia/Elysia/Data/workspace/subconscious/memory）
 ```
 
 建议固定提示词组合：
@@ -727,11 +728,13 @@ read、read_image、write、edit、glob、grep、subconscious_report
 
 ### 12.1 存储位置
 
-优先在现有潜意识 Store 中增加版本化 migration：
+优先在现有潜意识 Store 中增加版本化 migration。库文件位于 profile 的 `stateDir` 下，插件不内置默认路径：
 
 ```text
-/home/ayerelysia/Elysia/Data/subconscious/router/router.sqlite
+<stateDir>/router.sqlite
 ```
+
+本机 Linux 部署值为 `/home/ayerelysia/Elysia/Data/subconscious/router/router.sqlite`。
 
 建议新增表或等价持久记录：
 
@@ -946,13 +949,9 @@ src/router-session.ts    Router 派工工具、批次与报告输入
 src/runtime.ts           持久 worker、恢复与公平调度
 ```
 
-Task、Mandate、Assignment、Report 和 Effect 与接收线共用：
+Task、Mandate、Assignment、Report 和 Effect 与接收线共用 profile `stateDir` 下的 `router.sqlite`（本机 Linux 部署为 `/home/ayerelysia/Elysia/Data/subconscious/router/router.sqlite`）。
 
-```text
-/home/ayerelysia/Elysia/Data/subconscious/router/router.sqlite
-```
-
-长期记忆 Session 为 `elysia-subconscious-memory`，工作区为 `/home/ayerelysia/Elysia/Data/workspace/subconscious/memory`，默认产物为 `diary.md`。Router 只注册 `memory` 类型；专业 Session 不获得 Router 的 Shell、网络、Schedule 或派工权限。
+长期记忆 Session 为 `elysia-subconscious-memory`，工作区由 profile 的 `memoryWorkspaceDir` 提供（本机 Linux 部署为 `/home/ayerelysia/Elysia/Data/workspace/subconscious/memory`），默认产物为 `diary.md`。Router 只注册 `memory` 类型；专业 Session 不获得 Router 的 Shell、网络、Schedule 或派工权限。
 
 实际 worker 顺序为：
 
@@ -972,7 +971,7 @@ node ../../dsh/node_modules/typescript/bin/tsc --noEmit --incremental false --co
 node ../../dsh/node_modules/vitest/vitest.mjs run
 ```
 
-结果：类型检查通过，3 个测试文件、29／29 测试通过（Linux 口径；Windows 上 1 例 Linux 专用 sandbox shell 用例显式跳过，其余 28 例通过）。新增覆盖「投递预算耗尽后 retirement」「回传预算耗尽」「数据库读取失败后 worker 仍存活」以及 `ensureAgent` 契约断言。除权限、幂等、状态与恢复外，真实 AgentLoop 集成测试还覆盖 `dispatch → write/edit → report → Router relay`、“后续 Batch 已排队时，Assignment 和 Report 仍优先完成”，以及“Report 已持久化后发生上下文溢出，仍能完成投递与回传”的回归情况。测试显式使用临时 `memoryWorkspaceDir` 与 `memoryBackupDir`，不会把测试日记写进正式记忆目录。
+结果：类型检查通过，5 个测试文件、37 例（Linux 口径全部通过；Windows 上 1 例 Linux 专用 sandbox shell 用例显式跳过，其余 36 例通过）。覆盖「投递预算耗尽后 retirement」「回传预算耗尽」「数据库读取失败后 worker 仍存活」「Batch 预算耗尽后写入 ignore Decision」「`maxRunMs` 超时以 `ASSIGNMENT_TIMEOUT` 失败」「部署路径必配与记忆工作区推导」以及 `ensureAgent` 契约断言。除权限、幂等、状态与恢复外，真实 AgentLoop 集成测试还覆盖 `dispatch → write/edit → report → Router relay`、“后续 Batch 已排队时，Assignment 和 Report 仍优先完成”，以及“Report 已持久化后发生上下文溢出，仍能完成投递与回传”的回归情况。测试显式使用临时 `memoryWorkspaceDir` 与 `memoryBackupDir`，不会把测试日记写进正式记忆目录。
 
 ### 20.3 正式服务真实闭环
 
@@ -1034,3 +1033,18 @@ file:/home/ayerelysia/Elysia/Data/workspace/subconscious/memory/diary.md
 - 主动机会候选、主动系统呈现与主意识最终决定接口。
 - 日记质量、长期记忆抽象、跨可见性域记忆与忘却策略。
 - 长历史里偶发模仿已删除 `subconscious_route` 的行为仍需治理；旧工具未恢复，错误会真实记录，不影响已经验证的新派工链。
+
+## 21. 运行预算与部署路径（2026-11-20 复审）
+
+本轮把三条「只写进配置/授权、没有真正执行」的边界补成真实行为：
+
+| 范围 | 配置／来源 | 默认 | 耗尽或超时后的状态 |
+|---|---|---|---|
+| Router Batch 运行 | `maxBatchAttempts` | 5 | 批次置 `decided` 并写入 `ignore` Decision（原因 `BATCH_ATTEMPTS_EXHAUSTED`），Observation 置 `reviewed`；输入可按 Decision 复盘，`health().failedBatches` 计数 |
+| Assignment 投递 | `maxDeliveryAttempts` | 5 | `deliver_assignment` Effect `failed`、Assignment `interrupted`、Task `failed`（释放去重键） |
+| Report 回传 | `maxReportRelayAttempts` | 5 | `relay_report` Effect `failed`；Report 本身仍可读 |
+| 单次 Assignment 运行 | Mandate `maxRunMs`（来自 `assignmentMaxRunMs`） | 900000ms | 本次 run 以 `ASSIGNMENT_TIMEOUT` 失败并交给投递预算；不 dispose、不 abort 耐久 Session |
+
+超时后仍在进行的模型回合不会被强杀：下一次 Assignment 的投递会等待该回合结束，不并发写同一 Session。结构化 code 进入 `last_error`（例如 `ASSIGNMENT_TIMEOUT: Assignment ... 已用 606ms，超过上限 600ms`）。
+
+部署路径不再由插件写死：`stateDir`、`workspaceDir`、`skillsDir` 必须由 profile 提供，缺失时挂载阶段抛 `CONFIG_PATH_REQUIRED`；`memoryWorkspaceDir` 未显式给出时取 `workspaceDir` 的同级 `memory`。不可配置的 `ROUTER_SESSION_CWD` 与 `DEFAULT_MEMORY_SESSION_CWD` 常量已删除，`DispatchStore` 的记忆工作区改为必填选项。

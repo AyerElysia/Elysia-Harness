@@ -1,8 +1,15 @@
 # The web surface's own patch layer, applied after every bundle layer.
 #
-# These rows mount Elysia's plugins. They resolve from the checkout's workspace,
-# so no profile install is needed: `dsh/pnpm-workspace.yaml` carries
-# `../plugins/*` and the installation anchor reaches it.
+# These rows mount Elysia's plugins. Each mounted package must also be declared in
+# this profile's package.json so the loader can resolve it from
+# `profiles/web/node_modules`. The dsh workspace does not carry `../plugins/*`
+# since the 0.2.2-rc.2 sync, so a missing declaration fails at resolve time.
+#
+# Provider ids and model ids below (`a6`, `deepseek-v4.1-flash`) are deployment
+# values, not tracked ones: they must be declared by the operator in the
+# untracked home-level `homes/shared/models.patch.yml` (shape in
+# `models.patch.example.yml`). A checkout without that file mounts nothing but
+# fails to resolve the model at the first request.
 
 - insert:
     # Host-level composition covers presets, fixed-channel Sessions, and future Agents.
@@ -126,6 +133,9 @@
           - SUBCONSCIOUS-ROUTER.md
         stateDir: /home/ayerelysia/Elysia/Data/subconscious/router
         workspaceDir: /home/ayerelysia/Elysia/Data/workspace/subconscious/router
+        # Deployment values are explicit: the plugin no longer ships path defaults,
+        # so a surface that forgets one fails at mount instead of writing elsewhere.
+        memoryWorkspaceDir: /home/ayerelysia/Elysia/Data/workspace/subconscious/memory
         skillsDir: /home/ayerelysia/Elysia/Data/workspace/skills
         readOnlyDirs:
           - /home/ayerelysia/Elysia/Data/workspace/diaries

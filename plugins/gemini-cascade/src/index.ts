@@ -1,5 +1,6 @@
 /** Voice in an isolated conversation or the original main DSH Session. */
 import { randomBytes } from 'node:crypto'
+import type { Stats } from 'node:fs'
 import { createServer, type IncomingMessage } from 'node:http'
 import { lstat, mkdir, readFile } from 'node:fs/promises'
 import { isAbsolute, join, resolve } from 'node:path'
@@ -29,7 +30,7 @@ const MODEL = 'gemini-3.8-flash'
 const MAX_CALL = 630_000
 export const name = 'elysia-gemini-cascade'
 export const inject = ['sessions', 'agents', 'systemPrompt', 'sessionPersistence', 'connection', 'tools', 'workspaceRegistry']
-export interface Config { enabled?: boolean; cwd?: string; promptsDir?: string; bridgeKeyFile?: string; inputMode?: InputMode; mainSessionVoice?: boolean; desktopKeyFile?: string }
+export interface Config { enabled?: boolean; cwd?: string; promptsDir?: string; bridgeKeyFile?: string; strictBridgeKey?: boolean; inputMode?: InputMode; mainSessionVoice?: boolean; desktopKeyFile?: string }
 export const Config = z.object({
   enabled: z.boolean().default(false),
   desktopKeyFile: z.string().default(''),
@@ -37,6 +38,8 @@ export const Config = z.object({
   cwd: z.string().default(join(HOME, 'gemini-cascade')),
   promptsDir: z.string().default(join(HOME, 'standing-prompts')),
   bridgeKeyFile: z.string().default(process.env.ELYSIA_GEMINI_CASCADE_BRIDGE_KEY_FILE ?? ''),
+  // 默认降级：缺失的 bridge key 只表示这台机器没部署语音桥，不应让整个插件挂载失败。
+  strictBridgeKey: z.boolean().default(false),
   inputMode: z.union([z.const('direct-audio'), z.const('local-asr')]).default(
     process.env.ELYSIA_GEMINI_CASCADE_LOCAL_ASR === '1' ? 'local-asr' : 'direct-audio',
   ),
@@ -60,6 +63,27 @@ const json = (body: unknown, status = 200) => Response.json(body, { status, head
 const errorResponse = (error: unknown) => error instanceof Failure
   ? json({ error: error.code }, error.status)
   : json({ error: 'cascade_unavailable' }, 503)
+const BRIDGE_KEY_LIMIT = 129
+/**
+ * 缺 key 不等于配置错误：没部署语音桥的机器也应该让插件正常挂载。
+ * 因此只有 ENOENT 表达成 undefined；文件存在时仍按原有规则校验，
+ * 只是权限位/所有者检查在 Windows 上不可表达，改用大小与内容格式。
+ */
+export async function readBridgeSecret(file: string): Promise<string | undefined> {
+  let stat: Stats
+  try { stat = await lstat(file) }
+  catch (error) {
+    if ((error as NodeJS.ErrnoException).code === 'ENOENT') return undefined
+    throw error
+  }
+  if (!stat.isFile() || stat.size > BRIDGE_KEY_LIMIT) fail('invalid_bridge_key', 503)
+  // Windows 的 mode 没有 group/other 语义、也没有 getuid；沿用 POSIX 位检查
+  // 会让已存在的 key 也恒失败。Windows 上由大小上限与内容格式承担校验。
+  if (process.platform !== 'win32' && ((stat.mode & 0o077) !== 0 || stat.uid !== process.getuid?.())) fail('invalid_bridge_key', 503)
+  const secret = (await readFile(file, 'utf8')).trim()
+  if (!/^[a-f0-9]{64}$/u.test(secret)) fail('invalid_bridge_key', 503)
+  return secret
+}
 
 async function readBrowser(request: Request): Promise<Record<string, unknown>> {
   if (!/^application\/json(?:;|$)/iu.test(request.headers.get('content-type') ?? '')) fail('invalid_content_type', 400)
@@ -107,10 +131,13 @@ export async function apply(ctx: Context, raw: Config = {}): Promise<void> {
   const config = Config(raw)
   if (!config.enabled) return
   if (![config.cwd, config.promptsDir, config.bridgeKeyFile].every(isAbsolute)) fail('invalid_config', 503)
-  const file = await lstat(config.bridgeKeyFile)
-  if (!file.isFile() || (file.mode & 0o077) !== 0 || file.uid !== process.getuid?.() || file.size > 129) fail('invalid_bridge_key', 503)
-  const secret = (await readFile(config.bridgeKeyFile, 'utf8')).trim()
-  if (!/^[a-f0-9]{64}$/u.test(secret)) fail('invalid_bridge_key', 503)
+  const secret = await readBridgeSecret(config.bridgeKeyFile)
+  if (secret === undefined) {
+    // 挂载期抛错会让 web 面把整个插件标成「未激活」；缺 key 只意味着少了语音桥。
+    if (config.strictBridgeKey) fail('invalid_bridge_key', 503)
+    ctx.logger('gemini-cascade').warn('未找到 bridge key，语音与桌宠能力已停用: ' + config.bridgeKeyFile)
+    return
+  }
 
   let active: Call | undefined
   let starting = false
