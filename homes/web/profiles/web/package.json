@@ -17,6 +17,7 @@
     "@elysia/voice-call": "file:../../../../plugins/voice-call",
     "@linxin666/dsh-remote-web-ui": "0.4.8",
     "@liustack/modsearch": "5.10.12",
+    "billion-context": "0.1.216",
     "dshmarket": "github:dsh-market/dsh-market"
   },
   "dsh": {
@@ -37,7 +38,8 @@
         "@liustack/modsearch",
         "@elysia/voice-call",
         "@elysia/gemini-cascade",
-        "@elysia/conscious-mind"
+        "@elysia/conscious-mind",
+        "billion-context"
       ]
     }
   }
