@@ -269,5 +269,97 @@
 - id: agent-default-model
   name: "@deepseek-ai/dsh-agent-default-model"
   config:
-    provider: a6
-    model: deepseek-v4.1-flash
+    provider: d1api
+    model: deepseek-v4.1-flash-1017
+    reasoningEffort: low
+
+# ── Model providers ─────────────────────────────────────────────────────────
+# Moved here from the home layer (homes/web/cordis.patch.yml) on 2026-11-20 so
+# the Settings page can edit them: config-editor persists to this profile patch
+# only, and a home-layer row with the same id shadows it.
+- id: llm-pi-ai
+  name: "@deepseek-ai/dsh-llm-pi-ai"
+  config:
+    providers:
+      nexus-a6-gemini:
+        displayName: NexusAI - A6 Gemini
+        apiKeyEnv: NEXUSAI_GEMINI_API_KEY
+        api: openai-completions
+        baseURL: http://127.0.0.1:3000/v1
+        models:
+          - id: gemini-3.8-flash
+            name: Gemini 3.8 Flash
+            contextWindow: 1000000
+            maxTokens: 8192
+            input:
+              - text
+              - image
+        compat:
+          supportsStore: false
+          supportsDeveloperRole: false
+          supportsReasoningEffort: false
+          supportsUsageInStreaming: true
+          maxTokensField: max_tokens
+      d1api:
+        displayName: d1api
+        apiKeyEnv: D1API_API_KEY
+        api: openai-completions
+        baseURL: https://d1api.xin/v1
+        models:
+          - id: deepseek-v4.1-flash-1017
+            name: deepseek-v4.1-flash-1017
+            contextWindow: 1000000
+            maxTokens: 131072
+            input:
+              - text
+              - image
+            reasoningEfforts:
+              off: null
+              high: high
+              max: max
+              low: low
+            compat:
+              chatTemplateKwargs: {}
+              chatTemplateArgs: {}
+        modelOverrides: {}
+        compat:
+          chatTemplateKwargs: {}
+          chatTemplateArgs: {}
+        defaultContextWindow: 262144
+        defaultMaxTokens: 32768
+        defaultInput:
+          - text
+        headers: {}
+        thinkingBudgets: {}
+        streamIdleTimeoutMs: 300000
+        maxRequestImageBytes: 20971520
+        requestImagePixelBudget: 4194304
+        requestImageMaxBytes: 1048576
+      a6:
+        displayName: A6 - DeepSeek
+        apiKeyEnv: A6API_API_KEY
+        api: openai-completions
+        baseURL: https://cf.a6api.net/v1
+        models:
+          - id: deepseek-v4.1-flash
+            name: deepseek-v4.1-flash (A6)
+            contextWindow: 1000000
+            maxTokens: 131072
+            input:
+              - text
+              - image
+            reasoningEfforts:
+              off: null
+              high: high
+              max: max
+        compat:
+          supportsStore: false
+          supportsDeveloperRole: false
+          supportsReasoningEffort: true
+          supportsUsageInStreaming: true
+          maxTokensField: max_tokens
+        timeoutMs: 1200000
+        streamIdleTimeoutMs: 1200000
+        maxRequestImageBytes: 20971520
+        requestImagePixelBudget: 4194304
+        requestImageMaxBytes: 1048576
