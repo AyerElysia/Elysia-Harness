@@ -279,9 +279,8 @@
 - id: agent-default-model
   name: "@deepseek-ai/dsh-agent-default-model"
   config:
-    provider: d1api
-    model: deepseek-v4.1-flash-1017
-    reasoningEffort: low
+    provider: a6
+    model: deepseek-v4.1-flash
 
 # ── Model providers ─────────────────────────────────────────────────────────
 # Moved here from the home layer (homes/web/cordis.patch.yml) on 2026-11-20 so
@@ -345,6 +344,7 @@
         maxRequestImageBytes: 20971520
         requestImagePixelBudget: 4194304
         requestImageMaxBytes: 1048576
+        maxRequestImages: 12
       a6:
         displayName: A6 - DeepSeek
         apiKeyEnv: A6API_API_KEY
@@ -373,3 +373,4 @@
         maxRequestImageBytes: 20971520
         requestImagePixelBudget: 4194304
         requestImageMaxBytes: 1048576
+        maxRequestImages: 12
