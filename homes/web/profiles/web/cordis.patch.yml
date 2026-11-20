@@ -345,6 +345,7 @@
         maxRequestImageBytes: 20971520
         requestImagePixelBudget: 4194304
         requestImageMaxBytes: 1048576
+        maxRequestImages: 12
       a6:
         displayName: A6 - DeepSeek
         apiKeyEnv: A6API_API_KEY
@@ -373,3 +374,4 @@
         maxRequestImageBytes: 20971520
         requestImagePixelBudget: 4194304
         requestImageMaxBytes: 1048576
+        maxRequestImages: 12
