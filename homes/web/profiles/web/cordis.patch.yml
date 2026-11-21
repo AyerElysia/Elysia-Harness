@@ -53,9 +53,9 @@
     reasoningEffort: low
 
 # ── Model providers ─────────────────────────────────────────────────────────
-# Moved here from the home layer (homes/web/cordis.patch.yml) on 2026-11-20 so
-# the Settings page can edit them: config-editor persists to this profile patch
-# only, and a home-layer row with the same id shadows it.
+# This is the single tracked source of truth. The home layer is applied after
+# this profile layer, so it must not repeat llm-pi-ai or agent-default-model;
+# otherwise Settings edits saved here are shadowed at boot.
 - id: llm-pi-ai
   name: "@deepseek-ai/dsh-llm-pi-ai"
   config:

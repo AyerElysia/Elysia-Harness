@@ -5,7 +5,7 @@
     "@linxin666/dsh-remote-web-ui": "0.4.20",
     "@liustack/modsearch": "5.10.14",
     "billion-context": "0.1.216",
-    "dshmarket": "github:dsh-market/dsh-market"
+    "dshmarket": "github:dsh-market/dsh-market#a05f16d73de3dc5a7c6c6c5c7a18d45dfc2e2c6a"
   },
   "dsh": {
     "profile": {

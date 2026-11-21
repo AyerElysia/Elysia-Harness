@@ -43,6 +43,11 @@ homes/*/remote-web-ui-registry/
 homes/*/.credentials.yaml
 !homes*/.credentials.example.yaml
 
+# Environment files are operator-local too; only examples are tracked.
+**/.env
+**/.env.*
+!**/.env.*.example
+
 # The prompt bodies are the subject's own, not repository content. A surface
 # symlinks them in from wherever they actually live.
 homes/*/standing-prompts
