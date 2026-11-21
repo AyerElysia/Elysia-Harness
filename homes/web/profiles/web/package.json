@@ -2,8 +2,8 @@
   "name": "dsh-profile-web",
   "private": true,
   "dependencies": {
-    "@linxin666/dsh-remote-web-ui": "0.4.8",
-    "@liustack/modsearch": "5.10.12",
+    "@linxin666/dsh-remote-web-ui": "0.4.20",
+    "@liustack/modsearch": "5.10.14",
     "billion-context": "0.1.216",
     "dshmarket": "github:dsh-market/dsh-market"
   },
