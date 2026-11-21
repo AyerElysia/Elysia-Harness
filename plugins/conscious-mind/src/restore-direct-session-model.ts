@@ -12,7 +12,23 @@ interface NativeModelSelectionProjection {
   stateOf(
     session: Agent['session'],
     key: 'modelSelection',
-  ): { pending: PendingModelSelection | null } | undefined
+  ): { pending: PendingModelSelection | null; lastUsed: PendingModelSelection | null } | undefined
+}
+
+/**
+ * Whether this Session already recorded a route: a pending selection or a used request header.
+ * A configured default applies only while the Session has recorded nothing of its own; a later
+ * owner must not overwrite the choice a Client, resume or earlier default already recorded.
+ * @param agent - Agent whose Session owns the selection projection.
+ * @returns true when the Session's own recorded selection must win.
+ */
+export function hasRecordedModelSelection(agent: Agent): boolean {
+  // A request header is the durable record of the route this Session actually used; it survives
+  // resume even while the selection projection is still initializing.
+  if (agent.session.requestHeader() !== undefined) return true
+  const projections = agent.ctx.get('sessionProjections') as NativeModelSelectionProjection | undefined
+  const state = projections?.stateOf(agent.session, 'modelSelection')
+  return state !== undefined && (state.pending != null || state.lastUsed != null)
 }
 
 /**

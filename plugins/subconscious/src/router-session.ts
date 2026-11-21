@@ -8,7 +8,7 @@ import type {} from '@deepseek-ai/dsh-system-prompt'
 import type {} from '@deepseek-ai/dsh-tools'
 import * as StandingPrompt from '@elysia/conscious-mind/standing-prompts'
 import * as CurrentTime from '@elysia/conscious-mind/current-time'
-import { restoreDirectSessionModel } from '@elysia/conscious-mind/src/restore-direct-session-model.ts'
+import { hasRecordedModelSelection, restoreDirectSessionModel } from '@elysia/conscious-mind/src/restore-direct-session-model.ts'
 import type { Config } from './config.ts'
 import { batchContent, ROUTER_SESSION_ID, routerMessageSource, routerReportSource, type RouterBatch } from './model.ts'
 import type { RouterStore } from './store.ts'
@@ -74,6 +74,9 @@ export class RouterSession {
   }
 
   private selectModel(agent: Agent): void {
+    // The configured route is the default for a fresh Router, never a per-batch override:
+    // a Session that already recorded a route (Client choice, earlier default, resume) keeps it.
+    if (hasRecordedModelSelection(agent)) return
     agent.model.select({ provider: this.config.provider, model: this.config.model })
   }
 

@@ -37,10 +37,23 @@ function clearVisibleClocks(agent: Agent): void {
   }
 }
 
+/** The Agent owning this mount, when the row is mounted inside one Agent's own scope.
+ *
+ * A preset child row mounts in the preset registry's scope instead: it has no
+ * single owner and serves every Agent composed under that preset, so the clock
+ * follows each routed Agent rather than reading the scope tag as an Agent.
+ * @param ctx - mounting context of this row.
+ * @returns the owning Agent, or undefined for a preset-owned row.
+ */
+function scopedAgent(ctx: Context): Agent | undefined {
+  const scope = scopeOf(ctx)
+  if (scope === undefined) throw new Error('elysia-current-time requires an Agent-scoped or preset context')
+  return 'session' in scope ? scope as Agent : undefined
+}
+
 /** Sample once per actual turn; tool steps reuse it without another injection. */
 export function apply(ctx: Context, config: Config): void {
-  const owner = scopeOf(ctx)
-  if (owner === undefined) throw new Error('elysia-current-time requires an Agent-scoped context')
+  const owner = scopedAgent(ctx)
   let calendar: Intl.DateTimeFormat
   try {
     calendar = new Intl.DateTimeFormat('zh-CN', {
@@ -51,17 +64,22 @@ export function apply(ctx: Context, config: Config): void {
   } catch (error) {
     throw new Error(`invalid IANA timeZone: ${config.timeZone}`, { cause: error })
   }
-  let injectedTurn: number | undefined
-  clearVisibleClocks(owner)
-  ctx.effect(() => () => clearVisibleClocks(owner))
+  /** Turn already clocked for one Agent, so later steps of that turn reuse the reading. */
+  const injected = new WeakMap<Agent, number>()
+  if (owner !== undefined) {
+    clearVisibleClocks(owner)
+    ctx.effect(() => () => clearVisibleClocks(owner), 'elysia-current-time: visible clocks')
+  }
   ctx.on('agent/pre-step', async ({ agent, turn, signal }, next) => {
     const decision = await next()
-    // Scoped events also reach ancestor listeners; this clock belongs only to its exact owner.
-    if (agent !== owner || decision.kind === 'reject' || signal.aborted || injectedTurn === turn) return decision
+    // Scoped events also reach ancestor listeners: a row mounted in one Agent's
+    // scope clocks only that Agent, while a preset row clocks each Agent routed to it.
+    if (owner !== undefined && agent !== owner) return decision
+    if (decision.kind === 'reject' || signal.aborted || injected.get(agent) === turn) return decision
     clearVisibleClocks(agent)
     const parts = new Map(calendar.formatToParts(Date.now()).map(part => [part.type, part.value]))
     const text = `${parts.get('year')}/${parts.get('month')}/${parts.get('day')} ${parts.get('hour')}:${parts.get('minute')}`
-    injectedTurn = turn
+    injected.set(agent, turn)
     return {
       ...decision,
       messages: [...decision.messages, createUserMessage({

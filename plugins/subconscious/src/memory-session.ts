@@ -7,7 +7,7 @@ import { SessionPersistenceNotFoundError } from '@deepseek-ai/dsh-session-persis
 import * as StandingPrompt from '@elysia/conscious-mind/standing-prompts'
 import * as CurrentTime from '@elysia/conscious-mind/current-time'
 import * as FileCapabilities from '@elysia/conscious-mind/file-capabilities'
-import { restoreDirectSessionModel } from '@elysia/conscious-mind/src/restore-direct-session-model.ts'
+import { hasRecordedModelSelection, restoreDirectSessionModel } from '@elysia/conscious-mind/src/restore-direct-session-model.ts'
 import type { Config } from './config.ts'
 import { MEMORY_SESSION_ID, reminderContent, taskContent, taskMessageSource } from './dispatch.ts'
 import { DispatchError, type DispatchStore } from './dispatch-store.ts'
@@ -110,6 +110,8 @@ export class MemorySession {
   }
 
   private selectModel(agent: Agent): void {
+    // Keep a route this Session already recorded; the configured route only seeds a fresh one.
+    if (hasRecordedModelSelection(agent)) return
     agent.model.select({ provider: this.config.provider, model: this.config.model })
   }
 
