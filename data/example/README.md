@@ -39,9 +39,11 @@ A live copy can be inconsistent while the server is writing. Treat `data/elysia/
 
 ## Personal copy
 
-```sh
-# Local only; ignored by git.
-data/elysia/
-```
+`data/elysia/` is ignored by git. In this checkout it holds:
+
+- `Elysia-SoulBanker-main/` — the extracted snapshot
+- `Elysia-SoulBanker-main.zip` — the original archive
+
+This is a private, offline subject-document snapshot (`SOUL.md`, `USER.md`, `MEMORY.md`, `TOOL.md`, plus `subject-documents.sqlite3.zip`), not the full live 22 GB data tree. The snapshot SQLite must not replace the running Elysium database.
 
 Do not copy private content into `data/example/`. If a new directory becomes part of the contract, add only its empty skeleton and a short description here.
