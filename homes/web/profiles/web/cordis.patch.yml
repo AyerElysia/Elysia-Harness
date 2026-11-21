@@ -1,217 +1,20 @@
-# The web surface's own patch layer, applied after every bundle layer.
+# Local web profile patch.
+# ElyH feature plugins are archived under plugins/_archive-elysia-v1 and are
+# intentionally unmounted here. Only the external plugins remain:
+# modsearch, remote-web-ui, market, billion-context. Core DSH/Web rows stay.
 #
-# These rows mount Elysia's plugins. Each mounted package must also be declared in
-# this profile's package.json so the loader can resolve it from
-# `profiles/web/node_modules`. The dsh workspace does not carry `../plugins/*`
-# since the 0.2.2-rc.2 sync, so a missing declaration fails at resolve time.
-#
-# Provider ids and model ids below (`a6`, `deepseek-v4.1-flash`) are deployment
-# values, not tracked ones: they must be declared by the operator in the
-# untracked home-level `homes/shared/models.patch.yml` (shape in
-# `models.patch.example.yml`). A checkout without that file mounts nothing but
-# fails to resolve the model at the first request.
+# Provider ids and model ids below are deployment values, not tracked ones:
+# they must be declared by the operator in the untracked home-level
+# `homes/shared/models.patch.yml`. A checkout without that file mounts nothing
+# but fails to resolve the model at the first request.
 
-- insert:
-    # Host-level composition covers presets, fixed-channel Sessions, and future Agents.
-    - id: elysia-session-compaction
-      name: '@elysia/session-compaction'
-
-    - id: preset-elysia
-      name: '@deepseek-ai/dsh-agent-preset'
-      config:
-        id: elysia
-        name: 爱莉
-        description: 按爱莉的固定提示词组合装配一个独立 session
-        plugins:
-          - id: elysia-standing-prompts
-            name: '@elysia/conscious-mind/standing-prompts'
-            config:
-              baseDir: !!js process.env.ELYSIA_PROMPTS_DIR ?? process.env.DSH_HOME +
-                '/standing-prompts'
-              files:
-                - SOUL.md
-                - USER.md
-                - MEMORY.md
-                - CONSCIOUS-MIND.md
-              required:
-                - SOUL.md
-              complete: true
-          - id: elysia-file-capabilities
-            name: '@elysia/conscious-mind/file-capabilities'
-            config:
-              baseDir: !!js process.env.ELYSIA_PROMPTS_DIR ?? process.env.DSH_HOME +
-                '/standing-prompts'
-              files:
-                - SOUL.md
-                - USER.md
-                - MEMORY.md
-                - CONSCIOUS-MIND.md
-              required:
-                - SOUL.md
-              workspaceDir: /home/ayerelysia/Elysia/Data/workspace
-              backupDir: !!js process.env.DSH_HOME + '/standing-prompt-backups'
-              maxPromptBytes: 65536
-              backupRetention: 20
-          - id: elysia-web-capabilities
-            name: '@elysia/conscious-mind/web-capabilities'
-          - id: elysia-skill-capabilities
-            name: '@elysia/conscious-mind/skill-capabilities'
-            config:
-              rootDir: /home/ayerelysia/Elysia/Data/workspace/skills
-          - id: elysia-current-time
-            name: '@elysia/conscious-mind/current-time'
-            config:
-              timeZone: Asia/Shanghai
-
-    - id: preset-elysia-subconscious-memory
-      name: '@deepseek-ai/dsh-agent-preset'
-      config:
-        id: elysia-subconscious-memory
-        name: 爱莉 · 记忆潜意识
-        description: 回顾经历，查找并整理日记和记忆笔记
-        plugins:
-          - id: elysia-memory-standing-prompts
-            name: '@elysia/conscious-mind/standing-prompts'
-            config:
-              baseDir: !!js process.env.ELYSIA_PROMPTS_DIR ?? process.env.DSH_HOME +
-                '/standing-prompts'
-              files:
-                - SOUL.md
-                - USER.md
-                - SUBCONSCIOUS-MEMORY.md
-              required:
-                - SOUL.md
-                - SUBCONSCIOUS-MEMORY.md
-              complete: true
-          - id: elysia-memory-file-capabilities
-            name: '@elysia/conscious-mind/file-capabilities'
-            config:
-              baseDir: !!js process.env.ELYSIA_PROMPTS_DIR ?? process.env.DSH_HOME +
-                '/standing-prompts'
-              files:
-                - MEMORY.md
-              required: []
-              workspaceDir: /home/ayerelysia/Elysia/Data/workspace/subconscious/memory
-              backupDir: /home/ayerelysia/Elysia/Data/subconscious/memory/standing-prompt-backups
-              allowPromptWrites: false
-              restrictInheritedTools: true
-
-    - id: elysia-session-communication
-      name: '@elysia/session-communication'
-      config:
-        stateDir: /home/ayerelysia/Elysia/Data/subconscious/session-communication
-
-    - id: elysia-conscious-mind
-      name: '@elysia/conscious-mind'
-      config:
-        timeZone: Asia/Shanghai
-        scheduledPlans: true
-        baseDir: !!js process.env.ELYSIA_PROMPTS_DIR ?? process.env.DSH_HOME +
-          '/standing-prompts'
-        files:
-          - SOUL.md
-          - USER.md
-          - MEMORY.md
-          - CONSCIOUS-MIND.md
-
-    # Observe the main Session's admitted surface events. Router has its own
-    # scoped workspace/tools and no channel-sending capability.
-    - id: elysia-subconscious
-      name: '@elysia/subconscious'
-      config:
-        provider: a6
-        model: deepseek-v4.1-flash
-        baseDir: !!js process.env.ELYSIA_PROMPTS_DIR ?? process.env.DSH_HOME +
-          '/standing-prompts'
-        files:
-          - SOUL.md
-          - USER.md
-          - MEMORY.md
-          - SUBCONSCIOUS-ROUTER.md
-        required:
-          - SOUL.md
-          - SUBCONSCIOUS-ROUTER.md
-        stateDir: /home/ayerelysia/Elysia/Data/subconscious/router
-        workspaceDir: /home/ayerelysia/Elysia/Data/workspace/subconscious/router
-        # Deployment values are explicit: the plugin no longer ships path defaults,
-        # so a surface that forgets one fails at mount instead of writing elsewhere.
-        memoryWorkspaceDir: /home/ayerelysia/Elysia/Data/workspace/subconscious/memory
-        skillsDir: /home/ayerelysia/Elysia/Data/workspace/skills
-        readOnlyDirs:
-          - /home/ayerelysia/Elysia/Data/workspace/diaries
-        backupDir: /home/ayerelysia/Elysia/Data/subconscious/router/standing-prompt-backups
-        maxBackgroundJobs: 4
-        maxJobAgeMs: 1800000
-        jobSweepMs: 30000
-        shellTimeoutMs: 120000
-        shellMaxTimeoutMs: 600000
-
-    # Channels stay off until an adapter config exists on this host; each reads
-    # an absolute Elysium path and fails loud when it is absent, which would take
-    # the whole profile down at boot.
-    - id: elysia-qq-napcat
-      name: '@elysia/qq-napcat'
-      disabled: !!js process.env.ELYSIA_NAPCAT_CONFIG === undefined
-      config:
-        configPath: !!js process.env.ELYSIA_NAPCAT_CONFIG ?? ''
-        port: 0
-
-    - id: elysia-feishu-app
-      name: '@elysia/feishu-app'
-      disabled: !!js process.env.ELYSIA_FEISHU_CONFIG === undefined
-      config:
-        configPath: !!js process.env.ELYSIA_FEISHU_CONFIG ?? ''
-        listen: false
-
-    - id: elysia-kook-bot
-      name: '@elysia/kook-bot'
-      disabled: !!js process.env.ELYSIA_KOOK_CONFIG === undefined
-      config:
-        configPath: !!js process.env.ELYSIA_KOOK_CONFIG ?? ''
-        # One token keeps one gateway. Opening it here replaces the socket the
-        # live Python Elysium holds, so listen only turns on through an explicit
-        # ELYSIA_KOOK_LISTEN=1 after that adapter has been stood down.
-        listen: !!js process.env.ELYSIA_KOOK_LISTEN === '1'
-
-    - id: elysia-request-archive
-      name: '@elysia/request-archive'
-      config:
-        dir: !!js process.env.ELYSIA_REQUESTS_DIR ?? process.env.DSH_HOME + '/requests'
-    # Full upstream livestream body/console; local Breeze and external Livehime publisher.
-    - id: elysia-dsh-livestream
-      name: '@elysia/dsh-livestream'
-      config:
-        baseDir: !!js process.env.ELYSIA_PROMPTS_DIR ?? process.env.DSH_HOME +
-          '/standing-prompts'
-        files:
-          - SOUL.md
-          - LIVE.md
-        stagePort: !!js Number(process.env.ELYSIA_STAGE_PORT ?? 3300)
-        publisher: livehime
-        allowedWriteActions: []
-    - id: elysia-context-inspector
-      name: '@elysia/context-inspector'
-      config:
-        dir: !!js process.env.ELYSIA_REQUESTS_DIR ?? process.env.DSH_HOME + '/requests'
 # ModSearch supplies real structured search results without an official key.
-# The D1 adapter stays mounted for diagnosis but is no longer selected: its
-# upstream returned message-only responses without a native search trace.
 # web_fetch continues to use the original anonymous HTTP provider.
 - id: web
   name: '@deepseek-ai/dsh-web'
   config:
     searchProvider: modsearch
     fetchProvider: http
-- insert:
-    - id: web-search-d1
-      name: '@elysia/conscious-mind/d1-search'
-      config:
-        apiKeyEnv: D1API_API_KEY
-        baseURL: https://d1api.xin/v1
-        model: deepseek-v4.1-flash
-        protocol: openai-responses
-        maxTokens: 4096
-        timeoutMs: 90000
 # Keep the exposed capability identical to the pre-ModSearch web tools. The
 # optional settings route does not inherit DSH connection authentication.
 - id: modsearch
@@ -233,21 +36,6 @@
       config:
         autoTunnel: false
         publicBaseUrl: "https://climb-writing-bidder-here.trycloudflare.com"
-# The Ayla channel dials the Ayla backend and opens no port of its own.
-# This row sits at the top level on purpose: the configuration editor addresses
-# only top-level entries, so a row nested inside an `insert:` block would never
-# persist a settings-page edit. The plugin mounts unconditionally so the
-# settings page can render its fields; it opens no socket until username and
-# password are both set. Env values only seed the defaults on first load.
-- id: elysia-ayla-app
-  name: '@elysia/ayla-app'
-  config:
-    baseUrl: !!js process.env.AYLA_BASE_URL ?? 'http://127.0.0.1:8100'
-    # Written once by the settings page; the env var still seeds a fresh checkout.
-    username: elysia
-    password: !!js process.env.AYLA_BOT_PASSWORD ?? ''
-    mode: auto
-    workspaceDir: ''
 - id: ui-chat
   name: "@deepseek-ai/dsh-client-ui-chat"
   config:
@@ -257,25 +45,6 @@
 - id: schedule
   disabled: true
 
-# Retain the old package/history; do not mount its legacy standalone panel.
-- id: elysia-voice-call
-  name: '@elysia/voice-call'
-  disabled: true
-  config:
-    enabled: true
-    breezeServerUrl: http://127.0.0.1:7865
-    openaiProxyUrl: http://127.0.0.1:17878
-
-# Native conversation voice, bound to the existing loopback-only ASR worker.
-# Keep the paired desktop on the native main session; receipt errors stay local.
-- id: elysia-gemini-cascade
-  name: '@elysia/gemini-cascade'
-  config:
-    enabled: true
-    mainSessionVoice: true
-    inputMode: local-asr
-    bridgeKeyFile: /home/ayerelysia/Elysia/DataInfra/voice-cascade/bridge.key
-    desktopKeyFile: /home/ayerelysia/Elysia/DataInfra/voice-cascade/desktop-owner.key
 - id: agent-default-model
   name: "@deepseek-ai/dsh-agent-default-model"
   config:

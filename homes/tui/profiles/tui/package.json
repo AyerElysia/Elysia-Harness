@@ -2,23 +2,13 @@
   "name": "dsh-profile-tui",
   "private": true,
   "dependencies": {
-    "@deepseek-harness-tui/dsh-tui": "0.16.1",
-    "@elysia/conscious-mind": "file:../../../../plugins/conscious-mind",
-    "@elysia/feishu-app": "file:../../../../plugins/feishu-app",
-    "@elysia/kook-bot": "file:../../../../plugins/kook-bot",
-    "@elysia/qq-napcat": "file:../../../../plugins/qq-napcat",
-    "@elysia/request-archive": "file:../../../../plugins/request-archive"
+    "@deepseek-harness-tui/dsh-tui": "0.16.1"
   },
   "dsh": {
     "profile": {
       "bundles": [
         "@deepseek-ai/dsh-base",
-        "@deepseek-harness-tui/dsh-tui",
-        "@elysia/conscious-mind",
-        "@elysia/qq-napcat",
-        "@elysia/feishu-app",
-        "@elysia/kook-bot",
-        "@elysia/request-archive"
+        "@deepseek-harness-tui/dsh-tui"
       ]
     }
   }

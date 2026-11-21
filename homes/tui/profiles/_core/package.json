@@ -35,11 +35,6 @@
     "dsh-tui-pkg": "0.4.3",
     "dsh-tui-find": "0.5.2",
     "@deepseek-ai/dsh-experimental-auto-review": "0.2.1-rc.2",
-    "@elysia/conscious-mind": "file:../../../../plugins/conscious-mind",
-    "@elysia/feishu-app": "file:../../../../plugins/feishu-app",
-    "@elysia/kook-bot": "file:../../../../plugins/kook-bot",
-    "@elysia/qq-napcat": "file:../../../../plugins/qq-napcat",
-    "@elysia/request-archive": "file:../../../../plugins/request-archive",
     "dsh-tui-elysia-pet": "file:../../../../vendor/elysia-pet"
   }
 }

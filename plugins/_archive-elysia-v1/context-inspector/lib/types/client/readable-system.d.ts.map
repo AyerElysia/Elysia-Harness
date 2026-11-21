@@ -1,0 +1,1 @@
+{"version":3,"file":"readable-system.d.ts","sourceRoot":"","sources":["../../../src/client/readable-system.ts"],"names":[],"mappings":"AAAA,yGAAyG;AACzG,MAAM,WAAW,mBAAmB;IAClC,QAAQ,CAAC,MAAM,EAAE,MAAM,CAAA;IACvB,QAAQ,CAAC,IAAI,EAAE,MAAM,CAAA;CACtB;AAcD;;;GAGG;AACH,wBAAgB,oBAAoB,CAAC,IAAI,EAAE,MAAM,GAAG,SAAS,mBAAmB,EAAE,CAyCjF"}
