@@ -100,6 +100,11 @@ homes/*/.dsh-tui/*
 # dsh/**/lib/ rule above deliberately does not reach here.
 vendor/*/node_modules/
 
+# ── Personal Elysium data mirror ────────────────────────────────────────────
+# The real server data copy is local-only. Only the sanitized skeleton under
+# data/example is tracked.
+data/elysia/
+
 # ── Scratch ─────────────────────────────────────────────────────────────────
 *.log
 *.orig

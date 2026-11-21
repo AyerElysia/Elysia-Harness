@@ -1,0 +1,37 @@
+{
+  "source": "server Elysium/data (reference only)",
+  "tracked": "data/example",
+  "personal": "data/elysia",
+  "directories": [
+    "chroma_db",
+    "diaries",
+    "elysia_generated_emoji",
+    "emoji",
+    "emoji_sender",
+    "json_storage",
+    "life_engine_workspace",
+    "life_storage",
+    "livestream",
+    "media_cache",
+    "new_api_relay",
+    "repair_backups",
+    "runtime",
+    "service_logs",
+    "training_data_lake",
+    "tts_ref_studio",
+    "webui"
+  ],
+  "databaseFiles": [
+    "Elysium.db",
+    "Elysium.db-wal",
+    "Elysium.db-shm",
+    "logs.db",
+    "logs.db-wal",
+    "logs.db-shm"
+  ],
+  "notes": [
+    "Only data/example is tracked.",
+    "data/elysia is the ignored personal copy.",
+    "Live SQLite copies are not guaranteed consistent while the server is writing."
+  ]
+}
