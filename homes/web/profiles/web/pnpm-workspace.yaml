@@ -15,4 +15,4 @@ allowBuilds:
   "@google/genai": false
   protobufjs: false
   # dsh-market is fetched from git, so its build runs at install time.
-  "dshmarket@https://codeload.github.com/dsh-market/dsh-market/tar.gz/e320461dba3a7e99845f83c7bd106a2f1889dc7f": true
+  "dshmarket@https://codeload.github.com/dsh-market/dsh-market/tar.gz/a05f16d73de3dc5a7c6c6c5c7a18d45dfc2e2c6a": true

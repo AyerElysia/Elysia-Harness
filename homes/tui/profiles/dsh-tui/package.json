@@ -4,12 +4,6 @@
   "dependencies": {
     "@deepseek-ai/dsh-experimental-auto-review": "0.2.1-rc.2",
     "@deepseek-harness-tui/dsh-tui": "0.20.0",
-    "@elysia/conscious-mind": "file:../../../../plugins/conscious-mind",
-    "@elysia/feishu-app": "file:../../../../plugins/feishu-app",
-    "@elysia/kook-bot": "file:../../../../plugins/kook-bot",
-    "@elysia/qq-napcat": "file:../../../../plugins/qq-napcat",
-    "@elysia/request-archive": "file:../../../../plugins/request-archive",
-    "@elysia/session-compaction": "file:../../../../plugins/session-compaction",
     "@liustack/modsearch": "5.10.12",
     "dsh-ops": "0.4.1",
     "dsh-tui-elysia-pet": "file:../../../../vendor/elysia-pet",
@@ -27,12 +21,7 @@
         "dsh-tui-pkg",
         "dsh-tui-find",
         "@liustack/modsearch",
-        "@deepseek-ai/dsh-experimental-auto-review",
-        "@elysia/conscious-mind",
-        "@elysia/qq-napcat",
-        "@elysia/feishu-app",
-        "@elysia/kook-bot",
-        "@elysia/request-archive"
+        "@deepseek-ai/dsh-experimental-auto-review"
       ]
     }
   }

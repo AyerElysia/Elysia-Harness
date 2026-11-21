@@ -1,0 +1,45 @@
+# The web surface's own patch layer, applied after every bundle layer.
+#
+# These rows mount Elysia's plugins. They resolve from the checkout's workspace,
+# so no profile install is needed: `dsh/pnpm-workspace.yaml` carries
+# `../plugins/*` and the installation anchor reaches it.
+
+- insert:
+    - id: elysia-conscious-mind
+      name: '@elysia/conscious-mind'
+      config:
+        baseDir: !!js process.env.ELYSIA_PROMPTS_DIR ?? process.env.DSH_HOME + '/standing-prompts'
+        files:
+          - SOUL.md
+          - USER.md
+          - MEMORY.md
+          - CONSCIOUS-MIND.md
+
+    # Channels stay off until an adapter config exists on this host; each reads
+    # an absolute Elysium path and fails loud when it is absent, which would take
+    # the whole profile down at boot.
+    - id: elysia-qq-napcat
+      name: '@elysia/qq-napcat'
+      disabled: !!js process.env.ELYSIA_NAPCAT_CONFIG === undefined
+      config:
+        configPath: !!js process.env.ELYSIA_NAPCAT_CONFIG ?? ''
+        port: 0
+
+    - id: elysia-feishu-app
+      name: '@elysia/feishu-app'
+      disabled: !!js process.env.ELYSIA_FEISHU_CONFIG === undefined
+      config:
+        configPath: !!js process.env.ELYSIA_FEISHU_CONFIG ?? ''
+        listen: false
+
+    - id: elysia-kook-bot
+      name: '@elysia/kook-bot'
+      disabled: !!js process.env.ELYSIA_KOOK_CONFIG === undefined
+      config:
+        configPath: !!js process.env.ELYSIA_KOOK_CONFIG ?? ''
+        listen: false
+
+    - id: elysia-request-archive
+      name: '@elysia/request-archive'
+      config:
+        dir: !!js process.env.ELYSIA_REQUESTS_DIR ?? process.env.DSH_HOME + '/requests'

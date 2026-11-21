@@ -1,0 +1,106 @@
+# This surface's own patch layer, applied after every bundle layer.
+#
+# Only the plugin composition belongs here: what a clone should reproduce. Model
+# providers and default-model choices describe one machine's setup and live in
+# homes/shared/models.patch.yml, which is ignored.
+
+- insert:
+    # Apply native compaction uniformly to every TUI Agent Session.
+    - id: elysia-session-compaction
+      name: '@elysia/session-compaction'
+
+    - id: elysia-conscious-mind
+      name: '@elysia/conscious-mind'
+      config:
+        baseDir: !!js process.env.ELYSIA_PROMPTS_DIR ?? process.env.DSH_HOME +
+          '/standing-prompts'
+        files:
+          - SOUL.md
+          - USER.md
+          - MEMORY.md
+          - CONSCIOUS-MIND.md
+
+    # Channels stay off until an adapter config exists on this host; each reads
+    # an absolute Elysium path and fails loud when absent.
+    - id: elysia-qq-napcat
+      name: '@elysia/qq-napcat'
+      disabled: !!js process.env.ELYSIA_NAPCAT_CONFIG === undefined
+      config:
+        configPath: !!js process.env.ELYSIA_NAPCAT_CONFIG ?? ''
+        port: 0
+
+    - id: elysia-feishu-app
+      name: '@elysia/feishu-app'
+      disabled: !!js process.env.ELYSIA_FEISHU_CONFIG === undefined
+      config:
+        configPath: !!js process.env.ELYSIA_FEISHU_CONFIG ?? ''
+        listen: false
+
+    - id: elysia-kook-bot
+      name: '@elysia/kook-bot'
+      disabled: !!js process.env.ELYSIA_KOOK_CONFIG === undefined
+      config:
+        configPath: !!js process.env.ELYSIA_KOOK_CONFIG ?? ''
+        listen: false
+
+    - id: elysia-request-archive
+      name: '@elysia/request-archive'
+      config:
+        dir: !!js process.env.ELYSIA_REQUESTS_DIR ?? process.env.DSH_HOME + '/requests'
+
+# The terminal surface's own settings. These are UI preferences, not machine
+# configuration: they belong to the repository like the plugin list does.
+# Model providers stay in homes/shared/models.patch.yml, which is ignored.
+- id: dsh-tui
+  config:
+    effort: max
+    preset: !!js process.env.DSH_TUI_PRESET ?? undefined
+    workspace: !!js process.env.DSH_TUI_WORKSPACE_TARGET ?? undefined
+    sessionId: !!js process.env.DSH_TUI_RESUME_SESSION ?? undefined
+    backend: !!js process.env.DSH_TUI_BACKEND || undefined
+    contextBar: true
+    activityFrames: whale-bubbles
+    whale: true
+    whaleIdle: true
+    splashFont: dot
+    minimal: false
+    fullscreen: true
+    terminalImages: true
+    diffLayout: split
+    thinkingFold: preview
+    toolBackground: subtle
+    scrollGutter: scrollbar
+    pageMargin: slim
+    turnUsageRow: true
+    promptSessionLabel: true
+    codeFrameStyle: light
+    imageBacking: transparent
+    statusBar:
+      compact: true
+      model: true
+      thinking: true
+      cwd: true
+      contextUsage: true
+      cache: true
+      tokens: true
+      cost: false
+      tps: true
+      gitBranch: true
+      sessionTitle: false
+      sessionId: false
+      goal: true
+      mode: true
+      contextBar: true
+      activity: true
+      trajectory: true
+      shortcutHint: true
+    sidePanel:
+      open: true
+
+    companion:
+      skin: elysia
+- id: dsh-tui-elysia-pet
+  config:
+    splashAnimation: drag
+    idleSpeed: 1
+    activateOnLoad: true
