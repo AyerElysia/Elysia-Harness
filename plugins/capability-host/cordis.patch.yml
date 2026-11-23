@@ -1,0 +1,18 @@
+# The ElyH capability panel: one bundle row owns both halves.
+#
+# The Host half keeps the panel document under the harness home, beside
+# `sessions/` and `storages/`, and exposes the `capabilityHost` Remote
+# namespace. The browser half is shipped from the same package
+# (`dsh.client` / `./client`) and reaches that namespace over the connection;
+# it is not a separately installed plugin.
+#
+# Static tools are NOT mounted here. A preset's static tool face belongs to
+# preset-manager's preset rows (`@deepseek-ai/dsh-tool-web` for
+# `web_search`/`web_fetch`); the panel only reads it through
+# `agentPresets.compositionInventory()` and shows it locked. Mounting `tool-web`
+# here would duplicate the preset row and blur who owns the static surface.
+- insert:
+    - id: elysia-capability-host
+      name: '@elysia/capability-host'
+      config:
+        stateDir: !!js dshHomePath('capability-host')

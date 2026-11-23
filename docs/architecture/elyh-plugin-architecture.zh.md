@@ -60,7 +60,7 @@
 - `InboundRouter`：渠道消息 -> 目标会话 `followup`。
 - `SessionRuntime`：只负责创建/恢复会话，不组合提示词或工具。
 
-### 3.2 `@elysia/control-panel`（Client 插件）
+### 3.2 `@elysia/capability-host` 的 Client 半
 
 - 列出会话与预设，自动识别当前会话的预设。
 - 内置几套能力模板（主意识、Router、渠道、媒体）。
@@ -68,6 +68,8 @@
 - 显示上下文事件流、工具可见性、最近一次错误。
 - 通过 RPC 读写 Host；不直接操作文件或 `agent.ctx`。
 - 权限：只有 owner 可改；所有变更审计。
+
+完整契约见 [ElyH 上下文事件 + 工具管理面板方案](elyh-control-panel.zh.md)。
 
 ### 3.3 Presets
 
@@ -222,8 +224,7 @@ Provider 向 `contextBus.publish(event)` 发事件。Host 按订阅解析出目�
 
 ### 6.1 新增核心包
 
-- `@elysia/capability-host`：Tool Catalog、Context Bus、State Store、Gate、Session Registry。
-- `@elysia/control-panel`：Client 面板。
+- `@elysia/capability-host`：Tool Catalog、Context Bus、State Store、Gate、Session Registry，以及同包的 Client 面板。
 - `@elysia/router-runtime`：观察主意识、心跳、派工桥；可后置。
 - `@elysia/inbound-router`：渠道消息 -> 目标会话 followup；可先并入 Host。
 - `@elysia/channel-kit`（库，不是插件）：standalone 渠道的最小会话/发送工具。
@@ -239,7 +240,7 @@ Provider 向 `contextBus.publish(event)` 发事件。Host 按订阅解析出目�
 
 ### 6.3 实施阶段
 
-- **P0 · 契约与骨架**：`capability-host` 的 Tool Catalog/Gate、Context Bus、State Store、Session Registry；`control-panel` 只读列表；不改变现有行为。验收：`when` 条件、`UNKNOWN_TOOL`、订阅分发、持久化各有单测和真实组合测试。
+- **P0 · 契约与骨架**：`capability-host` 的 Tool Catalog/Gate、Context Bus、State Store、Session Registry；同包的 Client 半只读列表；不改变现有行为。验收：`when` 条件、`UNKNOWN_TOOL`、订阅分发、持久化各有单测和真实组合测试。
 - **P1 · 主意识 + App Bridge**：`preset-elysia-conscious`、主意识工具 Provider、`inbound-router`、`app-bridge` 两模式。验收：已有会话加工具不新开、关闭不可执行、app 消息触发一轮、回复工具绑定入站会话。
 - **P2 · Router + 内部能力**：`preset-elysia-subconscious`、`router-runtime`（观察/心跳/派工桥）、`session-communication`、`proactive-system`。验收：主意识事件进入 Router 上下文；Router 派工不依赖固定 session id；报告回传。
 - **P3 · 渠道 + 记忆**：`channel-ayla/kook/qq/feishu` 统一为 Provider；补 QQ/飞书入站；删除 `memory` 空占位；记忆读写 Provider 先做只读。验收：四个渠道都能 managed 注册上下文/回复工具；订阅集合分发正确。

@@ -1,0 +1,11 @@
+# Host row of the preset manager.
+#
+# The manager document lives under the harness home, beside `sessions/` and
+# `storages/`, so deleting a home removes the roster it owns with it. The
+# browser half is declared by `dsh.client` in package.json; the `prompt-files`
+# child is mounted per preset by the Host service, never as a row here.
+- insert:
+    - id: elysia-preset-manager
+      name: '@elysia/preset-manager'
+      config:
+        stateDir: !!js dshHomePath('preset-manager')

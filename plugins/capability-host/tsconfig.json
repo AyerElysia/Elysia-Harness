@@ -1,0 +1,14 @@
+{
+  "extends": "../../dsh/tsconfig.base.client.json",
+  "compilerOptions": {
+    "composite": false,
+    "incremental": false,
+    "noEmit": true,
+    "paths": {},
+    "types": ["node"]
+  },
+  "include": [
+    "src",
+    "tests"
+  ]
+}
