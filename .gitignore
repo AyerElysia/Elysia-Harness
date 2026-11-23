@@ -211,3 +211,9 @@ breeze-realtime-review/results/
 # page snapshot here. They describe one run of one page, not anything the build
 # reads, so they stay out of history.
 .playwright-mcp/
+
+# Capability host and preset-manager documents are per-home runtime state.
+homes/*/capability-host/
+homes/*/preset-manager/
+# Local profile backups kept by the archived v1 package.
+plugins/_archive-elysia-v1/_profile-backups/

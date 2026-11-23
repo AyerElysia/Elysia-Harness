@@ -1,0 +1,19 @@
+{
+  "extends": "../../dsh/tsconfig.base.json",
+  "compilerOptions": {
+    "composite": false,
+    "incremental": false,
+    "noEmit": true,
+    "jsx": "react-jsx",
+    // This package is an out-of-tree consumer of the vendored harness: it
+    // compiles against the published declarations reached through node_modules
+    // (the artifact plane), not against dsh's source aliases. Reusing the
+    // source `paths` from the base config would compile the whole harness from
+    // outside its own project references.
+    "paths": {}
+  },
+  "include": [
+    "src",
+    "tests"
+  ]
+}
