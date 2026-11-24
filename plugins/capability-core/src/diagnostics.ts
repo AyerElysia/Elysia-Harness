@@ -3,7 +3,7 @@
  * an unknown stored tool id, a missing provider service, a refused publication —
  * are recorded here and surfaced by `status()` instead of being dropped.
  *
- * @module @elysia/capability-host/diagnostics
+ * @module @elysia/capability-core/diagnostics
  */
 
 import type { Diagnostic, ScopeRef } from './types.ts'

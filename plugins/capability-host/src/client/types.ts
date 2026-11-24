@@ -2,12 +2,11 @@
  * Client-safe payloads of the capability panel. Types only: no runtime code, so
  * the browser half can import this module without pulling Host dependencies.
  *
- * These declarations mirror the Remote API of
- * `docs/architecture/elyh-control-panel.zh.md` v1.2 §8. The Host owns the
- * authoritative declarations in `@elysia/capability-host`; when that package
- * lands, replace this module with a re-export of its `types` entry and keep the
- * response guards in `api.ts` aligned field by field. Until then this module is
- * the single place where the panel's expectations about the Host live.
+ * These client-safe declarations mirror the Remote API served by
+ * `@elysia/capability-core`; the core owns the authoritative Host declarations.
+ * This package imports no Host code, so the browser half stays independent of
+ * React-free Host internals. Keep the response guards in `api.ts` aligned with
+ * the core's wire fields.
  *
  * v1.2 keeps two tool origins: `static` tools come from the preset definition
  * (preset-manager owns them, the panel only reads them) and `dynamic` tools come
@@ -21,6 +20,7 @@
  * dynamic tools and context subscriptions; a static tool has no writable scope.
  */
 export type ScopeRef =
+  | { readonly kind: 'global' }
   | { readonly kind: 'preset'; readonly id: string }
   | { readonly kind: 'session'; readonly id: string }
 
@@ -33,6 +33,14 @@ export type ScopeKey = string
 
 /** Where a tool registers: globally on the Host, or inside an agent scope. */
 export type ToolScope = 'global' | 'agent'
+
+/** One global catalog tool's persisted switch. */
+export interface GlobalToolState {
+  /** Effective global switch; absent means off. */
+  readonly enabled: boolean
+  /** Whether the operator has written an explicit value. */
+  readonly stored: boolean
+}
 
 /**
  * Who owns a tool. `static` tools are mounted by the preset definition and the
@@ -53,6 +61,8 @@ export type StepGate = 'active' | 'frozen' | 'hidden'
 export interface ToolEntry {
   /** Tool id the model sees, such as `web_search` or `send_text`. */
   readonly id: string
+  /** Chinese display name supplied by the provider. */
+  readonly nameZh?: string
   /** Group id that owns this tool, such as `static`, `reply`, or `files-read`. */
   readonly group: string
   /** Registration scope: a global row or an agent-scoped row. */
@@ -116,6 +126,8 @@ export interface ToolPresetEntry {
 export interface ContextEntry {
   /** Event kind, such as `app.message` or `prompt.change`. */
   readonly kind: string
+  /** Chinese display name supplied by the provider. */
+  readonly nameZh?: string
   /** Whether publishing wakes a turn (`true`) or waits for the next step. */
   readonly active: boolean
   /** Time to live of a queued event; absent keeps it until consumed. */

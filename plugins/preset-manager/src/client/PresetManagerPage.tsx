@@ -7,7 +7,7 @@
  */
 import { useEffect, useState, type ReactNode } from 'react'
 import type { InjectFace, PropsLocale, PropsRuntime } from '@deepseek-ai/dsh-client-ui-slots'
-import type { PresetSummary } from '../types.ts'
+import type { PresetModelToolsState, PresetSummary } from '../types.ts'
 import type { PresetManagerApi } from './api.ts'
 import { describeFailure } from './errors.ts'
 import { PresetCreatePage } from './PresetCreatePage.tsx'
@@ -90,6 +90,9 @@ export function PresetManagerPage({ api, t }: PresetManagerPageProps): ReactNode
   const [pendingId, setPendingId] = useState<string | undefined>(undefined)
   const [notice, setNotice] = useState<string | undefined>(undefined)
   const [failure, setFailure] = useState<string | undefined>(undefined)
+  const [modelTools, setModelTools] = useState<PresetModelToolsState | undefined>(undefined)
+  const [modelToolsBusy, setModelToolsBusy] = useState(false)
+  const [modelToolsLoadFailed, setModelToolsLoadFailed] = useState(false)
 
   useEffect(() => {
     if (view !== 'list') return undefined
@@ -106,6 +109,42 @@ export function PresetManagerPage({ api, t }: PresetManagerPageProps): ReactNode
       controller.abort()
     }
   }, [api, request, view])
+
+  useEffect(() => {
+    if (view !== 'list') return undefined
+    let current = true
+    const controller = new AbortController()
+    setModelToolsLoadFailed(false)
+    void Promise.resolve()
+      .then(() => api.modelTools(controller.signal))
+      .then(
+        (value) => { if (current) setModelTools(value) },
+        () => { if (current) setModelToolsLoadFailed(true) },
+      )
+    return () => {
+      current = false
+      controller.abort()
+    }
+  }, [api, request, view])
+
+  const toggleModelTools = (enabled: boolean): void => {
+    if (modelToolsBusy) return
+    setModelToolsBusy(true)
+    setModelToolsLoadFailed(false)
+    setFailure(undefined)
+    setNotice(undefined)
+    const controller = new AbortController()
+    void api.setModelToolsGlobal(enabled, controller.signal).then(
+      (value) => {
+        setModelTools(value)
+        setModelToolsBusy(false)
+      },
+      (error: unknown) => {
+        setModelToolsBusy(false)
+        setFailure(describeFailure(error, t))
+      },
+    )
+  }
 
   const remove = (row: PresetSummary): void => {
     setFailure(undefined)
@@ -145,7 +184,23 @@ export function PresetManagerPage({ api, t }: PresetManagerPageProps): ReactNode
     <div className={css.page} aria-busy={roster.status === 'loading'}>
       <header className={css.header}>
         <h2 className={css.title}>{t('title')}</h2>
-        <span className={css.actions}>
+        <span className={css.headerActions}>
+          <label
+            className={css.modelToolsInline}
+            title={modelTools === undefined
+              ? t(modelToolsLoadFailed ? 'modelToolsError' : 'modelToolsHint')
+              : modelTools.capabilityHost ? t('modelToolsHint') : t('modelToolsOffStandalone')}
+            aria-busy={modelToolsBusy}
+          >
+            <span>{t('modelToolsSwitch')}</span>
+            <input
+              type="checkbox"
+              checked={modelTools?.global === true}
+              disabled={modelTools === undefined || modelToolsBusy || modelTools.capabilityHost !== true}
+              onChange={(event) => { toggleModelTools(event.target.checked) }}
+            />
+          </label>
+          {modelToolsLoadFailed ? <span className={css.modelToolsError}>{t('modelToolsError')}</span> : null}
           <button type="button" className={css.primary} onClick={() => { setView('create') }}>
             {t('createEntry')}
           </button>

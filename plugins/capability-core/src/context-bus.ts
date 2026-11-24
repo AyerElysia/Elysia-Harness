@@ -13,7 +13,7 @@
  * relay out of the Router's external-input test; the visible content is an
  * annotation on the turn, not a new inbound message.
  *
- * @module @elysia/capability-host/context-bus
+ * @module @elysia/capability-core/context-bus
  */
 
 import type { Context } from '@deepseek-ai/cordis'
@@ -109,8 +109,10 @@ export class ContextBus {
     const kind = registration.kind.trim()
     if (kind === '') throw new Error('capability-host: a context kind needs a name')
     if (this.kinds.has(kind)) throw new Error(`capability-host: context kind ${JSON.stringify(kind)} is already declared`)
+    const nameZh = registration.nameZh?.trim()
     const resolved: ResolvedContextKind = {
       kind,
+      ...(nameZh === undefined || nameZh === '' ? {} : { nameZh }),
       description: registration.description,
       activeByDefault: registration.activeByDefault ?? true,
       ttlMs: registration.ttlMs ?? this.options.defaults.ttlMs,
@@ -125,6 +127,7 @@ export class ContextBus {
   listKinds(): readonly ContextKindView[] {
     return [...this.kinds.values()].map(kind => ({
       kind: kind.kind,
+      ...(kind.nameZh === undefined ? {} : { nameZh: kind.nameZh }),
       description: kind.description,
       activeByDefault: kind.activeByDefault,
       ttlMs: kind.ttlMs,

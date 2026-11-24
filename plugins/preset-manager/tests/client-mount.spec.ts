@@ -79,7 +79,8 @@ describe('preset manager entries', () => {
     const panel = registrations.find(entry => entry.options.key === 'presets')
     const injected = panel?.options.inject?.() as { api?: Record<string, unknown> } | undefined
     expect(Object.keys(injected?.api ?? {}).toSorted()).toEqual([
-      'create', 'createToolFace', 'deleteToolFace', 'list', 'listPromptCandidates', 'listToolFaces', 'pickDirectory', 'remove',
+      'create', 'createToolFace', 'deleteToolFace', 'list', 'listPromptCandidates', 'listToolFaces',
+      'modelTools', 'pickDirectory', 'remove', 'setModelToolsGlobal',
     ])
   })
 

@@ -10,7 +10,7 @@
  * its module name, so an unknown static row is visible rather than silently
  * dropped.
  *
- * @module @elysia/capability-host/static-tools
+ * @module @elysia/capability-core/static-tools
  */
 
 import type { Context } from '@deepseek-ai/cordis'

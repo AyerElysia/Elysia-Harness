@@ -8,7 +8,7 @@
  * switched on are registered. Unmounting the row disposes every registration it
  * made, so a preset or Agent can compose it again cleanly.
  *
- * @module @elysia/capability-host/capability-set
+ * @module @elysia/capability-core/capability-set
  */
 
 import type { Context } from '@deepseek-ai/cordis'
@@ -33,7 +33,7 @@ export const inject = ['tools']
 export function apply(ctx: Context): void {
   const host = ctx.get('capabilityHost')
   if (host === undefined) {
-    throw new Error('elysia-capability-set requires @elysia/capability-host in the same tree')
+    throw new Error('elysia-capability-set requires @elysia/capability-core in the same tree')
   }
   const scope = scopeOf(ctx)
   if (scope === undefined) {

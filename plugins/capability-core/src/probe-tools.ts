@@ -7,7 +7,7 @@
  * until the panel switches them on, and the global one is exercised by the
  * gate spec while the agent-scoped one is exercised by the Capability Set spec.
  *
- * @module @elysia/capability-host/probe-tools
+ * @module @elysia/capability-core/probe-tools
  */
 
 import { defineTool } from '@deepseek-ai/dsh-tools'

@@ -34,6 +34,7 @@ export const ERROR_KEYS: Readonly<Record<string, PresetManagerLocaleKey>> = {
   'presetManager/TOOL_FACE_NOT_FOUND': 'errorToolFaceMissing',
   'presetManager/TOOL_FACE_EXISTS': 'errorToolFace',
   'presetManager/TOOL_FACE_READONLY': 'errorToolFaceReadOnly',
+  'presetManager/TOOLS_UNAVAILABLE': 'errorToolsUnavailable',
 }
 
 /**

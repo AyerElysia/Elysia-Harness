@@ -73,10 +73,12 @@ const TOOL_NAME_OVERRIDES: Readonly<Record<string, string>> = {
  * @param t - panel copy.
  * @param id - tool id from the Host.
  * @param translate - false shows the raw id instead of a semantic name.
- * @returns the localized label, the semantic override, or the id.
+ * @param nameZh - provider-supplied Chinese display name, preferred when present.
+ * @returns the provider name, localized label, semantic override, or id.
  */
-export function toolLabel(t: ControlPanelTranslate, id: string, translate = true): string {
+export function toolLabel(t: ControlPanelTranslate, id: string, translate = true, nameZh?: string): string {
   if (!translate) return id
+  if (nameZh !== undefined && nameZh.trim() !== '') return nameZh
   const key = TOOL_LABEL_KEYS[id]
   if (key !== undefined) return t(key)
   return TOOL_NAME_OVERRIDES[id] ?? id
@@ -86,9 +88,11 @@ export function toolLabel(t: ControlPanelTranslate, id: string, translate = true
  * Localized name of one context event kind.
  * @param t - panel copy.
  * @param kind - event kind from the Host.
- * @returns the localized label, or the kind when this build does not know it.
+ * @param nameZh - provider-supplied Chinese display name, preferred when present.
+ * @returns the provider name, localized label, or the kind when unknown.
  */
-export function contextLabel(t: ControlPanelTranslate, kind: string): string {
+export function contextLabel(t: ControlPanelTranslate, kind: string, nameZh?: string): string {
+  if (nameZh !== undefined && nameZh.trim() !== '') return nameZh
   const key = CONTEXT_LABEL_KEYS[kind]
   return key === undefined ? kind : t(key)
 }

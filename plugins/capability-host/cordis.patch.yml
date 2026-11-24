@@ -1,10 +1,11 @@
-# The ElyH capability panel: one bundle row owns both halves.
+# The ElyH capability panel. This package is the optional Web consumer of
+# `@elysia/capability-core`: its Host entry calls `ensureCapabilityCore`
+# (reusing an existing core or mounting one root-owned core), and the browser
+# half (`dsh.client` / `./client`) talks to the `capabilityHost` Remote
+# namespace served by that core. The panel owns no tool state of its own.
 #
-# The Host half keeps the panel document under the harness home, beside
-# `sessions/` and `storages/`, and exposes the `capabilityHost` Remote
-# namespace. The browser half is shipped from the same package
-# (`dsh.client` / `./client`) and reaches that namespace over the connection;
-# it is not a separately installed plugin.
+# `stateDir` is the core document directory when this row mounts the core
+# first; the core keeps the panel document beside `sessions/` and `storages/`.
 #
 # Static tools are NOT mounted here. A preset's static tool face belongs to
 # preset-manager's preset rows (`@deepseek-ai/dsh-tool-web` for

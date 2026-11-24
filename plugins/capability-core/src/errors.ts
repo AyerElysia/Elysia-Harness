@@ -3,7 +3,7 @@
  * panel can act on carries a stable code; anything else is a programming error
  * and is rethrown unchanged.
  *
- * @module @elysia/capability-host/errors
+ * @module @elysia/capability-core/errors
  */
 
 /** Stable refusal codes, mirrored by the Remote error namespace. */

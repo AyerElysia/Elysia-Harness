@@ -14,12 +14,10 @@ import type { PresetDraft, PromptCandidate, ToolFaceKind } from './types.ts'
 import type { PresetRecord } from './document.ts'
 import { PresetManagerError, describeError } from './errors.ts'
 import { DEFAULT_TOOL_IDS, partitionToolIds } from './tool-catalog.ts'
+import { TOOL_FACE_KINDS } from './tool-face-kinds.ts'
 
 /** Identity shape the preset registry accepts. */
 const PRESET_ID = /^[a-z0-9-]+$/
-
-/** Face families a draft may name. */
-const FACE_KINDS: readonly ToolFaceKind[] = ['default', 'common', 'existing', 'custom']
 
 /**
  * Validate and return one preset identity.
@@ -238,7 +236,7 @@ export function assertToolFace(value: PresetDraft['toolFace'], customFaceIds: re
   const kind = value.kind
   const id = value.id
   const faceId = typeof id === 'string' && id !== '' ? { toolFaceId: id } : {}
-  if (typeof kind !== 'string' || !FACE_KINDS.includes(kind as ToolFaceKind)) {
+  if (typeof kind !== 'string' || !TOOL_FACE_KINDS.includes(kind as ToolFaceKind)) {
     throw new PresetManagerError('TOOL_FACE_INVALID', `tool face family ${JSON.stringify(String(kind))} is not known`, {
       ...faceId, reason: 'unknown-kind',
     })

@@ -11,6 +11,10 @@ export const zh = {
   panel: '预设',
   title: '预设管理器',
   subtitle: '创建、查看和删除引用提示词文件的预设。提示词内容由外部编辑器维护。',
+  modelToolsSwitch: '为模型全局注入预设管理工具',
+  modelToolsHint: '使用能力面板的全局工具开关；关闭时可在能力面板按预设/会话启用。',
+  modelToolsOffStandalone: '能力面板未挂载，模型工具不可用。',
+  modelToolsError: '无法读取能力面板的全局工具状态。',
   loading: '正在读取预设…',
   error: '暂时无法读取预设。',
   retry: '重试',
@@ -114,6 +118,7 @@ export const zh = {
   errorToolFace: '工具面无效。',
   errorToolFaceMissing: '找不到该自定义工具面。',
   errorToolFaceReadOnly: '该工具面只读，不能删除。',
+  errorToolsUnavailable: '模型工具不可用，请检查能力面板。',
 } satisfies Record<string, string>
 
 /** Preset-manager locale key union. */
@@ -124,6 +129,10 @@ export const en = {
   panel: 'Presets',
   title: 'Preset manager',
   subtitle: 'Create, inspect, and delete presets that reference prompt files. Edit the prompt bodies in an external editor.',
+  modelToolsSwitch: 'Inject preset-management tools into the model globally',
+  modelToolsHint: 'Uses the Capabilities panel\'s global tool switch; off means enable per preset/session there.',
+  modelToolsOffStandalone: 'The capability panel is not mounted; the model tools are unavailable.',
+  modelToolsError: 'The capability panel\'s global tool state could not be read.',
   loading: 'Reading presets…',
   error: 'Presets are temporarily unavailable.',
   retry: 'Retry',
@@ -227,6 +236,7 @@ export const en = {
   errorToolFace: 'The tool face is invalid.',
   errorToolFaceMissing: 'No custom tool face carries that id.',
   errorToolFaceReadOnly: 'That tool face is read-only and cannot be deleted.',
+  errorToolsUnavailable: 'The model tools are unavailable; check the Capabilities panel.',
 } satisfies Record<PresetManagerLocaleKey, string>
 
 /** Localized label of each tool this build offers. */

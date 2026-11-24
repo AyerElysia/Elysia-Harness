@@ -8,7 +8,7 @@
 
 import type { ClientConnectionRpc } from '@deepseek-ai/dsh-client-connection/client'
 import type {
-  CustomToolFaceInput, DeletePresetOptions, PresetDraft, PresetSummary, PromptCandidate,
+  CustomToolFaceInput, DeletePresetOptions, PresetDraft, PresetModelToolsState, PresetSummary, PromptCandidate,
   ToolFace, ToolFaceCatalog,
 } from '../types.ts'
 
@@ -28,6 +28,10 @@ export class PresetManagerRemoteError extends Error {
 export interface PresetManagerApi {
   /** Read the merged roster. */
   list(signal: AbortSignal): Promise<PresetSummary[]>
+  /** Read the plugin's own model-tools switch. */
+  modelTools(signal: AbortSignal): Promise<PresetModelToolsState>
+  /** Change the plugin's own model-tools switch. */
+  setModelToolsGlobal(enabled: boolean, signal: AbortSignal): Promise<PresetModelToolsState>
   /** Read the tool switches and faces this deployment can compose. */
   listToolFaces(signal: AbortSignal): Promise<ToolFaceCatalog>
   /** Store a custom face built from the current switches. */
@@ -66,6 +70,12 @@ function isToolOption(value: unknown): boolean {
     && typeof value['available'] === 'boolean'
 }
 
+function isModelToolsState(value: unknown): value is PresetModelToolsState {
+  return isRecord(value)
+    && typeof value['global'] === 'boolean'
+    && typeof value['capabilityHost'] === 'boolean'
+}
+
 function isFace(value: unknown): value is ToolFace {
   return isRecord(value)
     && typeof value['id'] === 'string'
@@ -92,6 +102,16 @@ export function createPresetManagerApi(rpc: Pick<ClientConnectionRpc, 'call'>): 
       if (!Array.isArray(value) || !value.every(isSummary)) {
         throw new Error('preset-manager/invalid-list-response')
       }
+      return value
+    },
+    async modelTools(signal) {
+      const value = await invoke('presetManager/modelTools', {}, signal)
+      if (!isModelToolsState(value)) throw new Error('preset-manager/invalid-model-tools-response')
+      return value
+    },
+    async setModelToolsGlobal(enabled, signal) {
+      const value = await invoke('presetManager/setModelToolsGlobal', { enabled }, signal)
+      if (!isModelToolsState(value)) throw new Error('preset-manager/invalid-model-tools-response')
       return value
     },
     async listToolFaces(signal) {

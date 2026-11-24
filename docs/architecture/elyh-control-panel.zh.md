@@ -1,11 +1,12 @@
-# ElyH 上下文事件 + 动态工具管理面板方案（v1.3）
+# ElyH 上下文事件 + 动态工具管理面板方案（v1.4）
 
-> 状态：设计稿，2026-11-23；v1.3 修订动态工具发现：Host 读取整个部署里所有预设/会话可见的工具并集，插件无需再向面板注册；只排除当前预设自带的静态工具，其余默认全部关闭；被静态工具覆盖的项直接隐藏。
+> 状态：设计稿，2026-11-24；v1.3 修订动态工具发现：核心读取整个部署里所有预设/会话可见的工具并集，也支持 provider 通过 catalog 显式声明（带 `nameZh`）；只排除当前预设自带的静态工具，其余默认由 gate 关闭；被静态工具覆盖的项直接隐藏。
 > v1.3 日期：2026-11-23；DSH 原生工具的判定基准是 `standard` 预设静态工具面加 base bundle 全局核心工具；`plugin_market`、`cordis_inspect_*` 和外部 MCP 属于插件工具，分类旁提供一键全选复选框。
 > v1.3 面板交互：动态工具按功能分类、可折叠并显示类别启用数；工具名默认翻译，可关；工具组预设支持应用、命名创建、删除；工具开关只改草稿，动态工具区底部的“保存”才写入 Host；静态工具始终排在最后。
-> 状态：v1.2 历史边界仍有效：preset-manager 保留静态工具面，面板只管理动态工具与上下文事件；静态工具只读锁定。
+> 状态：v1.2 历史边界仍有效：preset-manager 保留静态工具面，核心管理动态工具与上下文事件，面板只展示/操作；静态工具只读锁定。
 > 不在范围：预设内容编辑、预设创建/删除、提示词文件内容编辑、会话创建、模型选择、渠道桥接实现。
-> 关键约束：预设的静态工具面由 preset-manager 拥有，面板不能关闭；面板拥有动态工具和上下文事件；动态工具默认关闭；不新开会话。
+> 关键约束：预设的静态工具面由 preset-manager 拥有，面板不能关闭；共享 Host 核心拥有动态工具/全局状态/上下文事件；面板只是核心的可选 Client；动态工具默认关闭；不新开会话。
+> v1.4 包边界：`@elysia/capability-core` 是 Host-only 核心；`@elysia/capability-host` 是可选 Client 面板；`@elysia/preset-manager` 只依赖核心。
 
 ## 1. 一句话
 
@@ -13,23 +14,24 @@
 
 面板由两部分组成：
 
-- `@elysia/capability-host`（一个插件，Host + Client）：Host 侧负责 Tool Catalog、Gate、Context Bus、State Store、Session Registry、Capability Set；同一个包的 `dsh.client` 负责会话/预设列表、静态工具只读展示、动态工具开关、上下文事件开关、事件日志、健康面。卸载或安装这一个 bundle 会同时处理两半。
+- `@elysia/capability-core`（Host-only）：负责 Tool Catalog、Gate、Context Bus、State Store、Session Registry、Capability Set、全局工具状态与持久化；不含 React/Client。
+- `@elysia/capability-host`（可选 Client 面板）：Host 入口只调用 `ensureCapabilityCore`（已有核心复用，没有则挂一次）；`dsh.client` 负责会话/预设列表、静态工具只读展示、动态工具开关、上下文事件开关、事件日志、健康面。没有这个包时核心和 preset-manager 仍然工作。
 
 ## 2. 组件
 
-### 2.1 `@elysia/capability-host`
+### 2.1 `@elysia/capability-core`（Host-only）
 
 | 模块 | 职责 |
 |---|---|
 | Tool Catalog | 收集**动态工具**条目；每条声明 `scope: global \| agent`、factory、schema、required services；global 工具全局注册，agent 工具交给 Capability Set |
-| Gate | `enabled(toolId, agent)`：静态工具恒开且只读；动态工具按 session/preset 判定；可选扩展 fail-closed，reply 组 fail-loud |
+| Gate | `enabled(toolId, agent)`：静态工具恒开且只读；动态工具按 `session > preset > global` 判定；全局默认关；可选扩展 fail-closed，reply 组 fail-loud |
 | Capability Set | 通用桥：由 Host controller 挂到 agent scope，按面板状态注册 agent-scoped 动态工具；不声明具体工具名单，不改预设 |
 | Context Bus | 事件 schema、订阅、每会话队列/游标、去重、TTL、active/passive 分发、背压 |
-| State Store | 只存动态工具的 `presetId/sessionId -> tools/contexts`；静态工具不落开关；原子写/版本迁移 |
+| State Store | 存动态工具的 `global / presetId / sessionId -> tools/contexts`；静态工具不落开关；原子写/版本迁移 |
 | Session Registry | live + 持久化会话 -> 预设映射；`presetForSession()` + 持久化列表；不创建会话 |
 | Static Tool Probe | 从预设组合读取静态工具（`agentPresets.compositionInventory()`），标 `origin:'static'`、`locked:true`；不注册、不注销 |
 
-### 2.2 `@elysia/capability-host` 的 Client 半
+### 2.2 `@elysia/capability-host`（可选 Client 面板）
 
 - 列出会话与预设，自动识别当前会话的预设；离线会话按持久化列表展示。
 - **静态工具**：只读展示，标 `locked`，提示“预设默认工具，不能关闭”；没有开关，不能发 `setTool`。
@@ -41,7 +43,8 @@
 
 ### 2.3 与预设管理器的边界
 
-- 预设管理器独立可用：`id/name/description/identity/promptRoot/files/order` + **静态工具面**。
+- 预设管理器独立可用：`id/name/description/identity/promptRoot/files/order` + **静态工具面**。它只依赖 `@elysia/capability-core`，不依赖面板包；没有面板时自行 `ensureCapabilityCore`。
+- 面板是可选消费者；没有面板时预设管理器的全局工具开关仍可直接写核心状态。
 - 预设的静态工具面由 preset definition 里的 tool rows 决定；当前系统最小面是 `tool-web`（`web_search` / `web_fetch`），具体由 preset-manager 配置决定。
 - 面板不编辑预设、不改静态工具面、不能关闭静态工具；只在其上叠加动态工具和上下文事件。
 - 面板看到的静态工具来自预设组合，不是面板 catalog；两者同名时静态优先，动态条目 `shadowed`，不重复注册。
@@ -61,7 +64,7 @@
 
 ### 3.2 动态工具：自动发现，默认关闭
 
-v1.3 起，动态工具不再由插件向面板逐条注册。Host 读取所有预设/会话作用域可见工具的并集，排除当前预设的静态工具后全部列为动态工具；每次修改只进入客户端草稿，用户点击动态工具区底部的“保存”才逐条写入 `setTool`。被当前预设静态工具覆盖的条目直接从列表隐藏，不显示不可用行。
+动态工具来自 core catalog（`scope: 'global' | 'agent'`，带 `nameZh`）以及部署实际可见工具的并集；catalog 条目默认由 gate 关闭，可按预设/会话显式开启，核心还可自动发现未显式注册的工具。被当前预设静态工具覆盖的条目从列表隐藏，不显示不可用行；每次修改只进入客户端草稿，用户点击动态工具区底部的“保存”才逐条写入 `setTool`。
 
 - `reply`：`send_text` / `send_voice` / `pass`（`send_file` 未实现，预留）。**不可拆**：主意识预设开启后必须同时拥有 `pass` 与至少一个发送工具；面板可以关闭某个渠道，但不能让会话失去“沉默”能力。
 - `files-read`：`read` / `read_image` / `glob` / `grep`（agent-scoped）
@@ -327,6 +330,8 @@ interface PublishReceipt {
 8. App Bridge managed：app 消息 -> 真实 user message + snapshot -> 主意识回复 -> app 收到；Router 能看到 app 消息。
 9. 失败语义：可选动态扩展 gate 抛错时该工具隐藏且 step 不失败；reply 组 gate 失败时 step 失败并报错。
 10. 预设边界：preset-manager 独立可用；预设 definition 的静态工具面不被面板修改；面板没有“编辑预设”。
+11. 包边界：只装 preset-manager（无面板）时它自行挂核心并全局开关；只装面板时核心正常、catalog 为空；两者任意顺序共用一个核心。
+12. 优先级：`session > preset > global`；global=false+preset=true 只开该预设；global=true+preset=false 只关该预设；无覆盖时继承 global。
 
 ## 11. 参考
 

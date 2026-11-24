@@ -8,7 +8,7 @@
  * `agentPresets.compositionInventory()` and shown locked. Only dynamic tools are
  * switchable, and only dynamic registrations are owned here.
  *
- * @module @elysia/capability-host/service
+ * @module @elysia/capability-core/service
  */
 
 import type { Context } from '@deepseek-ai/cordis'
@@ -19,7 +19,7 @@ import type { ToolDefinition, ToolExecution } from '@deepseek-ai/dsh-tools'
 import { Remote, RemoteError, TypertRemoteService, principalOf } from '@deepseek-ai/dsh-typert-protocol'
 import type { Principal } from '@deepseek-ai/dsh-typert-protocol'
 import type {
-  CapabilitySnapshot, ContextEventInput, ContextStatus, HostState, HostStatus,
+  CapabilitySnapshot, ContextEventInput, ContextStatus, GlobalToolState, HostState, HostStatus,
   PublishReceipt, ScopeRef, ScopeView, SessionView, ToolPresetView, ToolView,
 } from './types.ts'
 import type { ContextDefaults, ContextKindRegistration, ToolCatalogEntry } from './contracts.ts'
@@ -45,6 +45,12 @@ declare module '@deepseek-ai/cordis' {
      * @mode emit
      */
     'capability-host/change'(change: CapabilityChange): undefined
+    /**
+     * The core-named alias of the same change event.
+     * @param change - what changed.
+     * @mode emit
+     */
+    'capability-core/change'(change: CapabilityChange): undefined
   }
 }
 
@@ -148,11 +154,36 @@ export class CapabilityHost extends TypertRemoteService {
    */
   private readonly config: HostConfig
   private dynamicIds = new Set<string>()
+  private readonly toolNames = new Map<string, string>()
 
   constructor(ctx: Context, config: HostConfig) {
     super(ctx, 'capabilityHost', { namespace: 'capabilityHost' })
     this.config = config
     this.ready = this.start()
+  }
+
+  /**
+   * Supply the panel-only Chinese name for any tool, including a directly
+   * registered tool that has no catalog entry. The hint is process-local; a
+   * provider re-registers it on every mount.
+   * @param toolId - model-facing tool id.
+   * @param nameZh - short Chinese display name.
+   * @returns a disposer that restores the previous hint.
+   */
+  registerToolName(toolId: string, nameZh: string): () => void {
+    const id = toolId.trim()
+    const name = nameZh.trim()
+    if (id === '' || name === '') {
+      throw new Error('capability-host: a tool name hint needs a tool id and a Chinese name')
+    }
+    const previous = this.toolNames.get(id)
+    this.toolNames.set(id, name)
+    this.emit({ action: 'catalog', id })
+    return () => {
+      if (this.toolNames.get(id) !== name) return
+      if (previous === undefined) this.toolNames.delete(id)
+      else this.toolNames.set(id, previous)
+    }
   }
 
   /**
@@ -163,8 +194,15 @@ export class CapabilityHost extends TypertRemoteService {
   registerTool(entry: ToolCatalogEntry): () => void {
     const runtime = this.requireRuntime()
     const dispose = runtime.catalog.register(entry)
+    const nameZh = entry.nameZh?.trim()
+    const nameDispose = nameZh === undefined || nameZh === ''
+      ? undefined
+      : this.registerToolName(entry.id, nameZh)
     this.emit({ action: 'catalog', id: entry.id })
-    return dispose
+    return () => {
+      dispose()
+      nameDispose?.()
+    }
   }
 
   /**
@@ -238,6 +276,27 @@ export class CapabilityHost extends TypertRemoteService {
   }
 
   /**
+   * Read the persisted global switch for every global catalog tool.
+   * @returns per-tool enabled and stored flags.
+   */
+  @Remote('globalTools')
+  async globalTools(): Promise<Readonly<Record<string, GlobalToolState>>> {
+    try {
+      await this.ready
+      const runtime = this.requireRuntime()
+      const result: Record<string, GlobalToolState> = {}
+      for (const record of runtime.catalog.list()) {
+        if (record.entry.scope !== 'global') continue
+        const value = runtime.store.switchValue({ kind: 'global' }, 'tools', record.entry.id)
+        result[record.entry.id] = { enabled: value === true, stored: value !== undefined }
+      }
+      return result
+    } catch (error: unknown) {
+      fail(error)
+    }
+  }
+
+  /**
    * Switch one dynamic tool on or off for a preset or session.
    * @param scope - target scope.
    * @param toolId - dynamic catalog id.
@@ -252,6 +311,27 @@ export class CapabilityHost extends TypertRemoteService {
       const runtime = this.requireRuntime()
       this.assertAuthorized()
       const target = parseScopeRef(scope)
+      if (target.kind === 'global') {
+        const record = runtime.catalog.find(toolId)
+        if (record === undefined || record.entry.scope !== 'global') {
+          throw new CapabilityHostError(
+            'TOOL_UNKNOWN',
+            `tool ${JSON.stringify(toolId)} is not a global catalog entry`,
+            { toolId, scope: target },
+          )
+        }
+        if (!record.registered) {
+          throw new CapabilityHostError(
+            'TOOL_UNKNOWN',
+            `global tool ${JSON.stringify(toolId)} is not registered: ${record.reason ?? 'unavailable'}`,
+            { toolId, scope: target },
+          )
+        }
+        await runtime.store.setSwitch(target, 'tools', toolId, enabled)
+        this.record({ action: 'setTool', scope: target, id: toolId, enabled })
+        this.emit({ action: 'setTool', scope: target, id: toolId, enabled })
+        return
+      }
       await this.refreshStatic()
       if (this.staticIdsFor(target).has(toolId)) {
         throw new CapabilityHostError('TOOL_STATIC_LOCKED', '预设默认工具，不能关闭', { toolId, scope: target })
@@ -476,6 +556,7 @@ export class CapabilityHost extends TypertRemoteService {
    */
   private staticIdsFor(ref: ScopeRef): ReadonlySet<string> {
     const runtime = this.requireRuntime()
+    if (ref.kind === 'global') return new Set()
     const presetId = ref.kind === 'preset' ? ref.id : runtime.sessions.presetOf(ref.id)
     if (presetId === undefined) return new Set()
     return runtime.staticTools.byPreset.get(presetId) ?? new Set()
@@ -545,6 +626,7 @@ export class CapabilityHost extends TypertRemoteService {
   /** Whether an unmanaged registered tool is on for one panel scope. */
   private inventoryScopeEnabled(ref: ScopeRef, toolId: string, available = true): boolean {
     const runtime = this.requireRuntime()
+    if (ref.kind === 'global') return runtime.store.switchValue(ref, 'tools', toolId) ?? false
     const own = runtime.store.switchValue(ref, 'tools', toolId)
     if (own !== undefined) return own
     if (ref.kind === 'session') {
@@ -560,6 +642,7 @@ export class CapabilityHost extends TypertRemoteService {
   /** Every tool visible in one preset or session scope. */
   private async scopeDefinitions(ref: ScopeRef): Promise<readonly ToolDefinition[]> {
     const runtime = this.requireRuntime()
+    if (ref.kind === 'global') return this.ctx.tools.definitions()
     const agent: Agent | undefined = ref.kind === 'session' ? runtime.sessions.agentOf(ref.id) : undefined
     if (agent !== undefined) {
       const key = scopeOf(agent.ctx)
@@ -593,6 +676,10 @@ export class CapabilityHost extends TypertRemoteService {
     const kindIds = new Set(runtime.bus.listKinds().map(kind => kind.kind))
     const document = runtime.store.snapshot()
     const scopes: ScopeRef[] = [
+      ...(Object.keys(document.global.tools ?? {}).length === 0
+        && Object.keys(document.global.contexts ?? {}).length === 0
+        ? []
+        : [{ kind: 'global' } as const]),
       ...Object.keys(document.presets).map(id => ({ kind: 'preset', id }) as const),
       ...Object.keys(document.sessions).map(id => ({ kind: 'session', id }) as const),
     ]
@@ -660,10 +747,12 @@ export class CapabilityHost extends TypertRemoteService {
     const dynamicViews = new Map<string, ToolView>()
     this.dynamicIds = new Set([...universe.keys()].filter(name =>
       scopeInputs.length === 0 || !scopeInputs.every(input => input.staticIds.has(name))))
+    const managed = new Set(managedIds)
     for (const [name, definition] of universe) {
-      if (!this.dynamicIds.has(name)) continue
+      if (!this.dynamicIds.has(name) || managed.has(name)) continue
       dynamicViews.set(name, {
         id: name,
+        ...(this.toolNames.get(name) === undefined ? {} : { nameZh: this.toolNames.get(name) as string }),
         origin: 'dynamic',
         locked: false,
         scope: globalDefinitions.has(name) ? 'global' : 'agent',
@@ -678,7 +767,7 @@ export class CapabilityHost extends TypertRemoteService {
       const tools = runtime.gate.merged(input.ref, managedIds)
       const localNames = new Set((input.definitions ?? []).map(definition => definition.name))
       for (const name of universe.keys()) {
-        if (input.staticIds.has(name)) continue
+        if (managed.has(name) || input.staticIds.has(name)) continue
         tools[name] = this.inventoryScopeEnabled(input.ref, name, localNames.has(name))
       }
       // Static tools are always on for the preset that composes them.
@@ -694,6 +783,7 @@ export class CapabilityHost extends TypertRemoteService {
     const tools: ToolView[] = [
       ...staticTools.entries.map((entry): ToolView => ({
         id: entry.id,
+        ...(this.toolNames.get(entry.id) === undefined ? {} : { nameZh: this.toolNames.get(entry.id) as string }),
         origin: 'static',
         locked: true,
         registered: true,
@@ -711,6 +801,7 @@ export class CapabilityHost extends TypertRemoteService {
         const entry = record.entry
         return {
           id: entry.id,
+          ...(this.toolNames.get(entry.id) === undefined ? {} : { nameZh: this.toolNames.get(entry.id) as string }),
           origin: 'dynamic',
           // A dynamic entry is never locked; a preset that composes the same
           // static id shadows it for that preset only, which the client derives.
@@ -756,6 +847,10 @@ export class CapabilityHost extends TypertRemoteService {
         merged[kind] = own
         continue
       }
+      if (ref.kind === 'global') {
+        merged[kind] = false
+        continue
+      }
       if (ref.kind === 'preset') {
         merged[kind] = false
         continue
@@ -790,6 +885,7 @@ export class CapabilityHost extends TypertRemoteService {
    * @throws CapabilityHostError `SCOPE_NOT_FOUND`.
    */
   private async assertScopeExists(ref: ScopeRef): Promise<void> {
+    if (ref.kind === 'global') return
     if (ref.kind === 'preset') {
       const known = await this.knownPresetIds()
       if (!known.includes(ref.id)) {
@@ -831,6 +927,7 @@ export class CapabilityHost extends TypertRemoteService {
 
   private emit(change: CapabilityChange): void {
     this.ctx.emit('capability-host/change', change)
+    this.ctx.emit('capability-core/change', change)
   }
 
   private requireRuntime(): HostRuntime {
@@ -870,6 +967,7 @@ function parseScopeRef(value: unknown): ScopeRef {
   if (kind === 'base') {
     throw new CapabilityHostError('SCOPE_READ_ONLY', 'static tools have no writable scope', { scope: 'base' })
   }
+  if (kind === 'global') return { kind: 'global' }
   if (kind === 'preset' || kind === 'session') {
     const id = record['id']
     if (typeof id !== 'string' || id === '') {

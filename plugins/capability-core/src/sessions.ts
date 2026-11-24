@@ -6,7 +6,7 @@
  * Offline sessions matter twice: the panel lists them, and their queues keep
  * accumulating so a restart does not lose events for a session that is idle.
  *
- * @module @elysia/capability-host/sessions
+ * @module @elysia/capability-core/sessions
  */
 
 import type { Context } from '@deepseek-ai/cordis'

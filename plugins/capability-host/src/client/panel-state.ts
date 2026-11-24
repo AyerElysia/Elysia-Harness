@@ -30,7 +30,7 @@ export const LOCKED_MEMBERS: readonly string[] = ['pass']
  * @returns `preset:<id>` or `session:<id>`.
  */
 export function scopeKeyOf(scope: ScopeRef): ScopeKey {
-  return `${scope.kind}:${scope.id}`
+  return scope.kind === 'global' ? 'global' : `${scope.kind}:${scope.id}`
 }
 
 /**
@@ -111,6 +111,7 @@ export function effectivePresetId(
   snapshot: CapabilitySnapshot,
 ): string | undefined {
   if (selected === undefined) return undefined
+  if (selected.kind === 'global') return undefined
   if (selected.kind === 'preset') return selected.id
   return snapshot.sessions.find(row => row.id === selected.id)?.presetId
 }

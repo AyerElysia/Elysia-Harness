@@ -12,7 +12,7 @@ import { readFile, writeFile } from 'node:fs/promises'
 import { join } from 'node:path'
 import type { Agent } from '@deepseek-ai/dsh-agent'
 import { defineTool } from '@deepseek-ai/dsh-tools'
-import { DOCUMENT_FILE_NAME, GLOBAL_PROBE_TOOL } from '../src/index.ts'
+import { AGENT_PROBE_TOOL, DOCUMENT_FILE_NAME, GLOBAL_PROBE_TOOL } from '../src/index.ts'
 import { createEnv, textResponse, toolCallResponse } from './harness.ts'
 
 /** The code a refused operation carries. */
@@ -32,14 +32,30 @@ function toolResult(agent: Agent, callId: string) {
 }
 
 describe('dynamic tool gate', () => {
-  it('reports a globally mounted inventory tool as on by default', async () => {
+  it('exposes the provider Chinese name for a directly registered tool', async () => {
+    const env = await createEnv()
+    await env.mountHost()
+    env.host().registerTool(GLOBAL_PROBE_TOOL)
+    env.host().registerToolName('elysia_probe', '探针工具')
+    const snapshot = await env.host().list()
+    expect(snapshot.tools.find(tool => tool.id === 'elysia_probe')?.nameZh).toBe('探针工具')
+  })
+
+  it('reports a global catalog tool as off by default and turns it on with the global switch', async () => {
     const env = await createEnv()
     await env.mountHost()
     env.host().registerTool(GLOBAL_PROBE_TOOL)
     await env.createAgent('default-on-1', 'elysia-conscious')
-    const snapshot = await env.host().list()
-    const preset = snapshot.scopes.find(scope => scope.ref.kind === 'preset' && scope.ref.id === 'elysia-conscious')
-    expect(preset?.tools['elysia_probe']).toBe(true)
+
+    const before = await env.host().list()
+    const presetBefore = before.scopes.find(scope => scope.ref.kind === 'preset' && scope.ref.id === 'elysia-conscious')
+    expect(presetBefore?.tools['elysia_probe']).toBe(false)
+    expect(before.tools.filter(tool => tool.id === 'elysia_probe')).toHaveLength(1)
+
+    await env.host().setTool({ kind: 'global' }, 'elysia_probe', true)
+    const after = await env.host().list()
+    const presetAfter = after.scopes.find(scope => scope.ref.kind === 'preset' && scope.ref.id === 'elysia-conscious')
+    expect(presetAfter?.tools['elysia_probe']).toBe(true)
   })
 
   it('adds a switched-on tool at the next step and blocks a hard call after it is switched off', async () => {
@@ -79,6 +95,77 @@ describe('dynamic tool gate', () => {
     expect(overridden.scopes.find(scope => scope.ref.kind === 'session')?.tools['elysia_probe']).toBe(false)
     // The preset switch itself is unchanged: only the session overrode it.
     expect(overridden.scopes.find(scope => scope.ref.kind === 'preset')?.tools['elysia_probe']).toBe(true)
+  })
+})
+
+describe('global tool scope', () => {
+  it('switches a global catalog tool for every session and lets a session explicit-off win', async () => {
+    const env = await createEnv()
+    await env.mountHost()
+    env.host().registerTool(GLOBAL_PROBE_TOOL)
+    const agent = await env.createAgent('global-1', 'elysia-conscious')
+
+    expect(env.host().isEnabled(agent, 'elysia_probe')).toBe(false)
+    await env.host().setTool({ kind: 'global' }, 'elysia_probe', true)
+    expect(env.host().isEnabled(agent, 'elysia_probe')).toBe(true)
+    expect(await env.host().globalTools()).toEqual({
+      elysia_probe: { enabled: true, stored: true },
+    })
+
+    await env.host().setTool({ kind: 'preset', id: 'elysia-conscious' }, 'elysia_probe', false)
+    expect(env.host().isEnabled(agent, 'elysia_probe')).toBe(false)
+    const presetScope = (await env.host().list()).scopes.find(scope =>
+      scope.ref.kind === 'preset' && scope.ref.id === 'elysia-conscious')
+    expect(presetScope?.tools['elysia_probe']).toBe(false)
+
+    await env.host().setTool({ kind: 'session', id: 'global-1' }, 'elysia_probe', true)
+    expect(env.host().isEnabled(agent, 'elysia_probe')).toBe(true)
+
+    await env.host().setTool({ kind: 'session', id: 'global-1' }, 'elysia_probe', false)
+    expect(env.host().isEnabled(agent, 'elysia_probe')).toBe(false)
+  })
+
+  it('persists the global switch across a Host restart', async () => {
+    const first = await createEnv()
+    const mounted = await first.mountHost()
+    first.host().registerTool(GLOBAL_PROBE_TOOL)
+    await first.host().setTool({ kind: 'global' }, 'elysia_probe', true)
+    await mounted.dispose()
+
+    const second = await createEnv({ stateDir: first.stateDir })
+    await second.mountHost()
+    second.host().registerTool(GLOBAL_PROBE_TOOL)
+    expect(await second.host().globalTools()).toEqual({
+      elysia_probe: { enabled: true, stored: true },
+    })
+    const agent = await second.createAgent('global-2', 'elysia-conscious')
+    expect(second.host().isEnabled(agent, 'elysia_probe')).toBe(true)
+  })
+
+  it('refuses a global switch for an agent-scope entry', async () => {
+    const env = await createEnv()
+    await env.mountHost()
+    env.host().registerTool(AGENT_PROBE_TOOL)
+    expect(await refusalOf(() => env.host().setTool({ kind: 'global' }, 'elysia_agent_probe', true)))
+      .toBe('capabilityHost/TOOL_UNKNOWN')
+  })
+
+  it('removes a globally enabled tool from the next step and refuses a late call', async () => {
+    const env = await createEnv()
+    await env.mountHost()
+    env.host().registerTool(GLOBAL_PROBE_TOOL)
+    const agent = await env.createAgent('global-3', 'elysia-conscious')
+    await env.host().setTool({ kind: 'global' }, 'elysia_probe', true)
+
+    env.adapter.enqueue(textResponse('first'))
+    await env.send(agent, 'first')
+    expect(env.adapter.requests[0]?.tools?.map(tool => tool.name)).toEqual(['elysia_probe'])
+
+    await env.host().setTool({ kind: 'global' }, 'elysia_probe', false)
+    env.adapter.enqueue(toolCallResponse('removed-global', 'elysia_probe', {}), textResponse('done'))
+    await env.send(agent, 'second')
+    expect(env.adapter.requests[1]?.tools ?? []).toEqual([])
+    expect(toolResult(agent, 'removed-global')?.data).toMatchObject({ error: { code: 'UNKNOWN_TOOL' } })
   })
 })
 

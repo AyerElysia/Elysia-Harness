@@ -13,7 +13,7 @@
  * global registration only for that scope's Agents. Every other preset keeps the
  * dynamic tool. The panel derives per-scope shadowing from the static rows.
  *
- * @module @elysia/capability-host/catalog
+ * @module @elysia/capability-core/catalog
  */
 
 import type { Context } from '@deepseek-ai/cordis'

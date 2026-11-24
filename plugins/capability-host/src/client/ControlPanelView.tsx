@@ -189,7 +189,7 @@ function StaticToolsCard({
             data-origin="static"
             data-locked="true"
           >
-            <span className={css.toolName}>{toolLabel(t, tool.id)}</span>
+            <span className={css.toolName}>{toolLabel(t, tool.id, true, tool.nameZh)}</span>
             <code className={css.toolId}>{tool.id}</code>
             {tool.provider === undefined ? null : <span className={css.badgeMuted}>{tool.provider}</span>}
             <span className={css.badgeMuted}>{t(tool.scope === 'global' ? 'scopeGlobal' : 'scopeAgent')}</span>
@@ -260,10 +260,10 @@ function ToolCategoryCard({
                     className={css.checkbox}
                     checked={checked}
                     disabled={disabled}
-                    aria-label={t('toolToggleLabel', { tool: toolLabel(t, tool.id, translate) })}
+                    aria-label={t('toolToggleLabel', { tool: toolLabel(t, tool.id, translate, tool.nameZh) })}
                     onChange={(event) => { onToggleTool(tool, event.currentTarget.checked) }}
                   />
-                  <span className={css.memberName}>{toolLabel(t, tool.id, translate)}</span>
+                  <span className={css.memberName}>{toolLabel(t, tool.id, translate, tool.nameZh)}</span>
                   <code className={css.toolId}>{tool.id}</code>
                 </label>
                 {tool.failure === undefined ? null : (
@@ -387,7 +387,7 @@ function ContextRow({
   readonly busy: boolean
   readonly onToggle: (entry: ContextEntry, enabled: boolean) => void
 }): ReactNode {
-  const label = contextLabel(t, entry.kind)
+  const label = contextLabel(t, entry.kind, entry.nameZh)
   return (
     <li className={css.contextRow} data-context-kind={entry.kind}>
       <label className={css.switchRow}>
@@ -494,7 +494,9 @@ export function ControlPanelView({
     ? undefined
     : selected.kind === 'preset'
       ? t('scopePreset', { id: selected.id })
-      : t('scopeSession', { id: selected.id })
+      : selected.kind === 'global'
+        ? t('scopeGlobal')
+        : t('scopeSession', { id: selected.id })
   return (
     <div className={css.page}>
       {status.mode === 'live' ? null : <p className={css.notice}>{t('degradedNotice')}</p>}

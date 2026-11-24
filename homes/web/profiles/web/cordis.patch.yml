@@ -1,7 +1,10 @@
 # Local web profile patch.
-# ElyH feature plugins are archived under plugins/_archive-elysia-v1 and are
-# intentionally unmounted here. Only the external plugins remain:
-# modsearch, remote-web-ui, market, billion-context. Core DSH/Web rows stay.
+# The archived v1 ElyH feature plugins under plugins/_archive-elysia-v1 stay
+# unmounted. The v2 packages under plugins/ are mounted by their own bundles;
+# the preset manager's panel switch drives the shared capability core's model
+# tools. The external
+# plugins remain: modsearch, remote-web-ui, market, billion-context. Core
+# DSH/Web rows stay.
 #
 # Provider ids and model ids below are deployment values, not tracked ones:
 # they must be declared by the operator in the untracked home-level

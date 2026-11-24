@@ -10,6 +10,7 @@ fixed compaction group. The manager never creates or switches a session.
 | Surface | Responsibility |
 |---|---|
 | Host service `presetManager` | Merges the preset roster with its own document, registers definitions, persists, deletes, probes tool availability, owns custom tool faces |
+| Model tools `preset_list` / `preset_create` | Discovery and creation for the model, published as global catalog entries by the shared capability core. The core is mounted by this plugin when no panel or explicit core row has mounted it. The Presets panel's switch drives the core global tool state: off leaves them available for per-preset enabling in Capabilities, on exposes them to every session. Both delegate validation and writes to the Host service and carry Chinese panel names |
 | Child `@elysia/preset-manager/prompt-files` | Renders the configured files as the complete system prompt; reports file changes |
 | Web sidebar entry + `presets` main panel | Lists presets; deletes the manager-owned ones; navigates to the create page |
 | Create page | Metadata, prompt files, and the tool-face configuration |
@@ -132,6 +133,86 @@ saved tool ids are then the operator's own set. An existing preset's face keeps
 only the tool ids this catalog offers; rows it cannot offer are listed in
 `missing` and the face is marked `partial`.
 
+## Model tools
+
+The Presets panel owns the switch **为模型全局注入预设管理工具**, default off.
+It sits as one compact control in the page header, next to New/Refresh; it is
+not a separate settings card. It binds to the capability core's global tool
+state through the preset-manager RPC proxy; there is no plugin-local boolean and
+no re-register/restart trick.
+
+- The plugin always publishes both tools as `scope: 'global'` catalog entries.
+  If no core is mounted, this package mounts it first. The entries appear in the
+  “能力 / Capabilities” panel with their Chinese names.
+- **Off:** no session sees them by default. The capability panel can enable
+  them per preset or session.
+- **On:** the core's global gate is on, so every session sees them at the next
+  model step. The catalog entries stay mounted; the change is a core state
+  write, not a re-registration.
+- **Core mount failure:** the catalog and global scope do not exist, so the
+  model tools are unavailable. The preset manager panel itself still works.
+
+`@elysia/capability-core` may be mounted before or after this plugin. This
+package calls `ensureCapabilityCore` (one root-owned core per application),
+waits for it with `ctx.inject(['capabilityHost'], ...)`, awaits `host.ready`,
+and registers the catalog entries from the injected scope's effect. Either
+order works; the effect removes both entries if the host or this plugin
+unmounts. The mount-order specs in `tests/tools.spec.ts` assert the catalog
+rows, switches, and self-mounted core.
+
+`global` in the row config only seeds the first-run switch value (default
+`false`) when the core has no stored value. After that, the core's persisted
+global state is authoritative (`capability-state.json`), and an explicit off
+survives restart.
+
+| Tool | Behavior |
+|---|---|
+| `preset_list` | Does not write the manager document. Returns the merged roster, every catalog tool with its availability, and every tool face. When `promptRoot` is supplied, it also lists the non-blank `*.md` files directly inside that directory with their sizes. |
+| `preset_create` | Validates the draft, resolves the prompt root and files, obtains the call's permission, then delegates to `ctx.presetManager.create()`. Returns the created preset's id, name, prompt files, tools, order, and face provenance. |
+
+Both catalog entries carry `nameZh`: `preset_create` → 创建预设,
+`preset_list` → 列出预设. The panel prefers those labels; the model schema
+never receives them. Both modes require the capability core and the `tools`
+service. The capability **panel** is optional; the presets panel installs and
+runs without it because this package mounts the core itself.
+
+`preset_create` parameters:
+
+- `id`, `name`, `identity`, and `promptRoot` are required.
+- `promptFiles` is optional. When omitted, every non-blank `.md` file directly
+  inside the root is used, sorted by name. Explicit paths are normalized and
+  checked before the permission question, so a typo fails without a prompt.
+- `tools` is optional. Omission means the default face (`tool-web`), or the
+  tools of `toolFace` when one is supplied; an empty array means a preset with
+  no tools. The parameter enum is the code-owned catalog, and a requested id
+  whose probe reports `available: false` is refused with `TOOL_UNAVAILABLE`
+  before the permission question.
+- `description`, `toolFace`, `agentInstructions`, and `order` are optional and
+  match the create page. A `toolFace` must name a face from the current
+  catalog, so stale provenance fails before the prompt. Supplying both
+  `toolFace` and `tools` requires them to describe the same tool set; the face
+  order wins.
+
+Refusals reuse the Host service's stable codes (`PRESET_ID_INVALID`,
+`PRESET_ID_EXISTS`, `PROMPT_ROOT_MISSING`, `PROMPT_FILE_INVALID`,
+`PROMPT_FILES_EMPTY`, `PRESET_REGISTER_FAILED`, ...) and cross the tool
+boundary as structured `HarnessError` codes. A refusal happens before
+registration and before the document write. `TOOL_UNAVAILABLE` and
+`TOOL_FACE_NOT_FOUND` are tool-level refusals with the same timing.
+
+Permission: the create path requires `danger-full-access`. A session already in
+that mode runs the call without a prompt; a narrower session asks through the
+approval seam to widen for this one call. The approval authorizes a direct
+write by the Host service; the tool does not run a sandboxed command, so the
+grant is a permission decision, not a mode applied to a child process. The tool
+has no confirmation dialog of its own. A missing `sandboxPolicy` service fails
+closed with `SANDBOX_POLICY_UNAVAILABLE`; a narrower session with no approval
+channel fails with `SANDBOX_ESCALATION_UNAVAILABLE`.
+
+Creating a preset never creates or switches a session. Existing sessions keep
+the preset they recorded; the new preset is available to sessions started
+afterward.
+
 ## Host service
 
 `PresetManager` (`ctx.presetManager`) is a `TypertRemoteService` on the
@@ -156,6 +237,10 @@ Refusals cross the wire as `presetManager/<CODE>`:
 `PROMPT_FILE_OUTSIDE_ROOT`, `PROMPT_FILE_EMPTY`, `PROMPT_FILES_EMPTY`,
 `TOOL_UNKNOWN`, `TOOL_FACE_INVALID`, `TOOL_FACE_NOT_FOUND`, `TOOL_FACE_EXISTS`,
 `TOOL_FACE_READONLY`, `STATE_INVALID`, `STATE_WRITE_FAILED`.
+
+`preset_create` maps the same refusals onto `HarnessError` codes (`PRESET_ID_EXISTS`,
+`PROMPT_FILE_INVALID`, ...), so the model sees a structured failure and the
+session log records the same discriminator.
 
 ### Validation
 
@@ -281,7 +366,7 @@ selection order is render order.
 ```sh
 cd plugins/preset-manager
 pnpm install          # one project-local workspace; `link:` deps reach ../../dsh
-pnpm test             # vitest, 54 specs
+pnpm test             # vitest, 82 specs
 pnpm run typecheck    # tsc --noEmit
 pnpm run bundle       # emits lib/client.js for the Web shell
 ```
@@ -318,7 +403,25 @@ Then run `pnpm install` in the profile directory, and build the browser half onc
 inside the package (`cd plugins/preset-manager && pnpm run bundle`) so
 `lib/client.js` exists — the package is its own workspace root, so the profile
 cannot filter it. The Host row comes from this package's `cordis.patch.yml`,
-which puts the document under `dshHomePath('preset-manager')`.
+which puts the document under `dshHomePath('preset-manager')` and seeds the
+global switch off. Turn the model tools on in the Presets panel; the capability
+host stores that global state and it survives a restart. The row's `global`
+config is only the first-run seed when the host has no stored value. A profile
+that wants the first run on can override the row (restating `stateDir`, because
+a patch replaces the whole config):
+
+```yaml
+- id: elysia-preset-manager
+  config:
+    stateDir: !!js dshHomePath('preset-manager')
+    global: true
+```
+
+`@elysia/capability-core` is required and is mounted automatically when absent.
+It owns the catalog entries, the global gate, the persistent global state, and
+the in-flight guard. `@elysia/capability-host` (the panel) is optional; the
+presets panel installs and runs without it. The web profile mounts the panel,
+leaves the preset manager's global switch off, and both consume the same core.
 
 ## Known gaps
 
@@ -328,6 +431,9 @@ which puts the document under `dshHomePath('preset-manager')`.
 - **The availability probe runs once per Host process.** Installing a plugin that
   provides a previously missing service needs a Host restart before its tool
   appears as available.
+- **The model surface is create/list only.** Deleting a preset remains a panel
+  action, because a live session's recorded preset is what that session resumes
+  on and the refusal needs an operator decision.
 - **An existing preset's face collapses duplicate modules.** `standard` mounts
   `dsh-tool-subagent` twice (`subagent` and `subagent_fork`); the face carries the
   single catalog row, so applying it yields `subagent` only.

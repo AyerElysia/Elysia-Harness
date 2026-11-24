@@ -49,6 +49,8 @@ export type PresetErrorCode =
   | 'TOOL_FACE_EXISTS'
   /** The face belongs to the built-in, common, or existing-preset families. */
   | 'TOOL_FACE_READONLY'
+  /** The tools service is missing, so the model tools cannot be mounted. */
+  | 'TOOLS_UNAVAILABLE'
   /** The persisted manager document is unreadable or malformed. */
   | 'STATE_INVALID'
   /** The persisted manager document could not be written. */

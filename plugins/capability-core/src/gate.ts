@@ -9,7 +9,7 @@
  * An unlisted dynamic tool is off. The gate is a pure in-memory read, because
  * `when` runs during step preparation.
  *
- * @module @elysia/capability-host/gate
+ * @module @elysia/capability-core/gate
  */
 
 import type { GateStatus, ScopeRef, SwitchOrigin } from './types.ts'
@@ -75,9 +75,11 @@ export class ToolGate {
     const own = this.store.switchValue(sessionRef, 'tools', toolId)
     if (own !== undefined) return own
     const presetId = this.presetOf(agent.session.id)
-    if (presetId === undefined) return false
-    const inherited = this.store.switchValue({ kind: 'preset', id: presetId }, 'tools', toolId)
-    return inherited ?? false
+    if (presetId !== undefined) {
+      const inherited = this.store.switchValue({ kind: 'preset', id: presetId }, 'tools', toolId)
+      if (inherited !== undefined) return inherited
+    }
+    return this.store.switchValue({ kind: 'global' }, 'tools', toolId) ?? false
   }
 
   /**
@@ -121,7 +123,7 @@ export class ToolGate {
   merged(ref: ScopeRef, ids: readonly string[]): Record<string, boolean> {
     const merged: Record<string, boolean> = {}
     for (const id of ids) {
-      if (ref.kind === 'preset') {
+      if (ref.kind === 'global') {
         merged[id] = this.store.switchValue(ref, 'tools', id) ?? false
         continue
       }
@@ -130,10 +132,15 @@ export class ToolGate {
         merged[id] = own
         continue
       }
+      if (ref.kind === 'preset') {
+        merged[id] = this.store.switchValue({ kind: 'global' }, 'tools', id) ?? false
+        continue
+      }
       const presetId = this.presetOf(ref.id)
-      merged[id] = presetId === undefined
-        ? false
-        : this.store.switchValue({ kind: 'preset', id: presetId }, 'tools', id) ?? false
+      const preset = presetId === undefined
+        ? undefined
+        : this.store.switchValue({ kind: 'preset', id: presetId }, 'tools', id)
+      merged[id] = preset ?? this.store.switchValue({ kind: 'global' }, 'tools', id) ?? false
     }
     return merged
   }

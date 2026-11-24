@@ -62,6 +62,28 @@ describe('preset manager adapter', () => {
       .rejects.toThrow('preset-manager/invalid-tool-faces-response')
   })
 
+  it('reads and switches the model-tools setting', async () => {
+    const off = { global: false, capabilityHost: true }
+    const read = rpcReturning({ ok: true, value: off })
+    await expect(createPresetManagerApi(read.rpc).modelTools(SIGNAL)).resolves.toEqual(off)
+    expect(read.calls[0]).toEqual({
+      channel: '/api', endpoint: 'presetManager/modelTools', payload: { args: {} },
+    })
+
+    const on = { global: true, capabilityHost: false }
+    const set = rpcReturning({ ok: true, value: on })
+    await expect(createPresetManagerApi(set.rpc).setModelToolsGlobal(true, SIGNAL)).resolves.toEqual(on)
+    expect(set.calls[0]).toEqual({
+      channel: '/api',
+      endpoint: 'presetManager/setModelToolsGlobal',
+      payload: { args: { enabled: true } },
+    })
+
+    const bad = rpcReturning({ ok: true, value: { global: 'yes' } })
+    await expect(createPresetManagerApi(bad.rpc).modelTools(SIGNAL))
+      .rejects.toThrow('preset-manager/invalid-model-tools-response')
+  })
+
   it('creates and deletes custom faces through their endpoints', async () => {
     const created = rpcReturning({ ok: true, value: FACE })
     await expect(createPresetManagerApi(created.rpc).createToolFace({ name: 'Mine', tools: ['tool-web'] }, SIGNAL))

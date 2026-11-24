@@ -6,7 +6,7 @@
  * v1.2 split: `origin: 'static'` rows come from a preset's composition and are
  * locked; `origin: 'dynamic'` rows are the panel's catalog and are switchable.
  *
- * @module @elysia/capability-host/types
+ * @module @elysia/capability-core/types
  */
 
 /** Where a dynamic tool is registered, and therefore who can switch it. */
@@ -17,6 +17,7 @@ export type ToolScope = 'global' | 'agent'
  * tools are locked, and dynamic switches live on a preset or a session.
  */
 export type ScopeRef =
+  | { readonly kind: 'global' }
   | { readonly kind: 'preset'; readonly id: string }
   | { readonly kind: 'session'; readonly id: string }
 
@@ -107,7 +108,15 @@ export interface PublishReceipt {
 export type ToolOrigin = 'static' | 'dynamic'
 
 /** The switch layer that decided one dynamic value. */
-export type SwitchOrigin = 'preset' | 'session' | 'default'
+export type SwitchOrigin = 'global' | 'preset' | 'session' | 'default'
+
+/** One global catalog tool's persisted switch. */
+export interface GlobalToolState {
+  /** Effective global switch; absent means off. */
+  readonly enabled: boolean
+  /** Whether the operator has written an explicit value. */
+  readonly stored: boolean
+}
 
 /**
  * One tool as the panel renders it.
@@ -121,6 +130,8 @@ export type SwitchOrigin = 'preset' | 'session' | 'default'
 export interface ToolView {
   /** Tool id, or the module name for an unmapped static module. */
   readonly id: string
+  /** Chinese display name supplied by the provider. */
+  readonly nameZh?: string
   /** Static (preset composition) or dynamic (panel catalog). */
   readonly origin: ToolOrigin
   /** True for a static tool: it cannot be switched. */
@@ -160,6 +171,8 @@ export interface ToolPresetView {
 export interface ContextKindView {
   /** Registered kind name. */
   readonly kind: string
+  /** Chinese display name supplied by the provider. */
+  readonly nameZh?: string
   /** One line describing what the kind carries. */
   readonly description: string
   /** Whether publications default to waking a turn. */

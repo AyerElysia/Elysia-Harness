@@ -69,6 +69,14 @@ export interface ToolFaceCatalog {
   readonly faces: readonly ToolFace[]
 }
 
+/** State of the plugin's own model-tool switch. */
+export interface PresetModelToolsState {
+  /** Whether the tools are injected into every session. */
+  readonly global: boolean
+  /** Whether the capability host is mounted, so per-preset switches exist. */
+  readonly capabilityHost: boolean
+}
+
 /** What the create page submits; the manager turns it into a preset definition. */
 export interface PresetDraft {
   /** Identity and roster key: lowercase letters, digits and hyphens. */

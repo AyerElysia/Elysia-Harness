@@ -1,8 +1,8 @@
 # ElyH 插件开发规范（v1.0）
 
-> 状态：2026-11-23。依据 `@elysia/preset-manager` 与 `@elysia/capability-host`（含 Client 面板）的现有实现整理。
+> 状态：2026-11-24。依据 `@elysia/preset-manager`、`@elysia/capability-core`（Host-only）与 `@elysia/capability-host`（可选 Client 面板）的现有实现整理。
 > 本文是今后 `plugins/*` 的模板与验收基线；与代码冲突时先改代码或先改本文，不要让两种说法并存。
-> 原则：**插件独立运行；一个插件一个包；Host 与强相关 Client 不拆包；上下文事件必进面板；工具默认不全局注册。**
+> 原则：**插件独立运行；一个插件一个包；Host 与强相关 Client 不拆包；共享 Host 核心只允许一个 Host-only 包；上下文事件必进面板；工具默认不全局注册。**
 
 ## 1. 适用范围
 
@@ -21,13 +21,25 @@
 |---|---|---|
 | Host-only | 可以 | `src/index.ts`、无 `dsh.client` |
 | Host + Web 面板，强相关 | **默认做法** | 同一包内 `src/index.ts` + `src/client/*`；`package.json` 同时声明 `dsh.client` 与 `dsh.bundle` |
+| 共享 Host 核心 | 允许（确有多个消费者时） | 独立 Host-only 包，无 `dsh.client`、无 React；面板插件只做可选消费者 |
 | 把 Host 和 Client 拆成两个包 | 禁止（强相关时） | 会让安装/卸载/版本/依赖分裂 |
 
 判定规则：
 
 - 面板只是为了展示或编辑本插件自己的 Host 状态 → 必须同包。
-- Client 是可替换的独立产品，且 Host 没有它也能完整工作 → 才允许拆包；目前本仓库没有这种需求。
+- Client 是可替换的独立产品，且 Host 没有它也能完整工作 → 才允许拆包；目前本仓库的**共享 Host 核心**是唯一例外。
 - 不要为了“以后可能复用”拆包。先同包，等出现第二个独立消费者再拆。
+
+### 2.1 共享 Host 核心（允许的唯一拆包例外）
+
+当两个以上独立插件需要**同一份** Host 状态（例如全局工具开关、catalog、gate、guard）时，抽出 Host-only 核心包：
+
+- 核心包无 `dsh.client`、无 React、无面板 CSS，不 import 任何面板包；
+- 核心包拥有状态、catalog、优先级解析、`when` 门、call guard、变更事件与持久化；
+- 面板包是核心的**可选消费者**，只负责展示与操作，不拥有第二份状态；
+- 每个消费者依赖核心包，不依赖面板包；
+- 核心提供 `ensure<Core>(ctx, config)`：首次调用在 application root 挂载一次，后续消费者复用同一个服务；消费者自己的 `apply()` 不得因为“核心当时不在”而永久跳过注册；
+- 示例：`@elysia/capability-core` 由 `@elysia/preset-manager` 与可选面板 `@elysia/capability-host` 共用。服务名保留 `capabilityHost` 仅为兼容现有面板 RPC，包依赖必须写 `@elysia/capability-core`，不得写面板包。
 
 ## 3. 目录模板
 
@@ -122,7 +134,7 @@ plugins/<name>/
 
 - 没有 Web 面板时删除 `exports["./client"]`、`files` 里的客户端项、`dsh.client`、`tsdown.config.ts`。
 - `peerDependencies` 只列运行时真正需要的服务包；`devDependencies` 用 `link:` 指到 `dsh/`。
-- 需要 `capabilityHost` 的插件必须显式声明对 `@elysia/capability-host` 的依赖（profile 依赖或包内 peer），不要靠“碰巧被别的 bundle 装了”。
+- 需要 `capabilityHost` 服务的插件必须显式声明对 `@elysia/capability-core` 的依赖（profile 依赖或包内 peer），不要靠“碰巧被别的 bundle 装了”；不要依赖 `@elysia/capability-host` 面板包。
 - 客户端 bundle 的产物名必须是 `@elysia/<name>/client`；`tsdown.config.ts` 只过滤自己的客户端入口。
 
 ## 5. `cordis.patch.yml` 模板
@@ -147,9 +159,29 @@ plugins/<name>/
 
 ## 6. 工具规范
 
-### 6.1 默认不全局注册
+### 6.1 中文名参数（强制）
 
-每个提供工具的 Host 插件必须暴露一个布尔配置，名字固定为 `global`，默认 `false`：
+每个工具和每个上下文事件都必须有中文显示名，字段名固定为 `nameZh`。它是面板显示名，不参与模型 schema，也不改变工具 id。
+
+- 面板 catalog 工具：在 `ToolCatalogEntry` 上设置 `nameZh`。
+- 直接 `ctx.tools.register` 的工具：调用 `capabilityHost.registerToolName(toolId, nameZh)` 补充显示名；该调用只提供标签，不把工具变成面板开关。
+- 上下文事件：在 `registerContextKind({...})` 中设置 `nameZh`。
+
+```ts
+host.registerToolName('<domain>_<action>', '中文动作名')
+```
+
+要求：
+
+- 中文名必须短、可读、动作明确，例如“创建预设”“列出预设”“读取后台任务输出”。
+- 不得写成工具 id 的重复，例如 `preset_create` 不能再显示成 `preset_create`。
+- 不得在中文名里拼动态状态、版本号或参数；需要时用描述表达。
+- 未提供 `nameZh` 的新插件视为不合规；面板会退回原始 id，这是兼容行为，不是推荐行为。
+- 中文名与英文/原始 id 同时显示时，中文名在前，id 作为代码保留。
+
+### 6.2 默认不全局注册（强制）
+
+**默认禁止全局挂载工具。** 每个提供工具的 Host 插件必须暴露一个布尔配置，名字固定为 `global`，默认 `false`：
 
 ```ts
 export interface Config {
@@ -162,10 +194,12 @@ export const Config = z.object({
 })
 ```
 
-- `global: false`：不得在 root scope 调用 `ctx.tools.register`；安装插件本身不改变任何会话的工具面。
-- `global: true`：才允许把工具注册到 root scope，使其对所有 Agent 可见。
+- `global: false`（默认）：**严禁**直接用 `ctx.tools.register` 把工具变成模型可见的 root 工具；安装插件本身不得改变任何会话的工具面。需要逐预设开关的 catalog 条目可以存在，但必须由 core gate 默认关闭，模型 schema 不可见。
+- `global: true`：profile 的启动默认值；独立 UI 开关可以把 core 的 global state 打开到 `true`，并在重启后保留。
+- 独立 UI 开关可以从默认 `false` 打开到 `true`；这是用户明确 opt-in 的运行时路径，不能靠代码默认值或环境变量隐式打开。
 - 预设行/Agent 行挂载的 scoped 工具不受 `global` 影响；它们只在该作用域出现。
-- “默认关”是安全默认：插件装了但没配 `global: true` 时，模型看不到工具，这是预期行为。
+- 全局开关必须写进 README，并有一个测试断言 “默认 false 时模型看不到工具、显式 true 后才出现、重启保持”。
+- 默认关是安全默认：插件装了但没配 `global: true` 时，模型看不到工具，这是预期行为。
 
 ```ts
 export const name = 'elysia-<name>'
@@ -187,31 +221,35 @@ export function apply(ctx: Context, config: Config): void {
 }
 ```
 
-### 6.2 三种注册方式
+### 6.3 三种注册方式
 
 | 方式 | 是否进面板 | 默认可见性 | 适用 |
 |---|---|---|---|
 | 直接 `ctx.tools.register` | 不要求；实际挂载后面板会自动读到 | 由挂载作用域决定 | 普通工具，不需要逐预设开关 |
 | 预设/Agent 行内注册 | 不要求 | 只在该作用域 | 只有某些预设需要的能力 |
-| `capabilityHost.registerTool` catalog | 是 | 由 Host 面板状态控制 | 需要逐预设/会话开关、工具组、统一 guard 的工具 |
+| `capabilityHost.registerTool` catalog | 是 | 由 capability core 的 gate 控制 | 需要逐预设/会话开关、工具组、统一 guard 的工具 |
 
 关键边界：
 
 - **工具不需要为了存在而注册到面板。** 面板会自动发现实际挂载的工具；只有需要面板开关/工具组时才注册 catalog。
-- 注册 catalog 不等于自动全局注册；`scope: 'global'` 仍必须服从 `global: true`，`scope: 'agent'` 由 capability-set 在预设/Agent 作用域挂载。
-- 同一个工具名只能有一条注册路径：要么直接注册，要么 Host catalog 托管；不得两处同时注册同名工具。
+- 注册 catalog 不等于自动全局注册；`scope: 'global'` 条目可以存在，但必须由 gate 默认关闭，模型 schema 不可见；`scope: 'agent'` 由 capability-set 在预设/Agent 作用域挂载。`global` 配置只作为首次默认值，不得用来阻止 catalog 发布（否则 global=false 时无法按预设单独开启）。
+- 同一个工具名只能有一条注册路径：要么直接注册，要么 core catalog 托管；不得两处同时注册同名工具。
 - 面板只管理它知道的动态/实际工具，不会替插件保存一份独立的“启用列表”。
 
-### 6.3 可选的面板 catalog
+### 6.4 可选的面板 catalog
 
-需要面板开关时，Host 入口在 `capabilityHost` 存在且 `global:true`（或 agent scope）时注册：
+需要面板开关时，插件先 `ensureCapabilityCore`，再用 `ctx.inject(['capabilityHost'], ...)` 注册 catalog；`scope: 'global'` 条目默认由 gate 关闭，等待预设/会话显式开启（异步时序见 13.1）：
 
 ```ts
-const host = ctx.get('capabilityHost')
-if (host !== undefined) {
-  ctx.effect(() => host.registerTool({
+await ensureCapabilityCore(ctx, config)
+ctx.inject(['capabilityHost'], async scope => {
+  const host = scope.get('capabilityHost')
+  if (host === undefined) return
+  await host.ready
+  scope.effect(() => host.registerTool({
     id: '<domain>_<action>',
-    scope: 'agent',                 // 或 'global'，但 global 仍受 Config.global 约束
+    nameZh: '中文动作名',
+    scope: 'agent',                 // 或 'global'；global 条目默认 gate 关闭
     description: 'One sentence the model can act on.',
     required: ['tools'],
     group: '<optional group>',
@@ -225,7 +263,7 @@ if (host !== undefined) {
       },
     }),
   }), 'elysia-<name>.catalog')
-}
+})
 ```
 
 要求：
@@ -236,7 +274,7 @@ if (host !== undefined) {
 - 有 `required` 服务时，缺失就报 `TOOL_MOUNT_FAILED`，不要静默注册一个坏工具。
 - 面板开关只控制这个 catalog 条目；真正的调用 guard 由 Host/Capability Set 负责，插件不要另写一套“面板开关”状态。
 
-### 6.4 命名、schema 与执行
+### 6.5 命名、schema 与执行
 
 - 工具名：`snake_case`，带领域前缀，如 `team_task_create`、`schedule_create`；不要用 `run`、`do`、`tool1`。
 - 描述：第一句写动作和对象；第二句写边界/副作用；不要靠参数名解释一切。
@@ -246,6 +284,53 @@ if (host !== undefined) {
 - 审批：有写副作用、安装、账号、外发消息的工具，必须走 DSH 的 approval/permission 机制；不要自己弹确认框。
 - 失败：抛带稳定 code 的错误；不要返回“成功但什么都没做”的模糊结果。
 - 不要创建 session；不要替用户选择预设；不要把工具调用变成隐式后台任务。
+
+### 6.6 独立全局工具开关（UI 规范）
+
+当插件在自己的设置页或面板里提供“让所有会话都能用这个工具”的开关时，必须遵守本节。
+
+**文案固定**：
+
+```text
+为模型全局注入<nameZh>工具
+```
+
+例如 `nameZh = '创建预设'` 时，开关必须是 **“为模型全局注入创建预设工具”**。一个开关覆盖多个工具时，`xxx` 用该组的中文名，例如 **“为模型全局注入预设管理工具”**。不要写成“全局注入模型工具”“全局开启”“对所有会话生效”“Enable globally”等自由文案。
+
+**位置固定**：开关放在插件页面标题栏的右侧，与页面主操作按钮同一行，做成紧凑的一行控件（标签 + 复选框）；不要单独占一张“模型工具”设置卡片。
+
+必须满足：
+
+- **默认关闭**：新装的插件不自动开启任何全局工具。
+- **使用共享核心的同款方案**：开关只能绑定 `@elysia/capability-core` 的 global tool catalog/state/gate/guard，不得用插件自己的布尔值、重新注册/注销工具或重启进程来模拟。面板包只是这个核心的可选消费者，不是依赖目标。
+- **可自由开关**：每次切换都写核心的全局工具状态；状态跨重启保留，显式关闭优先。
+- **优先级固定**：`session 显式 > preset 显式 > global 默认`。因此 `global=false + preset=true` 只开该预设；`global=true + preset=false` 只关该预设；没有显式覆盖时继承 global。
+- **实时注入**：
+  - 开启后，下一次模型请求的 tool schema 立即包含该工具及其中文名/描述；不需要新会话、不需要重启。
+  - 关闭后，下一次模型请求不再包含该工具；已准入但尚未执行的调用由 Host guard 拦截。
+  - 用 `capability-core/change`（兼容别名 `capability-host/change`）通知 UI / Capability Set 重新同步，不允许插件自己维护第二套“已注入”状态。
+- **提示模型**：工具出现/消失由 DSH 每步重新组装的 tool schema 自然完成；如果还需要额外说明，使用每步可重读的 system-prompt section 或工具 description，不得伪造一条 `user/message` 当作注入提示。
+- **启动默认与运行时开关**：插件的 `global` 配置只是启动默认值，默认 `false`；独立开关必须能从关切换到开。开关为关时不得让模型在 root 工具清单里看到该工具；全局 catalog 条目可以存在，但必须由 Host gate 默认关闭。用户显式开启后才允许注入。开关状态必须持久化，不能每次重挂载都回到默认。
+- 插件卸载、Host 重启、会话切换都不能把用户关闭的全局工具重新打开。
+
+实现状态：
+
+- `@elysia/capability-core` 的 global tool scope 已实现：`globalTools`、`setTool({ kind: 'global' })`、`capability-state.json` 持久化、step gate 和 call guard 共用同一状态；服务名保留 `capabilityHost` 以兼容面板 RPC。
+- `preset-manager` 是本节参考实现：两个工具始终作为 `scope: 'global'` catalog 条目发布；开关只写核心全局状态，不重新注册工具；包依赖只写 `@elysia/capability-core`，不 import 面板包。旧的两态切换（root 注册 / catalog 互斥）已删除，不得复制。
+- 仍然禁止用插件本地开关冒充“全局生效”，禁止直接 `ctx.tools.register/unregister` 绕过核心 gate。
+- **异步挂载**：不得在 `apply` 里用一次性的 `ctx.get('capabilityHost')` 判空后永久返回；应先 `ensureCapabilityCore(ctx, config)`，再用 `ctx.inject(['capabilityHost'], ...)`、`await host.ready`，在 effect 里注册和清理。核心后挂载时工具也必须出现；这是 13.1 记录的实际事故。
+
+验收至少覆盖：
+
+- 只安装 preset-manager、不安装面板：预设工具可以全局开关，下一步能看到/失去工具；
+- 只安装面板、不安装 preset-manager：面板自身正常，catalog 为空；
+- 两者都装、任意挂载顺序：面板出现 `preset_create` / `preset_list`，且只有一个核心实例；
+- 优先级：`session > preset > global`；global=false + preset=true 只开该预设；global=true + preset=false 只关该预设；无显式覆盖时继承 global；
+- 开关默认关闭；切换后不新开会话、不重启，下一步 tool schema 改变；
+- 关闭发生在一步中间时，已准入调用被 guard 拒绝；
+- 重启后状态保持；显式关闭不会被重新挂载恢复；
+- 卸载 preset-manager 后，面板不残留其 catalog 行；重新挂载不重复注册；
+- preset-manager 的源码、`package.json` 和构建产物都不出现 `@elysia/capability-host` 依赖。
 
 ## 7. 上下文事件规范
 
@@ -259,11 +344,12 @@ export const inject = ['capabilityHost']
 export function apply(ctx: Context): void {
   const host = ctx.get('capabilityHost')
   if (host === undefined) {
-    throw new Error('elysia-<name> requires @elysia/capability-host for context registration')
+    throw new Error('elysia-<name> requires @elysia/capability-core for context registration')
   }
 
   ctx.effect(() => host.registerContextKind({
     kind: '<plugin>.<event>',
+    nameZh: '中文事件名',
     description: 'One line describing what the event carries.',
     activeByDefault: false,
     ttlMs: 15 * 60_000,
@@ -276,6 +362,7 @@ export function apply(ctx: Context): void {
 规则：
 
 - `kind` 用 `<plugin>.<event>` 点号命名，例如 `app.message`、`prompt.change`；全局唯一，不带版本号。
+- `nameZh` 必填，写短而明确的中文事件名；面板优先显示它，缺失时退回 kind。
 - `description` 是面板和模型都能读的一行说明，不写营销文案。
 - `activeByDefault: false` 表示默认不唤醒轮次；主动事件才设 `true`，并在描述里说明。
 - `ttlMs`、`maxBytes`、`maxQueueDepth` 只在确实需要覆盖 Host 默认值时填写。
@@ -391,7 +478,7 @@ export function apply(ctx: Context): void {
 ### Host
 
 - 挂载后注册了什么、卸载后是否全部释放；
-- `global: false` 时 root scope 没有该工具；`global: true` 时才出现；
+- `global: false` 时模型可见工具为空（catalog 条目可以存在，但 gate 必须关闭）；`global: true` 或显式预设/session 开启后才出现；
 - 工具参数/返回/错误 code；
 - 状态读写、版本、原子写、重启恢复；
 - 权限拒绝和 owner 校验；
@@ -429,10 +516,11 @@ pnpm run bundle   # 仅当有 dsh.client
 
 交付前逐项确认：
 
-- [ ] 一个插件一个包；Host 与强相关 Client 未拆包。
+- [ ] 一个插件一个包；Host 与强相关 Client 未拆包；共享 Host 核心是唯一例外（Host-only、无 Client）。
 - [ ] 只改 `plugins/*` 与 profile，不改 `dsh/`。
-- [ ] `cordis.patch.yml` 只有一行；profile 依赖与 bundles 同步。
-- [ ] 工具默认不全局注册；`global:false` 时 root scope 无该工具。
+- [ ] `cordis.patch.yml` 只有一行；profile 依赖与 bundles 同步；共享核心由消费者 `ensure` 或独立行挂载。
+- [ ] 工具和上下文事件都有 `nameZh`；直接注册的工具已调用 `registerToolName`。
+- [ ] 工具默认不全局注册；`global:false` 时模型看不到工具（catalog 可存在但 gate 关闭），显式预设/session 或全局开关才能打开。
 - [ ] 上下文 kind 已 `registerContextKind`，卸载可清理。
 - [ ] 所有注册/监听/定时器都在 `ctx.effect` 内。
 - [ ] 不创建 session；不替用户选预设；不自动写权限。
@@ -462,16 +550,18 @@ export const Config = z.object({
 
 export function apply(ctx: Context, config: Config): void {
   const host = ctx.get('capabilityHost')
-  if (host === undefined) throw new Error('elysia-<name> requires @elysia/capability-host')
+  if (host === undefined) throw new Error('elysia-<name> requires @elysia/capability-core')
 
   ctx.effect(() => host.registerContextKind({
     kind: '<name>.changed',
+    nameZh: '中文事件名',
     description: 'One line describing the event.',
     activeByDefault: false,
   }), 'elysia-<name>.context-kind')
 
   if (config.global !== true) return
 
+  ctx.effect(() => host.registerToolName('<name>_action', '中文动作名'), 'elysia-<name>.tool-name')
   ctx.effect(() => ctx.tools.register(defineTool({
     name: '<name>_action',
     description: 'One sentence the model can act on.',
@@ -485,4 +575,82 @@ export function apply(ctx: Context, config: Config): void {
 ```
 
 > 工具不需要面板关联时，删掉 `host.registerTool` 相关代码即可；上下文事件注册不要删。
-> 需要逐预设开关时，把直接 `ctx.tools.register` 换成 `host.registerTool({ scope: 'agent', ... })`，并在预设/Agent 行挂 `@elysia/capability-host/capability-set`。
+> 需要逐预设开关时，把直接 `ctx.tools.register` 换成 `host.registerTool({ scope: 'agent', ... })`，并在预设/Agent 行挂 `@elysia/capability-core/capability-set`。
+
+## 13. 踩坑记录
+
+### 13.1 核心/服务未就绪时一次性 `ctx.get`，工具永远不进入面板
+
+**现象**
+
+- 插件自己的 Host 已启动，UI 也能读到 `capabilityHost=true`。
+- 能力面板里没有该插件的工具，`capabilityHost/list` 的 `tools` 数组里也没有。
+- `capabilityHost/status` 没有 `TOOL_REGISTRATION_FAILED` / `TOOL_MOUNT_FAILED`，只有其他静态映射诊断。
+- 面板按预设/会话显示正常，因此很容易误判成“面板过滤”或“nameZh 不显示”。
+
+**根因**
+
+插件在 `apply()` 里只读一次：
+
+```ts
+const host = ctx.get('capabilityHost')
+if (host === undefined) {
+  await manager.ready
+  return
+}
+// host.registerTool(...) 只在这里执行
+```
+
+`capabilityHost` 是异步挂载的服务；`preset-manager` 的 `apply()` 可能先执行，此时 `ctx.get` 返回 `undefined`，代码直接 `return`。之后 core/Host 挂载完成，但**没有任何逻辑重试 catalog 注册**。所以：
+
+- 注册代码从未执行，不是“注册失败”；
+- 面板没有任何记录可显示；
+- `presetManager/modelTools` 稍后查询时当然能看到 `capabilityHost=true`。
+
+**正确做法**
+
+- 不要用一次性的 `ctx.get` 加 `return` 判断服务存在性。
+- 需要共享核心的插件先 `await ensureCapabilityCore(ctx, config)`；它会在 application root 挂载一次核心，后挂消费者复用同一服务。
+- 然后用 `ctx.inject(['capabilityHost'], scope => ...)` 等待服务出现；在回调里注册 catalog 条目和名字提示。
+- 注册前 `await host.ready`，避免核心 runtime 尚未初始化就调用 `registerTool`。
+- 所有注册用作用域 `effect` 清理；回调可能晚于插件卸载，先检查 disposed。
+- 如果插件允许无核心独立运行，未挂载核心时只跳过“核心相关”注册，不能连带跳过自己的普通工具。
+
+示意：
+
+```ts
+function registerCatalogTools(host: CapabilityHost): () => void {
+  const disposeCreate = host.registerTool({ /* ... */ })
+  const disposeList = host.registerTool({ /* ... */ })
+  return () => {
+    disposeList()
+    disposeCreate()
+  }
+}
+
+await ensureCapabilityCore(ctx, config)
+ctx.inject(['capabilityHost'], async (scope) => {
+  const host = scope.get('capabilityHost')
+  if (host === undefined) return
+  await host.ready
+  // Re-read after the await: the scope may have been replaced.
+  const live = scope.get('capabilityHost')
+  if (live === undefined) return
+  scope.effect(() => registerCatalogTools(live), 'elysia-<name>.catalog')
+})
+```
+
+**排查顺序**
+
+1. 先调 `capabilityHost/list`，确认工具是否真的在 `tools` 数组里。
+2. 不在数组里 → 查 provider 的注册路径和 `apply` 时序；不要再改面板过滤。
+3. 在数组里但 UI 不显示 → 再查 `nameZh`、分类、shadowing、scope 选择。
+4. 有 `TOOL_REGISTRATION_FAILED` → 查 `required` 服务、factory、重复 id；没有诊断但缺失 → 优先怀疑注册代码没执行。
+
+**必须测试**
+
+- 只挂 `preset-manager`（无面板）：它自行 `ensureCapabilityCore`，catalog 条目出现。
+- 只挂面板（无 `preset-manager`）：核心正常、catalog 为空。
+- 面板先挂、`preset-manager` 后挂；`preset-manager` 先挂、面板后挂。
+- 两种顺序下 `capabilityHost/list` 都包含该插件的工具，且只有一个核心实例。
+- 插件卸载后 catalog 条目和名字提示都消失，重新挂载不重复。

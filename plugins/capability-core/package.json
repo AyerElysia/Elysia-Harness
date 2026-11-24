@@ -1,0 +1,71 @@
+{
+  "name": "@elysia/capability-core",
+  "description": "Host-only capability core: tool catalog, global/preset/session switches, step gate, call guard, change events, and persistence",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "main": "./lib/index.js",
+  "types": "./lib/index.d.ts",
+  "exports": {
+    ".": {
+      "types": "./lib/index.d.ts",
+      "default": "./lib/index.js"
+    },
+    "./capability-set": {
+      "types": "./lib/capability-set.d.ts",
+      "default": "./lib/capability-set.js"
+    },
+    "./package.json": "./package.json",
+    "./cordis.patch.yml": "./cordis.patch.yml"
+  },
+  "files": [
+    "lib/**/*.js",
+    "lib/**/*.d.ts",
+    "lib/**/*.map",
+    "src/**/*.ts",
+    "cordis.patch.yml",
+    "README.md"
+  ],
+  "scripts": {
+    "build": "tsc -p tsconfig.build.json",
+    "test": "vitest run --maxWorkers=1 --no-file-parallelism",
+    "typecheck": "tsc --noEmit"
+  },
+  "license": "MIT",
+  "peerDependencies": {
+    "@deepseek-ai/cordis": "workspace:~",
+    "@deepseek-ai/dsh-agent": "workspace:*",
+    "@deepseek-ai/dsh-agent-preset-registry": "workspace:*",
+    "@deepseek-ai/dsh-llm": "workspace:*",
+    "@deepseek-ai/dsh-scope": "workspace:*",
+    "@deepseek-ai/dsh-session": "workspace:*",
+    "@deepseek-ai/dsh-tools": "workspace:*",
+    "@deepseek-ai/dsh-typert-protocol": "workspace:*",
+    "@deepseek-ai/schemastery": "workspace:~"
+  },
+  "devDependencies": {
+    "@deepseek-ai/cordis": "link:../../dsh/vendor/cordis",
+    "@deepseek-ai/schemastery": "link:../../dsh/vendor/schemastery",
+    "@deepseek-ai/dsh-agent": "link:../../dsh/packages/core/agent",
+    "@deepseek-ai/dsh-agent-loop": "link:../../dsh/packages/core/agent-loop",
+    "@deepseek-ai/dsh-agent-loop-testkit": "link:../../dsh/packages/test-support/agent-loop-testkit",
+    "@deepseek-ai/dsh-agent-preset-registry": "link:../../dsh/packages/preset/agent-preset-registry",
+    "@deepseek-ai/dsh-llm": "link:../../dsh/packages/llm/llm",
+    "@deepseek-ai/dsh-scope": "link:../../dsh/packages/core/scope",
+    "@deepseek-ai/dsh-session": "link:../../dsh/packages/core/session",
+    "@deepseek-ai/dsh-session-projection": "link:../../dsh/packages/session/session-projection",
+    "@deepseek-ai/dsh-system-prompt": "link:../../dsh/packages/core/system-prompt",
+    "@deepseek-ai/dsh-tool-executor-native": "link:../../dsh/packages/core/tool-executor-native",
+    "@deepseek-ai/dsh-tool-web": "link:../../dsh/packages/web/tool-web",
+    "@deepseek-ai/dsh-tools": "link:../../dsh/packages/core/tools",
+    "@deepseek-ai/dsh-typert-protocol": "link:../../dsh/packages/typert/protocol",
+    "@types/node": "^22.20.1",
+    "typescript": "^6.0.3",
+    "vitest": "^4.1.11"
+  },
+  "dsh": {
+    "bundle": {
+      "patch": "./cordis.patch.yml"
+    }
+  }
+}

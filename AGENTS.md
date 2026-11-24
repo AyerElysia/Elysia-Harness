@@ -52,6 +52,11 @@ Non-negotiable invariants from that spec:
 - **One bundle row.** `cordis.patch.yml` mounts the plugin once. Add the package
   to both the profile's `dependencies` and `dsh.profile.bundles`; remove both
   together.
+- **Every tool and context event carries a Chinese name.** Tool catalogs pass
+  `nameZh`; directly registered tools call
+  `capabilityHost.registerToolName(toolId, nameZh)`; context kinds pass
+  `nameZh` to `registerContextKind()`. The panel prefers that name over the raw
+  id; a new plugin without one is incomplete.
 - **Context events must register with the panel.** Providers call
   `capabilityHost.registerContextKind()` on mount and publish through
   `capabilityHost.publish()`; registration must be disposed with `ctx.effect`.
@@ -63,11 +68,26 @@ Non-negotiable invariants from that spec:
   through two paths.
 - **Global tool registration is opt-in and off by default.** Every tool-providing
   plugin exposes a boolean `global` config defaulting to `false`; when false it
-  must not register tools in the root scope. Preset/Agent-scoped tools are
-  unaffected.
+  must not register tools in the root scope. The user-facing global switch must
+  be able to turn it on explicitly and persist that choice. Preset/Agent-scoped
+  tools are unaffected.
+- **Independent global-tool UI switches use the panel's mechanism and exact copy.**
+  A plugin-owned switch must read
+  `为模型全局注入<nameZh>工具` and bind to the Host global tool catalog/state/gate/
+  guard — never a plugin-local boolean or a re-register/restart trick. Toggling
+  must take effect at the next model step (tool schema appears/disappears without
+  a new session or restart), persist across restart, and deny in-flight calls
+  through the guard. The Host currently only has preset/session tool scopes;
+  extend that global scope first, and do not fake it until then.
 - **Actual state, not invented defaults.** The panel displays the tool state that
   is actually mounted; do not make checkboxes claim a default the runtime does
   not have. Explicit panel off-switches are authoritative and survive restart.
+- **Service mount is asynchronous.** Never use a one-shot `ctx.get('capabilityHost')`
+  followed by a permanent `return` during `apply`: the Host may mount later and
+  the tool/context registration would be skipped forever. Wait with
+  `ctx.inject(...)`, await `host.ready`, and register from an effect. This exact
+  timing bug hid `preset_create` / `preset_list` from the panel; the diagnosis and
+  both mount-order tests are recorded in the plugin spec.
 - **Everything is disposable and tested.** Every tool, context kind, listener,
   timer, and slot registration lives inside `ctx.effect`; state stays under the
   harness home; the plugin has host and client tests plus `typecheck`, `test`,

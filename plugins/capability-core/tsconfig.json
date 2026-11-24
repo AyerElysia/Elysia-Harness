@@ -1,0 +1,13 @@
+{
+  "extends": "../../dsh/tsconfig.base.json",
+  "compilerOptions": {
+    "composite": false,
+    "incremental": false,
+    "noEmit": true,
+    "paths": {}
+  },
+  "include": [
+    "src",
+    "tests"
+  ]
+}

@@ -44,16 +44,16 @@
 
 ## 3. 组件
 
-### 3.1 `@elysia/capability-host`（Host 插件）
+### 3.1 `@elysia/capability-core`（Host-only）
 
 一次挂载，持有四块：
 
 | 模块 | 职责 |
 |---|---|
 | Tool Catalog | 收集 Provider 注册的工具描述与工厂；每个工具全局 `ctx.tools.register(def, { when })` 一次 |
-| Gate | `enabled(toolId, agent)`：按会话集合或预设集合判定；失败关闭 |
+| Gate | `enabled(toolId, agent)`：`session > preset > global`；失败关闭 |
 | Context Bus | 事件 schema、订阅、每会话队列/游标、去重、TTL、主动/被动分发 |
-| State Store | `presetId/sessionId -> 开启的 tools/contexts`，持久化；面板的唯一写入目标 |
+| State Store | `global/presetId/sessionId -> 开启的 tools/contexts`，持久化；核心的唯一写入目标 |
 | Session Registry | 会话 -> 预设映射；可读 `agentPresets.presetForSession(session)`；只读，不创建会话 |
 
 可选子模块（第一期可后置）：
@@ -62,7 +62,7 @@
 - `InboundRouter`：渠道消息 -> 目标会话 `followup`。
 - `SessionRuntime`：只负责创建/恢复会话，不组合提示词或工具。
 
-### 3.2 `@elysia/capability-host` 的 Client 半
+### 3.2 `@elysia/capability-host`（可选 Client 面板）
 
 - 列出会话与预设，自动识别当前会话的预设。
 - 内置几套能力模板（主意识、Router、渠道、媒体）。
@@ -70,6 +70,7 @@
 - 显示上下文事件流、工具可见性、最近一次错误。
 - 通过 RPC 读写 Host；不直接操作文件或 `agent.ctx`。
 - 权限：只有 owner 可改；所有变更审计。
+- 面板是可选消费者：它的 Host 入口只 `ensureCapabilityCore`；没有面板时核心仍完整工作。preset-manager 只依赖核心，不依赖本包。
 
 完整契约见 [ElyH 上下文事件 + 工具管理面板方案](elyh-control-panel.zh.md)。
 
@@ -226,7 +227,8 @@ Provider 向 `contextBus.publish(event)` 发事件。Host 按订阅解析出目�
 
 ### 6.1 新增核心包
 
-- `@elysia/capability-host`：Tool Catalog、Context Bus、State Store、Gate、Session Registry，以及同包的 Client 面板。
+- `@elysia/capability-core`：Host-only，Tool Catalog、Context Bus、State Store（含 global 工具状态）、Gate、Session Registry、Capability Set、变更事件与持久化。
+- `@elysia/capability-host`：可选 Client 面板；Host 入口只 `ensureCapabilityCore`，不拥有工具状态。
 - `@elysia/router-runtime`：观察主意识、心跳、派工桥；可后置。
 - `@elysia/inbound-router`：渠道消息 -> 目标会话 followup；可先并入 Host。
 - `@elysia/channel-kit`（库，不是插件）：standalone 渠道的最小会话/发送工具。
@@ -237,12 +239,12 @@ Provider 向 `contextBus.publish(event)` 发事件。Host 按订阅解析出目�
 - 只有 `SessionRuntime` 创建/恢复会话；Provider 不创建主意识/Router 会话。
 - Preset 不列动态工具；动态能力由 Host 的 `when` 门决定，避免双源。
 - Provider 不 runtime-import 另一个 feature plugin 的值；共享代码进中性库。
-- 所有工具/上下文 Provider 都可独立挂载；缺 Host 时降级或明确失败。
-- Panel 是唯一写入 State Store 的 UI；Host 是唯一执行者。
+- 所有工具/上下文 Provider 都可独立挂载；缺核心时降级或明确失败。
+- 共享核心是唯一 State Store 写入者；面板和 preset-manager 都只是调用 core 的 UI；preset-manager 不得依赖面板包。
 
 ### 6.3 实施阶段
 
-- **P0 · 契约与骨架**：`capability-host` 的 Tool Catalog/Gate、Context Bus、State Store、Session Registry；同包的 Client 半只读列表；不改变现有行为。验收：`when` 条件、`UNKNOWN_TOOL`、订阅分发、持久化各有单测和真实组合测试。
+- **P0 · 契约与骨架**：`capability-core` 的 Tool Catalog/Gate、Context Bus、State Store、Session Registry、`ensureCapabilityCore`；可选 Client 面板只读列表；不改变现有行为。验收：`when` 条件、`UNKNOWN_TOOL`、全局/预设/session 优先级、订阅分发、持久化各有单测和真实组合测试。
 - **P1 · 主意识 + App Bridge**：`preset-elysia-conscious`、主意识工具 Provider、`inbound-router`、`app-bridge` 两模式。验收：已有会话加工具不新开、关闭不可执行、app 消息触发一轮、回复工具绑定入站会话。
 - **P2 · Router + 内部能力**：`preset-elysia-subconscious`、`router-runtime`（观察/心跳/派工桥）、`session-communication`、`proactive-system`。验收：主意识事件进入 Router 上下文；Router 派工不依赖固定 session id；报告回传。
 - **P3 · 渠道 + 记忆**：`channel-ayla/kook/qq/feishu` 统一为 Provider；补 QQ/飞书入站；删除 `memory` 空占位；记忆读写 Provider 先做只读。验收：四个渠道都能 managed 注册上下文/回复工具；订阅集合分发正确。

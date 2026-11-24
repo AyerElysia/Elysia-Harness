@@ -63,6 +63,7 @@ const ENDPOINTS = {
 /** Host tool row as `capabilityHost/list` emits it. */
 interface RawTool {
   readonly id: string
+  readonly nameZh?: string
   readonly origin: ToolOrigin
   readonly locked: boolean
   readonly scope?: ToolScope
@@ -100,6 +101,7 @@ interface RawToolPreset {
 /** One context kind as the Host emits it. */
 interface RawContextKind {
   readonly kind: string
+  readonly nameZh?: string
   readonly activeByDefault: boolean
   readonly ttlMs: number
   readonly maxBytes: number
@@ -168,6 +170,7 @@ function isBooleanRecord(value: unknown): value is Readonly<Record<string, boole
 function isRawTool(value: unknown): value is RawTool {
   return isRecord(value)
     && typeof value['id'] === 'string'
+    && isOptionalString(value['nameZh'])
     && isToolOrigin(value['origin'])
     && typeof value['locked'] === 'boolean'
     && (value['scope'] === undefined || isToolScope(value['scope']))
@@ -212,6 +215,7 @@ function isToolPreset(value: unknown): value is ToolPresetEntry {
 function isRawContextKind(value: unknown): value is RawContextKind {
   return isRecord(value)
     && typeof value['kind'] === 'string'
+    && isOptionalString(value['nameZh'])
     && typeof value['activeByDefault'] === 'boolean'
     && isFiniteNumber(value['ttlMs'])
     && isFiniteNumber(value['maxBytes'])
@@ -247,8 +251,8 @@ function isRawStatus(value: unknown): value is RawStatus {
     && Array.isArray(value['diagnostics'])
 }
 
-function scopeKey(ref: { readonly kind: 'preset' | 'session'; readonly id: string }): string {
-  return `${ref.kind}:${ref.id}`
+function scopeKey(ref: ScopeRef): string {
+  return ref.kind === 'global' ? 'global' : `${ref.kind}:${ref.id}`
 }
 
 /** Normalize the Host's flat tool rows into the panel's rendered tools. */
@@ -264,6 +268,7 @@ function normalizeTools(raw: RawSnapshot): readonly ToolEntry[] {
       : undefined
     return {
       id: tool.id,
+      ...(tool.nameZh === undefined ? {} : { nameZh: tool.nameZh }),
       group,
       scope: tool.scope ?? 'agent',
       origin: tool.origin,
@@ -300,6 +305,7 @@ function normalizeContexts(raw: RawSnapshot): readonly ContextEntry[] {
   const scopes = new Map(raw.scopes.map(entry => [scopeKey(entry.ref), entry]))
   return raw.contexts.map((context): ContextEntry => ({
     kind: context.kind,
+    ...(context.nameZh === undefined ? {} : { nameZh: context.nameZh }),
     active: context.activeByDefault,
     ttlMs: context.ttlMs,
     backlog: 0,

@@ -54,11 +54,16 @@
     "@deepseek-ai/dsh-client-ui-sidebar": "workspace:*",
     "@deepseek-ai/dsh-client-ui-slots": "workspace:*",
     "@deepseek-ai/dsh-llm": "workspace:*",
+    "@deepseek-ai/dsh-sandbox": "workspace:*",
+    "@deepseek-ai/dsh-sandbox-policy": "workspace:*",
     "@deepseek-ai/dsh-scope": "workspace:*",
     "@deepseek-ai/dsh-session": "workspace:*",
     "@deepseek-ai/dsh-session-projection": "workspace:*",
     "@deepseek-ai/dsh-system-prompt": "workspace:*",
-    "@deepseek-ai/dsh-typert-protocol": "workspace:*"
+    "@deepseek-ai/dsh-tools": "workspace:*",
+    "@deepseek-ai/dsh-typert-protocol": "workspace:*",
+    "@deepseek-ai/dsh-user-approval": "workspace:*",
+    "@elysia/capability-core": "workspace:*"
   },
   "devDependencies": {
     "@deepseek-ai/cordis": "link:../../dsh/vendor/cordis",
@@ -73,11 +78,15 @@
     "@deepseek-ai/dsh-client-ui-sidebar": "link:../../dsh/packages/client/ui-sidebar",
     "@deepseek-ai/dsh-client-ui-slots": "link:../../dsh/packages/client/ui-slots",
     "@deepseek-ai/dsh-llm": "link:../../dsh/packages/llm/llm",
+    "@deepseek-ai/dsh-sandbox": "link:../../dsh/packages/sandbox/sandbox",
+    "@deepseek-ai/dsh-sandbox-policy": "link:../../dsh/packages/sandbox/sandbox-policy",
     "@deepseek-ai/dsh-scope": "link:../../dsh/packages/core/scope",
     "@deepseek-ai/dsh-session": "link:../../dsh/packages/core/session",
     "@deepseek-ai/dsh-session-projection": "link:../../dsh/packages/session/session-projection",
     "@deepseek-ai/dsh-system-prompt": "link:../../dsh/packages/core/system-prompt",
+    "@deepseek-ai/dsh-tools": "link:../../dsh/packages/core/tools",
     "@deepseek-ai/dsh-typert-protocol": "link:../../dsh/packages/typert/protocol",
+    "@deepseek-ai/dsh-user-approval": "link:../../dsh/packages/interaction/user-approval",
     "@types/node": "^22.20.1",
     "@types/react": "~18.3.1",
     "@types/react-dom": "~18.3.0",
@@ -85,7 +94,8 @@
     "react-dom": "^18.2.0",
     "tsdown": "^0.22.2",
     "typescript": "^6.0.3",
-    "vitest": "^4.1.11"
+    "vitest": "^4.1.11",
+    "@elysia/capability-core": "link:../capability-core"
   },
   "dsh": {
     "client": {

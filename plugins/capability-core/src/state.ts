@@ -9,7 +9,7 @@
  * with the switches because an idle session must not lose events across a
  * restart.
  *
- * @module @elysia/capability-host/state
+ * @module @elysia/capability-core/state
  */
 
 import { randomUUID } from 'node:crypto'
@@ -58,6 +58,8 @@ export interface ToolPresetRecord {
 export interface CapabilityDocument {
   /** Document generation. */
   readonly version: typeof DOCUMENT_VERSION
+  /** Deployment-wide switches for global catalog tools. */
+  readonly global: ScopeStateRecord
   /** Switches per preset id. Static tools are never stored. */
   readonly presets: Readonly<Record<string, ScopeStateRecord>>
   /** Switches and queues per session id. */
@@ -257,6 +259,7 @@ export function parseDocument(value: unknown, file: string): CapabilityDocument 
   if (value === undefined) {
     return {
       version: DOCUMENT_VERSION,
+      global: {},
       presets: {},
       sessions: {},
       sessionPresets: {},
@@ -276,6 +279,9 @@ export function parseDocument(value: unknown, file: string): CapabilityDocument 
     if (!isRecord(read)) throw invalid(file, `"${name}" must be an object`)
     return read
   }
+  const global = value['global'] === undefined
+    ? {}
+    : parseScope(value['global'], 'global', file)
   const presets: Record<string, ScopeStateRecord> = {}
   for (const [id, entry] of Object.entries(section('presets'))) {
     presets[id] = parseScope(entry, `presets.${id}`, file)
@@ -297,6 +303,7 @@ export function parseDocument(value: unknown, file: string): CapabilityDocument 
   if (updatedAt !== undefined && typeof updatedAt !== 'string') throw invalid(file, '"updatedAt" must be a string')
   return {
     version: DOCUMENT_VERSION,
+    global,
     presets,
     sessions,
     sessionPresets,
@@ -463,14 +470,18 @@ export class CapabilityStateStore {
    */
   switchOrigin(ref: ScopeRef, dimension: SwitchDimension, id: string): SwitchOrigin {
     const own = this.switchValue(ref, dimension, id)
-    if (ref.kind === 'preset') return own === undefined ? 'default' : 'preset'
+    if (ref.kind === 'global') return own === undefined ? 'default' : 'global'
+    if (ref.kind === 'preset') {
+      if (own !== undefined) return 'preset'
+      return this.switchValue({ kind: 'global' }, dimension, id) === undefined ? 'default' : 'global'
+    }
     if (own !== undefined) return 'session'
     const presetId = this.sessionPreset(ref.id)
     if (presetId !== undefined) {
       const inherited = this.switchValue({ kind: 'preset', id: presetId }, dimension, id)
       if (inherited !== undefined) return 'preset'
     }
-    return 'default'
+    return this.switchValue({ kind: 'global' }, dimension, id) === undefined ? 'default' : 'global'
   }
 
   /** The queue of one session. */
@@ -495,6 +506,14 @@ export class CapabilityStateStore {
    * @throws CapabilityHostError `SCOPE_READ_ONLY` when a static tool is addressed.
    */
   async setSwitch(ref: ScopeRef, dimension: SwitchDimension, id: string, enabled: boolean): Promise<void> {
+    if (ref.kind === 'global') {
+      const nextSwitches = { ...(this.document.global[dimension] ?? {}), [id]: enabled }
+      await this.commit({
+        ...this.document,
+        global: { ...this.document.global, [dimension]: nextSwitches },
+      })
+      return
+    }
     const section = ref.kind === 'preset' ? this.document.presets : this.document.sessions
     const current = section[ref.id] ?? {}
     const nextSwitches = { ...(current[dimension] ?? {}), [id]: enabled }
@@ -560,6 +579,7 @@ export class CapabilityStateStore {
    * @returns the stored record.
    */
   private scopeRecord(ref: ScopeRef): ScopeStateRecord {
+    if (ref.kind === 'global') return this.document.global
     return (ref.kind === 'preset' ? this.document.presets : this.document.sessions)[ref.id] ?? {}
   }
 

@@ -1,6 +1,6 @@
 # ElyH 预设管理器方案（v2）
 
-> 状态：已实现，2026-11-22。范围：本地 Web 的预设创建、列表、删除与工具面配置。
+> 状态：已实现（v2.1，2026-11-24）。范围：本地 Web 的预设创建、列表、删除、工具面配置，以及可选的模型预设工具。
 > 不在范围：提示词内容编辑、会话创建、模型选择、cwd/workspace、渠道桥接、记忆检索。
 > 关键约束：预设只做“这个预设是谁、看哪些提示词文件、给哪些工具”；工具面由代码维护的封闭目录生成，每个可选项在宿主启动后都经过一次真实激活探测。
 
@@ -13,6 +13,7 @@
 3. 创建时配置工具面：每个可用工具一个开关；默认工具面只有网络搜索；可选默认/常见/现有预设/自定义工具面；选面即改写全部开关。
 4. 自定义工具面可命名保存、可删除；默认、常见、现有预设工具面只读。
 5. 创建后不编辑内容；要改就删除后重建。
+6. 可选：模型通过 `preset_list` / `preset_create` 自行发现可用资源并创建预设；默认关闭，由预设面板的“为模型全局注入预设管理工具”开关控制（Host global tool state），首次值可由 `global` 配置播种。
 
 预设管理器不创建会话。创建预设只是把一份 composition 注册进 DSH roster；会话仍然由用户或会话运行时创建。
 
@@ -344,7 +345,37 @@ interface PresetManager {
 
 Client 通过 RPC 调这些方法；不直接写文件、不直接调 `agentPresets.register()`。
 
-## 12. 错误与安全
+Host 行另有一个 `global` 布尔配置（默认 `false`），不属于面板 API：它只作为**预设面板全局开关的首次默认值**。开关状态由 `@elysia/capability-core` 的 global tool state 持久化在 `capability-state.json`，之后的运行时状态以它为准。
+
+## 12. 模型工具（v2.1）
+
+预设面板有 **“为模型全局注入预设管理工具”** 开关，默认关闭；它位于页头标题栏右侧，与“新建预设/刷新”同一行，是一行紧凑控件，不单独占“模型工具”卡片。插件只把两个工具发布为 `scope: 'global'` 的 catalog 条目；开关通过 `@elysia/capability-core` 的 `setTool({ kind: 'global' }, ...)` 读写同一份 global tool state，由同一个 catalog/gate/guard 生效。关闭时 catalog 条目仍在，能力面板可按预设/会话启用；打开时 global gate 打开，下一步模型请求即包含两个工具，不需要重新注册工具、重启或新会话。插件只依赖 `@elysia/capability-core`；没有面板时 `ensureCapabilityCore` 自行挂载核心，模型工具仍可用。
+
+核心的挂载是异步的：`apply()` 先 `ensureCapabilityCore`（已有核心则复用，没有则在 application root 挂一次），再用 `ctx.inject(['capabilityHost'], ...)` 等待服务出现，先 `await host.ready` 再注册，并用注入作用域的 effect 管理两条 catalog 注册。预设管理器可单独挂载，面板可单独挂载；两者任意顺序共用一个核心，面板都能看到条目。核心消失或插件卸载时条目会被清理。顺序/独立测试在 `tests/tools.spec.ts`。
+
+| 工具 | 行为 |
+|---|---|
+| `preset_list` | 只读，不写管理器文档。返回合并后的预设列表、工具目录（含 `available` / `reason`）与全部工具面；传 `promptRoot` 时额外返回该目录下非空的 `.md` 文件及大小。 |
+| `preset_create` | 校验草稿、解析 prompt root 与文件、申请本次调用的权限，再调用 `presetManager.create()`；返回创建结果（id、名称、文件、工具、顺序、工具面来源）。 |
+
+catalog 条目带 `nameZh`：`preset_create` → 创建预设，`preset_list` → 列出预设；条目由能力面板按预设/会话启用，默认全部关闭。开关只写核心的 global 工具状态（`capability-state.json`），不注册/注销工具；核心在下一步 `when` 和调用 guard 中读取同一状态，因此关闭后已准入但未执行的调用会被拒绝。开关需要核心；核心缺失/挂载失败时以 `TOOLS_UNAVAILABLE` 拒绝。有效优先级是 `session > preset > global`：显式预设开/关覆盖全局，显式 session 覆盖两者。
+
+`preset_create` 参数与创建页同源：
+
+- `id` / `name` / `identity` / `promptRoot` 必填。
+- `promptFiles` 可选；省略时取 root 下所有**非空** `.md`，按文件名排序。显式列表在权限询问前先规范化并逐个校验，路径或内容有误不会弹审批。
+- `tools` 可选；省略时取默认面（`tool-web`），若同时给了 `toolFace` 则取该面的工具集；空数组为纯对话面。参数 `enum` 直接来自代码目录；请求的 id 在探测结果里 `available: false` 时，工具在权限询问前以 `TOOL_UNAVAILABLE` 拒绝。
+- `description` / `toolFace` / `agentInstructions` / `order` 可选，语义与创建页一致。`toolFace` 必须对应当前目录里的一个面；过期的来源引用在权限询问前以 `TOOL_FACE_NOT_FOUND` 拒绝。同时给 `toolFace` 与 `tools` 时两者必须是同一个工具集，记录按面的顺序保存；不一致以 `TOOL_FACE_INVALID` 拒绝。
+
+权限：`preset_create` 要求 `danger-full-access`。会话已经是该模式时直接执行；更窄的会话通过 DSH approval seam 为本次调用申请一次性放宽。这里的审批是“允许 Host 直接写管理器文档”的授权，不是把某个子进程切到 full access；文档写入不走沙箱命令。缺少 `sandboxPolicy` 时以 `SANDBOX_POLICY_UNAVAILABLE` fail closed；需要放宽但没有 approval 通道时以 `SANDBOX_ESCALATION_UNAVAILABLE` fail closed。两种情况都不会静默写入。
+
+错误：Host service 的稳定 code 在工具边界转成 `HarnessError` code（如 `PRESET_ID_EXISTS`、`PROMPT_FILE_INVALID`），会话日志记录同一个判别值。工具侧还会给出 `TOOL_UNAVAILABLE`、`TOOL_FACE_NOT_FOUND` 和 `SANDBOX_*`；参数结构错误仍是 `INVALID_ARGS`。
+
+创建预设不创建、不切换会话。已有会话保留其记录的预设；新预设只对之后新开的会话可选。
+
+配置：`global` 只写首次默认值，包自带 patch 写 `false`；本仓库 web profile 不再覆盖为 `true`，所以首次安装后面板开关是关闭的。需要改首次默认值时可用 profile patch 覆盖该行（patch 的 config 整块替换，必须同时重写 `stateDir`）；之后以 `@elysia/capability-core` 的 global state 为准，开关写入 `capability-state.json`，重启后保留，显式关闭优先。
+
+## 13. 错误与安全
 
 | 错误 | 行为 |
 |---|---|
@@ -355,13 +386,15 @@ Client 通过 RPC 调这些方法；不直接写文件、不直接调 `agentPres
 | `PROMPT_FILE_OUTSIDE_ROOT` | 拒绝创建 |
 | `PROMPT_FILE_EMPTY` | 拒绝创建 |
 | `TOOL_UNKNOWN` | 拒绝创建/保存工具面 |
-| `TOOL_FACE_INVALID` | 拒绝创建/保存工具面（空名、空工具集） |
+| `TOOL_FACE_INVALID` | 拒绝创建/保存工具面（空名、空工具集、未知家族） |
 | `TOOL_FACE_EXISTS` | 拒绝保存同名自定义面 |
-| `TOOL_FACE_NOT_FOUND` | 拒绝删除不存在的自定义面 |
+| `TOOL_FACE_NOT_FOUND` | 拒绝创建/删除：引用的工具面不存在 |
 | `TOOL_FACE_READONLY` | 拒绝删除默认/常见/现有预设面 |
 | `PRESET_IN_USE` | 拒绝删除，返回会话列表 |
 | `PRESET_NOT_MANAGED` | 拒绝删除 |
 | `PRESET_REGISTER_FAILED` | 创建回滚，保留 diagnostic |
+
+`preset_create` 在模型边界还会给出 `TOOL_UNAVAILABLE`（请求的工具探测不可用）和 `TOOL_FACE_INVALID`（`toolFace` 与 `tools` 不一致）。
 
 安全要求：
 
@@ -372,7 +405,7 @@ Client 通过 RPC 调这些方法；不直接写文件、不直接调 `agentPres
 - 工具 id 只在代码目录里解析；文档里的未知 id 不会变成任意模块行。
 - 创建预设不等于创建会话；不要顺手起会话。
 
-## 13. 验收
+## 14. 验收
 
 1. 入口：左侧栏出现“预设”，点开进入列表页；资料页/设置页不再是唯一入口。
 2. 创建页：列表页点“新建预设”进入；点“返回”回到列表，列表仍可读。
@@ -385,9 +418,10 @@ Client 通过 RPC 调这些方法；不直接写文件、不直接调 `agentPres
 9. 旧文档：v1 文档读取后按 `["tool-web"]` 组装，且不被读取动作重写。
 10. 可用性：不可用工具在列表里标灰给原因，不进任何面。
 11. 删除预设不删自定义工具面。
-12. `pnpm test`、`pnpm run typecheck`、`pnpm run bundle` 全绿。
+12. 模型工具：预设面板有默认关闭的 **“为模型全局注入预设管理工具”** 开关；插件发布“创建预设”“列出预设”两个 `scope: 'global'` catalog 条目，能力面板可按预设/会话启用；开关通过 `@elysia/capability-core` 的 global state/gate/guard 生效，开/关在下一步工具清单生效、已准入但未执行的调用被 guard 拒绝；只装 preset-manager 不装面板时核心自行挂载、工具可用；状态持久化在 `capability-state.json`，卸载后条目/工具/中文名一起消失；优先级 `session > preset > global`；`preset_create` 能按参数创建，权限不足时拒绝且不写入。
+13. `pnpm test`、`pnpm run typecheck`、`pnpm run bundle` 全绿。
 
-## 14. 未决
+## 15. 未决
 
 - `identity` 已定为必填的“预设说明”，由 `prompt-files` 注入；不挂 `dsh-persona`。
 - 候选文件是否只允许 `.md`；当前只列 `.md`，避免误注入二进制。

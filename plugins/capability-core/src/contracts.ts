@@ -2,14 +2,14 @@
  * Host-side registration contracts. A provider declares what it contributes
  * once; the Host owns gating, ordering, and disposal. Nothing here is
  * JSON-serializable, so this module never reaches a browser half — the panel
- * reads {@link @elysia/capability-host/types} instead.
+ * reads {@link @elysia/capability-core/types} instead.
  *
  * v1.2 boundary: only **dynamic** tools are declared here. A preset's static
  * tool face is owned by preset-manager and read through
- * {@link @elysia/capability-host/static-tools}; the panel never registers,
+ * {@link @elysia/capability-core/static-tools}; the panel never registers,
  * unregisters, or switches it.
  *
- * @module @elysia/capability-host/contracts
+ * @module @elysia/capability-core/contracts
  */
 
 import type { Context } from '@deepseek-ai/cordis'
@@ -66,6 +66,8 @@ export type ToolFactory = (ctx: Context) => ToolDefinition
 export interface ToolCatalogEntry {
   /** Catalog id and registration name; must be unique. */
   readonly id: string
+  /** Chinese display name shown by the panel; required for new providers. */
+  readonly nameZh?: string
   /** Where it is registered. Unknown values are refused at registration. */
   readonly scope: ToolScope
   /** Model-facing description, also shown in the panel. */
@@ -98,6 +100,8 @@ export interface CatalogRecord {
 export interface ContextKindRegistration {
   /** Kind name publications carry. */
   readonly kind: string
+  /** Chinese display name shown by the panel; required for new providers. */
+  readonly nameZh?: string
   /** One line describing what the kind carries. */
   readonly description: string
   /** Whether publications wake a turn when the event omits `active`. */
@@ -114,6 +118,8 @@ export interface ContextKindRegistration {
 export interface ResolvedContextKind {
   /** Kind name. */
   readonly kind: string
+  /** Chinese display name, when the provider supplied one. */
+  readonly nameZh?: string
   /** One line description. */
   readonly description: string
   /** Default `active` for publications that omit it. */

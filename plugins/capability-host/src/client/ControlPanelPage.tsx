@@ -70,6 +70,20 @@ export function ControlPanelPage({ api, t }: ControlPanelPageProps): ReactNode {
     }
   }, [api, request])
 
+  // The preset manager and this panel share one core state. Poll while visible
+// so a switch made in the other panel shows up without a manual refresh.
+  useEffect(() => {
+    const refresh = (): void => {
+      if (document.visibilityState === 'visible') setRequest(value => value + 1)
+    }
+    const timer = window.setInterval(refresh, 5_000)
+    document.addEventListener('visibilitychange', refresh)
+    return () => {
+      window.clearInterval(timer)
+      document.removeEventListener('visibilitychange', refresh)
+    }
+  }, [])
+
   useEffect(() => {
     setDraft({})
     setDirty(false)

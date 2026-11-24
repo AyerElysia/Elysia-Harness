@@ -17,14 +17,21 @@ import type { Context } from '@deepseek-ai/cordis'
 import z from '@deepseek-ai/schemastery'
 import type { AgentPreset } from '@deepseek-ai/dsh-agent-preset-registry'
 import { Remote, RemoteError, TypertRemoteService } from '@deepseek-ai/dsh-typert-protocol'
+import { ensureCapabilityCore } from '@elysia/capability-core'
+import type {} from '@elysia/capability-core'
+import { join } from 'node:path'
 import type {
   CustomToolFaceInput, ToolFace, ToolFaceCatalog, ToolOption,
-  DeletePresetOptions, PresetDraft, PresetSummary, PromptCandidate,
+  DeletePresetOptions, PresetDraft, PresetModelToolsState, PresetSummary, PromptCandidate,
 } from './types.ts'
 import { PresetDocumentStore, type PresetRecord, type ToolFaceRecord } from './document.ts'
 import { buildPresetDefinition } from './definition.ts'
 import { PresetManagerError, describeError, type PresetErrorCode } from './errors.ts'
 import { normalizeDraft, readPromptCandidates, assertToolFaceName } from './validation.ts'
+import {
+  PRESET_CREATE_NAME_ZH, PRESET_CREATE_TOOL, PRESET_LIST_NAME_ZH, PRESET_LIST_TOOL,
+  buildPresetCreateTool, buildPresetListTool, sandboxPresetCreateGuard,
+} from './tools.ts'
 import {
   COMMON_FACES, DEFAULT_FACE_ID, DEFAULT_TOOL_IDS, TOOL_CATALOG, findTool,
   isToolModule, partitionToolIds, toolIdsForModules, toolRowsFor,
@@ -97,6 +104,11 @@ export class PresetManager extends TypertRemoteService {
   /** Resolves once the document is open and every owned preset is registered. */
   readonly ready: Promise<void>
 
+  /** Whether the plugin has started disposal; late inject callbacks must stop. */
+  get closed(): boolean {
+    return this.disposed
+  }
+
   private store: PresetDocumentStore | undefined
   private readonly disposers = new Map<string, () => Promise<void>>()
   private readonly pending = new Map<string, Promise<() => Promise<void>>>()
@@ -147,6 +159,79 @@ export class PresetManager extends TypertRemoteService {
         })
       }
       return rows
+    } catch (error: unknown) {
+      fail(error)
+    }
+  }
+
+  /**
+   * Read the capability host's global switch for this plugin's two tools.
+   * @returns global injection and whether the capability host is mounted.
+   */
+  @Remote('modelTools')
+  async modelTools(): Promise<PresetModelToolsState> {
+    try {
+      await this.ready
+      const host = this.ctx.get('capabilityHost')
+      if (host === undefined) return { global: false, capabilityHost: false }
+      const states = await host.globalTools()
+      return {
+        global: states[PRESET_CREATE_TOOL]?.enabled === true
+          && states[PRESET_LIST_TOOL]?.enabled === true,
+        capabilityHost: true,
+      }
+    } catch (error: unknown) {
+      fail(error)
+    }
+  }
+
+  /**
+   * Toggle the capability host's global switch for both tools. The host owns
+   * the catalog, gate, persistence, and in-flight guard; this method only
+   * proxies the panel's setTool call.
+   * @param enabled - true for global injection, false to fall back to
+   *   per-preset switches.
+   * @returns the new switch state.
+   */
+  @Remote('setModelToolsGlobal')
+  async setModelToolsGlobal(enabled: boolean): Promise<PresetModelToolsState> {
+    try {
+      await this.ready
+      if (typeof enabled !== 'boolean') {
+        throw new PresetManagerError('STATE_INVALID', 'the model-tools switch must be a boolean', {
+          reason: 'invalid-value',
+        })
+      }
+      const host = this.ctx.get('capabilityHost')
+      if (host === undefined) {
+        throw new PresetManagerError(
+          'TOOLS_UNAVAILABLE',
+          'the capability core is not mounted; global model tools cannot be toggled',
+          { reason: 'capability-core-missing' },
+        )
+      }
+      const ids = [PRESET_CREATE_TOOL, PRESET_LIST_TOOL]
+      const previous = await host.globalTools()
+      try {
+        for (const id of ids) await host.setTool({ kind: 'global' }, id, enabled)
+      } catch (error: unknown) {
+        for (const id of ids) {
+          const value = previous[id]?.enabled ?? false
+          try {
+            await host.setTool({ kind: 'global' }, id, value)
+          } catch {
+            // Keep the original failure; the panel can retry.
+          }
+        }
+        throw error instanceof PresetManagerError
+          ? error
+          : new PresetManagerError(
+            'TOOLS_UNAVAILABLE',
+            `global model tools could not be toggled: ${describeError(error)}`,
+            { reason: describeError(error) },
+          )
+      }
+      return await this.modelTools()
     } catch (error: unknown) {
       fail(error)
     }
@@ -617,11 +702,18 @@ function unmanagedRow(preset: AgentPreset, inUse: readonly string[]): PresetSumm
 export interface Config {
   /** Absolute directory holding the manager document. */
   stateDir: string
+  /**
+   * First-run value of the capability host's global switch for this plugin's
+   * tools. The host persists the operator's choice; this config seeds it only
+   * when no explicit value has been stored. Defaults to false.
+   */
+  global?: boolean
 }
 
 /** Validation for {@link Config}: a missing or relative directory fails at load. */
 export const Config: z<Config> = z.object({
   stateDir: z.string().required(),
+  global: z.boolean().default(false),
 })
 
 /** Cordis plugin name used by loader diagnostics. */
@@ -638,6 +730,74 @@ export const inject = ['agentPresets', 'agents']
  */
 export async function apply(ctx: Context, config: Config): Promise<void> {
   const manager = new PresetManager(ctx, config)
+  // No tools service means no model-facing tools; the manager panel still
+  // opens, and the switch reports capabilityHost:false.
+  if (ctx.get('tools') === undefined) {
+    await manager.ready
+    return
+  }
+  // Mount the shared Host-only core when the panel (or an explicit core row)
+  // has not mounted it. The core owns the catalog, global state, gate, guard,
+  // and persistence; this package never imports the panel package.
+  await ensureCapabilityCore(ctx, {
+    stateDir: join(config.stateDir, 'capability-core'),
+  })
+  const guard = sandboxPresetCreateGuard(ctx, config.stateDir)
+  const createDefinition = buildPresetCreateTool(manager, guard)
+  const listDefinition = buildPresetListTool(manager)
+
+  // `capabilityHost` is provided by the core. The inject callback re-registers
+  // if the service is ever replaced; its scoped effect cleans the catalog.
+  ctx.inject(['capabilityHost'], async scoped => {
+    const host = scoped.get('capabilityHost')
+    if (host === undefined) return
+    // The Host creates its catalog asynchronously; registering before its
+    // runtime exists would be lost or throw.
+    await host.ready
+    await manager.ready
+    // The callback can outlive the plugin or the service while awaiting; do
+    // not register into a dead context.
+    if (manager.closed) return
+    const live = scoped.get('capabilityHost')
+    if (live === undefined) return
+
+    scoped.effect(() => {
+      const disposeCreate = live.registerTool({
+        id: PRESET_CREATE_TOOL,
+        nameZh: PRESET_CREATE_NAME_ZH,
+        scope: 'global',
+        description: createDefinition.description,
+        required: ['tools', 'sandboxPolicy'],
+        failureMode: 'closed',
+        factory: () => createDefinition,
+      })
+      const disposeList = live.registerTool({
+        id: PRESET_LIST_TOOL,
+        nameZh: PRESET_LIST_NAME_ZH,
+        scope: 'global',
+        description: listDefinition.description,
+        required: ['tools'],
+        failureMode: 'closed',
+        factory: () => listDefinition,
+      })
+      return () => {
+        disposeList()
+        disposeCreate()
+      }
+    }, 'elysia-preset-manager.model-tools')
+
+    // Only seed the Host global state on its first run. Once the operator has
+    // written an explicit value, Config.global must not override it.
+    if (config.global === true) {
+      const states = await live.globalTools()
+      for (const id of [PRESET_CREATE_TOOL, PRESET_LIST_TOOL]) {
+        if (states[id]?.stored !== true) await live.setTool({ kind: 'global' }, id, true)
+      }
+    }
+  })
+
+  // Surface document/registration failures at mount time; the inject callback
+  // re-awaits this promise before touching the catalog.
   await manager.ready
 }
 
