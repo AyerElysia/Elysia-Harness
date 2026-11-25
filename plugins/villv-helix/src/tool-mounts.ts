@@ -146,7 +146,7 @@ interface MountedSession {
  * @param enabled - tool ids currently allowed for this session.
  * @returns a child context whose `tools.register` composes the gate.
  */
-function gateContext(ctx: Context, owned: Set<string>): Context {
+function gateContext(ctx: Context, enabled: Set<string>, owned: Set<string>): Context {
   const tools = ctx.tools
   const proxy = new Proxy(tools, {
     get(target, property) {
@@ -154,11 +154,17 @@ function gateContext(ctx: Context, owned: Set<string>): Context {
         return (definition: ToolDefinition, options: ToolRegistrationOptions = {}) => {
           const name = definition.name
           if (!MANAGED_TOOL_IDS.has(name)) return target.register(definition, options)
-          // Keep the declaration visible for the tool's mounted lifetime. The
-          // live guard below is the only place a disabled name becomes an
-          // error, so the model cannot silently fall through to another tool
-          // merely because the name vanished from its schema.
-          const dispose = target.register(definition, options)
+          // The registration stays stable; only enabled names enter the
+          // model-facing declaration. The live guard still catches a stale
+          // held tool set as UNKNOWN_TOOL.
+          const original = options.when
+          const dispose = target.register(definition, {
+            ...options,
+            when: async (context) => {
+              if (!enabled.has(name)) return false
+              return original === undefined ? true : await original(context)
+            },
+          })
           owned.add(name)
           return () => {
             owned.delete(name)
@@ -285,7 +291,7 @@ export class SessionToolMounts {
       session = {
         enabled: gate,
         owned,
-        ctx: gateContext(agent.ctx, owned),
+        ctx: gateContext(agent.ctx, gate, owned),
         suites: new Map(),
         disposeGuard,
       }

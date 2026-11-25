@@ -12,7 +12,6 @@
 
 import type { Context } from '@deepseek-ai/cordis'
 import type { Agent } from '@deepseek-ai/dsh-agent'
-import { createDeveloperMessage } from '@deepseek-ai/dsh-llm'
 import { SessionId } from '@deepseek-ai/dsh-session'
 import { foldSessionTitle } from '@deepseek-ai/dsh-session-title'
 import { scopeChainOf, scopeOf } from '@deepseek-ai/dsh-scope'
@@ -106,7 +105,7 @@ export class VillVHelix extends TypertRemoteService {
   private readonly restrictions = new Map<string, AppliedRestriction>()
   private readonly presetStaticIds = new Map<string, ReadonlySet<string>>()
   private readonly toolMounts = new SessionToolMounts()
-  private readonly pendingFaces = new Map<string, { added: Set<string>; removed: Set<string> }>()
+  private readonly faceContexts = new Map<string, () => void>()
   private readonly toolNames = new Map<string, string>()
   private reconciling = false
   private restrictionFailures = 0
@@ -291,7 +290,6 @@ export class VillVHelix extends TypertRemoteService {
         }
         throw new VillvHelixError('TOOL_UNKNOWN', `tool ${JSON.stringify(toolId)} is not a global tool`, { toolId, sessionId })
       }
-      const wasEnabled = this.requireStore().enabledTools(sessionId).includes(toolId)
       await this.requireStore().setTool(sessionId, toolId, enabled)
       this.capturePresetStatics(agent)
       this.applyRestriction(agent)
@@ -299,7 +297,6 @@ export class VillVHelix extends TypertRemoteService {
       await this.toolMounts.reconcile(
         agent, store.orchestrated(sessionId), new Set(store.enabledTools(sessionId)),
       )
-      if (enabled !== wasEnabled) this.queueFaceChange(sessionId, toolId, enabled)
       this.emit({ action: 'setTool', sessionId, id: toolId, enabled })
     } catch (error: unknown) {
       fail(error)
@@ -398,17 +395,17 @@ export class VillVHelix extends TypertRemoteService {
       maxSnapshotBytes: this.config.maxSnapshotBytes,
     })
     this.bus.attach()
-    this.ctx.on('agent/created', () => { this.reconcile() })
+    this.ctx.on('agent/created', ({ agent }) => {
+      this.installFaceContext(agent)
+      this.reconcile()
+    })
     this.ctx.on('agent/disposed', ({ agent }) => {
       this.restrictions.get(agent.session.id)?.release()
       this.restrictions.delete(agent.session.id)
       this.presetStaticIds.delete(agent.session.id)
-      this.pendingFaces.delete(agent.session.id)
+      this.faceContexts.get(agent.session.id)?.()
+      this.faceContexts.delete(agent.session.id)
       this.toolMounts.dispose(agent.session.id)
-    })
-    this.ctx.on('agent/pre-step', (payload, next) => {
-      this.flushFaceNotice(payload.agent, payload.turn, payload.step)
-      return next()
     })
     this.ctx.on('tools/change', () => {
       // Static preset rows may register after the Agent is created. Keep the
@@ -423,94 +420,49 @@ export class VillVHelix extends TypertRemoteService {
     this.reconcile()
   }
 
-  /** Queue one special-tool face change for the next model step. */
-  private queueFaceChange(sessionId: string, toolId: string, enabled: boolean): void {
-    if (!MANAGED_TOOL_IDS.has(toolId)) return
-    let pending = this.pendingFaces.get(sessionId)
-    if (pending === undefined) {
-      pending = { added: new Set(), removed: new Set() }
-      this.pendingFaces.set(sessionId, pending)
-    }
-    if (enabled) {
-      pending.removed.delete(toolId)
-      pending.added.add(toolId)
-    } else {
-      pending.added.delete(toolId)
-      pending.removed.add(toolId)
-    }
-  }
-
   /**
-   * Inject one detailed face notice before the next step. All special tools are
-   * declared permanently, so the ordinary tool-registry diff cannot describe
-   * enable/disable changes; this message is the model-facing source of truth.
-   */
-  private flushFaceNotice(agent: Agent, turn: number, step: number): void {
+ * Register the durable model-facing special-tool face. Developer messages are
+ * a UI/history channel; this context is the copy the provider actually sends
+ * on every request, so the model cannot mistake the advertised schema for the
+ * enabled set.
+ */
+  private installFaceContext(agent: Agent): void {
     const sessionId = agent.session.id
-    const pending = this.pendingFaces.get(sessionId)
-    if (pending === undefined) return
-    this.pendingFaces.delete(sessionId)
-    try {
-      const store = this.requireStore()
-      const labels = new Map(MANAGED_SUITES.flatMap(suite => suite.tools.map(tool => [tool.id, `${tool.nameZh}（${tool.id}）`] as const)))
-      const label = (id: string): string => labels.get(id) ?? id
-      const enabled = new Set(store.enabledTools(sessionId).filter(id => MANAGED_TOOL_IDS.has(id)))
-      const all = [...MANAGED_TOOL_IDS]
-      const enabledNames = all.filter(id => enabled.has(id))
-      const disabledNames = all.filter(id => !enabled.has(id))
-      const changes: string[] = []
-      if (pending.added.size > 0) changes.push(`本轮启用：${[...pending.added].map(label).join('、')}`)
-      if (pending.removed.size > 0) changes.push(`本轮停用：${[...pending.removed].map(label).join('、')}`)
-      const text = [
-        '特殊工具面已更新，本轮生效。',
-        `已启用：${enabledNames.map(label).join('、') || '无'}`,
-        `未启用/不可用：${disabledNames.map(label).join('、') || '无'}`,
-        ...changes,
-        '调用规则：只有“已启用”中的特殊工具可以执行；调用未启用的特殊工具必须返回 UNKNOWN_TOOL，禁止改用 web_search、web_fetch 或其他工具替代。需要未启用的能力时，先请求用户开启。',
-      ].join('\n')
-
-      const headerEvent = agent.session.snapshotEvents()
-        .filter(event => event.type === 'request/header')
-        .at(-1)
-      const headerNames = new Set(headerEvent?.type === 'request/header'
-        ? headerEvent.data.header.tools?.map(tool => tool.name) ?? []
-        : [])
-      const additions = [...pending.added].filter(id => headerNames.has(id))
-      const changeContent: Parameters<typeof createDeveloperMessage>[0]['content'] = [
-        ...headerEvent !== undefined && additions.length > 0
-          ? additions.map(toolName => ({ type: 'tool-addition' as const, toolName }))
-          : [],
-        ...[...pending.removed].map(toolName => ({ type: 'tool-removal' as const, toolName })),
-      ]
-      if (changeContent.length > 0) {
-        agent.session.append('developer/message', {
-          turn,
-          step,
-          ...headerEvent !== undefined && additions.length > 0 ? { headerSeq: headerEvent.seq } : {},
-          message: createDeveloperMessage({ source: { kind: 'tool-registry' }, content: changeContent }),
-        }, { surfaceOp: 'append' })
-      }
-      agent.session.append('developer/message', {
-        turn,
-        step,
-        message: createDeveloperMessage({
-          source: { kind: 'tool-registry' },
-          content: [{ type: 'text', text }],
-        }),
-      }, { surfaceOp: 'append' })
-    } catch (error: unknown) {
-      this.ctx.logger.warn(`villv-helix: cannot append face notice: ${describeError(error)}`)
-    }
+    if (this.faceContexts.has(sessionId)) return
+    const dispose = agent.ctx.systemPrompt.context({
+      name: 'villv-helix:special-tools',
+      order: 900,
+      text: () => this.faceContextText(sessionId),
+    })
+    this.faceContexts.set(sessionId, dispose)
   }
 
-  /** Reinstall every live Agent's stored deny mask and managed mounts when they differ. */
+  private faceContextText(sessionId: string): string {
+    const store = this.store
+    if (store === undefined || !store.orchestrated(sessionId)) return ''
+    const labels = new Map(MANAGED_SUITES.flatMap(suite => suite.tools.map(tool => [tool.id, `${tool.nameZh}（${tool.id}）`] as const)))
+    const label = (id: string): string => labels.get(id) ?? id
+    const enabled = new Set(store.enabledTools(sessionId).filter(id => MANAGED_TOOL_IDS.has(id)))
+    const all = [...MANAGED_TOOL_IDS]
+    return [
+      '[VillV-Helix 特殊工具面]',
+      `已启用：${all.filter(id => enabled.has(id)).map(label).join('、') || '无'}`,
+      `未启用/不可用：${all.filter(id => !enabled.has(id)).map(label).join('、') || '无'}`,
+      '调用规则：只有“已启用”中的特殊工具可以执行；调用未启用的特殊工具必须返回 UNKNOWN_TOOL，禁止改用 web_search、web_fetch 或其他工具替代。需要未启用的能力时，先请求用户开启。',
+    ].join('\n')
+  }
+
+/** Reinstall every live Agent's stored deny mask and managed mounts when they differ. */
   private reconcile(): void {
     if (this.reconciling) return
     this.reconciling = true
     try {
       const store = this.requireStore()
       const agents = this.ctx.agents.list()
-      for (const agent of agents) this.capturePresetStatics(agent)
+      for (const agent of agents) {
+        this.capturePresetStatics(agent)
+        this.installFaceContext(agent)
+      }
       for (const agent of agents) this.applyRestriction(agent)
       for (const agent of agents) {
         const sessionId = agent.session.id

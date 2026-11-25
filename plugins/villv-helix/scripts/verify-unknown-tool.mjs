@@ -6,16 +6,19 @@
  *
  * Checks:
  *  - bash and pwsh are part of the special-tool catalog;
- *  - a never-enabled special tool is declared but executes as UNKNOWN_TOOL;
- *  - an enabled special tool is actually usable;
- *  - add/remove notices are queued and only injected at the next pre-step;
- *  - the injected notice is detailed and includes the current face.
+ *  - a never-enabled special tool is absent from the model schema and a hard
+ *    call still executes as UNKNOWN_TOOL;
+ *  - an enabled special tool appears in the model schema and is usable;
+ *  - the model-visible face context is detailed, current, and safe (no session
+ *    message append that can corrupt the turn log).
  */
 import { mkdtemp, rm } from 'node:fs/promises'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import { Context } from '@deepseek-ai/cordis'
 import { ToolCallId } from '@deepseek-ai/dsh-llm'
+import { scopeOf } from '@deepseek-ai/dsh-scope'
+import { renderContextSnapshot } from '@deepseek-ai/dsh-system-prompt'
 import { SessionId } from '@deepseek-ai/dsh-session'
 import {
   mountAgentLoopTestDependencies, mountAgentLoopTestHarness,
@@ -51,8 +54,9 @@ const execute = async (name, args) => {
   })
   return batch.results[0]?.result
 }
-const messages = () => agent.session.snapshotEvents()
-  .filter(event => event.type === 'developer/message')
+const face = async () => renderContextSnapshot(
+  await ctx.systemPrompt.assemble({ scope: scopeOf(agent.ctx) }),
+)
 
 try {
   await ctx.villvHelix.setMode(agent.session.id, true)
@@ -61,80 +65,66 @@ try {
     if (!catalog.includes(required)) throw new Error(`catalog is missing ${required}`)
   }
 
-  // Never enabled: declaration present, execution denied.
-  if (!ctx.tools.schemas(agent).some(tool => tool.name === 'read')) {
-    throw new Error('read declaration is missing before first enable')
+  // Never enabled: absent from the model schema, but a hard call is denied.
+  const before = await resolve()
+  const beforeNames = ctx.tools.schemas(agent, before).map(tool => tool.name)
+  if (beforeNames.includes('read')) {
+    throw new Error('read leaked into an empty special-tool step')
+  }
+  const beforeFace = await face()
+  if (!beforeFace.includes('特殊工具面') || !beforeFace.includes('读取文件（read）')) {
+    throw new Error(`disabled face is not model-visible: ${beforeFace}`)
   }
   const neverEnabled = await execute('read', { file_path: 'README.md' })
   if (neverEnabled?.error?.info?.code !== 'UNKNOWN_TOOL') {
     throw new Error(`never-enabled read did not fail closed: ${JSON.stringify(neverEnabled)}`)
   }
 
-  // Enable: queued notice, then usable.
-  const beforeEnableNotice = messages().length
+  // Enable: schema contains only the enabled special tool, and it executes.
   await ctx.villvHelix.setTool(agent.session.id, 'read', true)
-  if (messages().length !== beforeEnableNotice) {
-    throw new Error('enable notice was appended immediately instead of queued')
+  const afterEnable = await resolve()
+  const afterEnableNames = ctx.tools.schemas(agent, afterEnable).map(tool => tool.name)
+  if (!afterEnableNames.includes('read')) {
+    throw new Error('enabled read is missing from the model schema')
   }
-  await ctx.waterfall('agent/pre-step', {
-    agent,
-    messages: [],
-    turn: 2,
-    step: 1,
-    signal,
-    modelSelection: { provider: 'mock', model: 'mock' },
-  }, async () => ({ kind: 'enter', messages: [] }))
-  const enableNotice = messages().at(-1)
-  const enableText = enableNotice?.type === 'developer/message'
-    ? enableNotice.data.message.content.flatMap(block => block.type === 'text' ? [block.text] : []).join('\n')
-    : ''
-  if (!enableText.includes('特殊工具面已更新') || !enableText.includes('本轮启用')) {
-    throw new Error(`enable notice is not detailed: ${JSON.stringify(enableText)}`)
+  const enabledFace = await face()
+  if (!enabledFace.includes('已启用') || !enabledFace.includes('读取文件（read）')) {
+    throw new Error(`enabled face is not model-visible: ${enabledFace}`)
   }
   const enabledRead = await execute('read', { file_path: 'README.md' })
   if (enabledRead?.isError) {
     throw new Error(`enabled read failed: ${JSON.stringify(enabledRead)}`)
   }
 
-  // Disable: no immediate notice; next pre-step gets a removal + detailed face.
-  const beforeRemoveNotice = messages().length
+  // Disable: schema drops it again; a stale/current call fails closed.
   await ctx.villvHelix.setTool(agent.session.id, 'read', false)
-  const immediateRemoval = messages().slice(beforeRemoveNotice).some(event => event.type === 'developer/message'
-    && event.data.message.content.some(block => block.type === 'tool-removal' && block.toolName === 'read'))
-  if (immediateRemoval) throw new Error('disable notice was appended immediately')
-  await ctx.waterfall('agent/pre-step', {
-    agent,
-    messages: [],
-    turn: 3,
-    step: 1,
-    signal,
-    modelSelection: { provider: 'mock', model: 'mock' },
-  }, async () => ({ kind: 'enter', messages: [] }))
-  const removeMessages = messages().slice(beforeRemoveNotice)
-  const removeText = removeMessages
-    .flatMap(event => event.type === 'developer/message' ? event.data.message.content : [])
-    .flatMap(block => block.type === 'text' ? [block.text] : []).join('\n')
-  const hasRemoval = removeMessages.some(event => event.type === 'developer/message'
-    && event.data.message.content.some(block => block.type === 'tool-removal' && block.toolName === 'read'))
+  const afterDisable = await resolve()
+  const afterDisableNames = ctx.tools.schemas(agent, afterDisable).map(tool => tool.name)
+  if (afterDisableNames.includes('read')) {
+    throw new Error('disabled read leaked into the next model schema')
+  }
+  const disabledFace = await face()
+  if (!disabledFace.includes('未启用/不可用') || !disabledFace.includes('读取文件（read）')) {
+    throw new Error(`disabled face is not model-visible: ${disabledFace}`)
+  }
   const disabledRead = await execute('read', { file_path: 'README.md' })
-
-  console.log(JSON.stringify({
-    catalog,
-    neverEnabledCode: neverEnabled?.error?.info?.code ?? null,
-    enabledReadIsError: enabledRead?.isError ?? null,
-    enableNoticeDetailed: enableText.includes('特殊工具面已更新') && enableText.includes('本轮启用'),
-    immediateDisableNotice: immediateRemoval,
-    disableNoticeDetailed: removeText.includes('特殊工具面已更新') && removeText.includes('本轮停用'),
-    disableNoticeHasToolRemoval: hasRemoval,
-    disabledReadCode: disabledRead?.error?.info?.code ?? null,
-  }, null, 2))
-
   if (disabledRead?.error?.info?.code !== 'UNKNOWN_TOOL') {
     throw new Error(`disabled read did not fail closed: ${JSON.stringify(disabledRead)}`)
   }
-  if (!hasRemoval || !removeText.includes('特殊工具面已更新')) {
-    throw new Error('removal notice is incomplete')
+
+  const output = {
+    catalog,
+    beforeNames,
+    afterEnableNames,
+    afterDisableNames,
+    neverEnabledCode: neverEnabled?.error?.info?.code ?? null,
+    enabledReadIsError: enabledRead?.isError ?? null,
+    disabledReadCode: disabledRead?.error?.info?.code ?? null,
+    disabledFaceModelVisible: beforeFace.includes('读取文件（read）'),
+    enabledFaceModelVisible: enabledFace.includes('已启用') && enabledFace.includes('读取文件（read）'),
+    disabledAgainFaceModelVisible: disabledFace.includes('未启用/不可用') && disabledFace.includes('读取文件（read）'),
   }
+  console.log(JSON.stringify(output, null, 2))
 } finally {
   await fiber.dispose()
   await ctx.fiber.dispose()
