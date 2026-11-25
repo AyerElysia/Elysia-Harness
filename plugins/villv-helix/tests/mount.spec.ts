@@ -45,8 +45,8 @@ describe('per-session tool mounts', () => {
 
     await ctx.villvHelix.setMode('mount-one', true)
     await ctx.villvHelix.setMode('mount-two', true)
-    // A session that has never enabled a special tool does not expose it to the
-    // model, but a hard call still fails closed rather than falling through.
+    // A session that has never enabled a special tool still exposes the stable
+    // declaration, but a hard call fails closed rather than falling through.
     const signal = new AbortController().signal
     const resolveFor = (agent: typeof first) => ctx.tools.resolve({
       agent,
@@ -57,8 +57,8 @@ describe('per-session tool mounts', () => {
       renderContextSnapshot(await ctx.systemPrompt.assemble({ scope: scopeOf(agent.ctx)! }))
     const beforeEnable = await resolveFor(first)
     const beforeSecond = await resolveFor(second)
-    expect(ctx.tools.schemas(first, beforeEnable).some(tool => tool.name === 'read')).toBe(false)
-    expect(ctx.tools.schemas(second, beforeSecond).some(tool => tool.name === 'read')).toBe(false)
+    expect(ctx.tools.schemas(first, beforeEnable).some(tool => tool.name === 'read')).toBe(true)
+    expect(ctx.tools.schemas(second, beforeSecond).some(tool => tool.name === 'read')).toBe(true)
     expect(await faceFor(first)).toContain('读取文件（read）')
     const beforeResult = await ctx.tools.execute({
       agent: first,
@@ -75,7 +75,7 @@ describe('per-session tool mounts', () => {
     const firstEnabled = await resolveFor(first)
     const secondAfterFirst = await resolveFor(second)
     expect(ctx.tools.schemas(first, firstEnabled).some(tool => tool.name === 'read')).toBe(true)
-    expect(ctx.tools.schemas(second, secondAfterFirst).some(tool => tool.name === 'read')).toBe(false)
+    expect(ctx.tools.schemas(second, secondAfterFirst).some(tool => tool.name === 'read')).toBe(true)
     expect(await faceFor(first)).toContain('读取文件（read）')
 
     await ctx.villvHelix.setTool('mount-one', 'plugin_market', true)
@@ -84,8 +84,8 @@ describe('per-session tool mounts', () => {
     const secondBeforeAny = await resolveFor(second)
     expect(ctx.tools.schemas(first, firstAllEnabled).some(tool => tool.name === 'plugin_market')).toBe(true)
     expect(ctx.tools.schemas(first, firstAllEnabled).some(tool => tool.name === 'plugin_manager')).toBe(true)
-    expect(ctx.tools.schemas(second, secondBeforeAny).some(tool => tool.name === 'plugin_market')).toBe(false)
-    expect(ctx.tools.schemas(second, secondBeforeAny).some(tool => tool.name === 'plugin_manager')).toBe(false)
+    expect(ctx.tools.schemas(second, secondBeforeAny).some(tool => tool.name === 'plugin_market')).toBe(true)
+    expect(ctx.tools.schemas(second, secondBeforeAny).some(tool => tool.name === 'plugin_manager')).toBe(true)
 
     // A mounted suite must remain stable after its own tools/change burst.
     await new Promise(resolve => setTimeout(resolve, 250))
@@ -107,9 +107,9 @@ describe('per-session tool mounts', () => {
       modelSelection: { provider: 'mock', model: 'mock' },
       signal,
     })
-    // The enabled-only declaration disappears from the next model surface, but
-    // the live guard makes both the stale and current sets fail closed.
-    expect(ctx.tools.schemas(first, toolSet).some(tool => tool.name === 'read')).toBe(false)
+    // The declaration stays stable for cache consistency; the live guard makes
+    // both the stale and current sets fail closed.
+    expect(ctx.tools.schemas(first, toolSet).some(tool => tool.name === 'read')).toBe(true)
     for (const admitted of [staleToolSet, toolSet]) {
       const result = await ctx.tools.execute({
         agent: first,
@@ -119,7 +119,7 @@ describe('per-session tool mounts', () => {
       })
       expect(result.results[0]?.result.error?.info?.code).toBe('UNKNOWN_TOOL')
     }
-    expect(ctx.tools.schemas(second, await resolveFor(second)).some(tool => tool.name === 'read')).toBe(false)
+    expect(ctx.tools.schemas(second, await resolveFor(second)).some(tool => tool.name === 'read')).toBe(true)
     await fiber.dispose()
   }, 20_000)
 })

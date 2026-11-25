@@ -125,7 +125,7 @@ interface MountedSuite {
 
 /** One orchestrated session's stable registry and its current gate. */
 interface MountedSession {
-  /** Tool ids visible at the next step. Mutated in place while mounted. */
+  /** Tool ids allowed to execute. Mutated in place while mounted. */
   readonly enabled: Set<string>
   /** Managed names actually registered by this session's suite mounts. */
   readonly owned: Set<string>
@@ -139,14 +139,14 @@ interface MountedSession {
 
 /**
  * Build an Agent-scoped context that leaves tool definitions registered and
- * gates their step-time visibility. Keeping the registration stable is what
- * makes a late disabled-name call a real `UNKNOWN_TOOL`: disposing a fiber
- * would instead make the call disappear entirely and invite a fallback tool.
+ * gates their execution. Keeping the registration stable is what makes a
+ * disabled-name call a real `UNKNOWN_TOOL`: disposing a fiber would instead
+ * make the call disappear entirely and invite a fallback tool.
  * @param ctx - exact Agent context.
  * @param enabled - tool ids currently allowed for this session.
  * @returns a child context whose `tools.register` composes the gate.
  */
-function gateContext(ctx: Context, enabled: Set<string>, owned: Set<string>): Context {
+function gateContext(ctx: Context, owned: Set<string>): Context {
   const tools = ctx.tools
   const proxy = new Proxy(tools, {
     get(target, property) {
@@ -154,23 +154,17 @@ function gateContext(ctx: Context, enabled: Set<string>, owned: Set<string>): Co
         return (definition: ToolDefinition, options: ToolRegistrationOptions = {}) => {
           const name = definition.name
           if (!MANAGED_TOOL_IDS.has(name)) return target.register(definition, options)
-          // The registration stays stable; only enabled names enter the
-          // model-facing declaration. The live guard still catches a stale
-          // held tool set as UNKNOWN_TOOL.
-          const original = options.when
+          // The declaration stays visible for the mounted lifetime, even while the
+          // tool is disabled; execution is the only availability boundary. This
+          // keeps a stale model choice as a real UNKNOWN_TOOL instead of making
+          // the name disappear and inviting a substitute tool.
           // Mark ownership before register: registration emits tools/change
           // synchronously, and the static snapshot must not mistake this
           // managed definition for a preset row.
           owned.add(name)
           let dispose: () => void
           try {
-            dispose = target.register(definition, {
-              ...options,
-              when: async (context) => {
-                if (!enabled.has(name)) return false
-                return original === undefined ? true : await original(context)
-              },
-            })
+            dispose = target.register(definition, options)
           } catch (error: unknown) {
             owned.delete(name)
             throw error
@@ -214,8 +208,8 @@ export class SessionToolMounts {
   private readonly failures = new Map<string, string>()
 
   /**
-   * Reconcile one Agent's managed tools. Once a suite has been enabled it stays
-   * mounted for the session; toggling only changes its stable `when` gate.
+   * Reconcile one Agent's managed tools. Every service-available suite mounts
+   * for the session; toggling only changes the pre-execute gate.
    * @param agent - live Agent whose scope receives the tools.
    * @param orchestrated - whether 会话编排模式 is active for the session.
    * @param enabled - explicitly enabled managed tool ids.
@@ -305,7 +299,7 @@ export class SessionToolMounts {
       session = {
         enabled: gate,
         owned,
-        ctx: gateContext(agent.ctx, gate, owned),
+        ctx: gateContext(agent.ctx, owned),
         suites: new Map(),
         disposeGuard,
       }

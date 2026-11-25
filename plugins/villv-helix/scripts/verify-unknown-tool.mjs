@@ -65,11 +65,12 @@ try {
     if (!catalog.includes(required)) throw new Error(`catalog is missing ${required}`)
   }
 
-  // Never enabled: absent from the model schema, but a hard call is denied.
+  // Never enabled: the stable declaration remains in the model schema, while a
+  // hard call is denied.
   const before = await resolve()
   const beforeNames = ctx.tools.schemas(agent, before).map(tool => tool.name)
-  if (beforeNames.includes('read')) {
-    throw new Error('read leaked into an empty special-tool step')
+  if (!beforeNames.includes('read')) {
+    throw new Error('never-enabled read is missing from the stable model schema')
   }
   const beforeFace = await face()
   if (!beforeFace.includes('特殊工具面') || !beforeFace.includes('读取文件（read）')) {
@@ -103,8 +104,8 @@ try {
   await ctx.villvHelix.setTool(agent.session.id, 'read', false)
   const afterDisable = await resolve()
   const afterDisableNames = ctx.tools.schemas(agent, afterDisable).map(tool => tool.name)
-  if (afterDisableNames.includes('read')) {
-    throw new Error('disabled read leaked into the next model schema')
+  if (!afterDisableNames.includes('read')) {
+    throw new Error('disabled read disappeared from the stable model schema')
   }
   const disabledFace = await face()
   if (!disabledFace.includes('未启用/不可用') || !disabledFace.includes('读取文件（read）')) {

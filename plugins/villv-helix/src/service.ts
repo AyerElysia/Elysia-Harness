@@ -452,10 +452,14 @@ export class VillVHelix extends TypertRemoteService {
     const label = (id: string): string => labels.get(id) ?? id
     const enabled = new Set(store.enabledTools(sessionId).filter(id => MANAGED_TOOL_IDS.has(id)))
     const all = [...MANAGED_TOOL_IDS]
+    const staticIds = this.presetStaticIds.get(sessionId) ?? new Set<string>()
+    const locked = all.filter(id => staticIds.has(id) && !this.toolMounts.owns(sessionId, id))
+    const dynamic = all.filter(id => !locked.includes(id))
     return [
       '[VillV-Helix 特殊工具面]',
-      `已启用：${all.filter(id => enabled.has(id)).map(label).join('、') || '无'}`,
-      `未启用/不可用：${all.filter(id => !enabled.has(id)).map(label).join('、') || '无'}`,
+      `预设锁定（不可关闭）：${locked.map(label).join('、') || '无'}`,
+      `已启用：${dynamic.filter(id => enabled.has(id)).map(label).join('、') || '无'}`,
+      `未启用/不可用：${dynamic.filter(id => !enabled.has(id)).map(label).join('、') || '无'}`,
       '调用规则：只有“已启用”中的特殊工具可以执行。',
     ].join('\n')
   }
