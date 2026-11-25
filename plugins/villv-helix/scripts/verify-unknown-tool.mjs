@@ -75,6 +75,9 @@ try {
   if (!beforeFace.includes('特殊工具面') || !beforeFace.includes('读取文件（read）')) {
     throw new Error(`disabled face is not model-visible: ${beforeFace}`)
   }
+  if (beforeFace.includes('调用未启用的特殊工具必须返回') || beforeFace.includes('先请求用户开启')) {
+    throw new Error('removed substitution rule is still present in the face')
+  }
   const neverEnabled = await execute('read', { file_path: 'README.md' })
   if (neverEnabled?.error?.info?.code !== 'UNKNOWN_TOOL') {
     throw new Error(`never-enabled read did not fail closed: ${JSON.stringify(neverEnabled)}`)

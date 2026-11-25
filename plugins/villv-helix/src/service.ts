@@ -448,7 +448,7 @@ export class VillVHelix extends TypertRemoteService {
       '[VillV-Helix 特殊工具面]',
       `已启用：${all.filter(id => enabled.has(id)).map(label).join('、') || '无'}`,
       `未启用/不可用：${all.filter(id => !enabled.has(id)).map(label).join('、') || '无'}`,
-      '调用规则：只有“已启用”中的特殊工具可以执行；调用未启用的特殊工具必须返回 UNKNOWN_TOOL，禁止改用 web_search、web_fetch 或其他工具替代。需要未启用的能力时，先请求用户开启。',
+      '调用规则：只有“已启用”中的特殊工具可以执行。',
     ].join('\n')
   }
 
