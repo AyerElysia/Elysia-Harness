@@ -11,6 +11,7 @@ import { mkdtemp, rm } from 'node:fs/promises'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import { Context } from '@deepseek-ai/cordis'
+import { ToolCallId } from '@deepseek-ai/dsh-llm'
 import { SessionId } from '@deepseek-ai/dsh-session'
 import { defineTool } from '@deepseek-ai/dsh-tools'
 import {
@@ -93,6 +94,26 @@ describe('tool restrictions', () => {
 
     await env.ctx.villvHelix.setTool('s1', 'alpha_tool', true)
     expect(env.ctx.tools.schemas(env.agent).map(tool => tool.name)).toContain('alpha_tool')
+  })
+
+  it('turns a stale global call into UNKNOWN_TOOL after the switch is off', async () => {
+    const env = await setup()
+    const signal = new AbortController().signal
+    const admitted = await env.ctx.tools.resolve({
+      agent: env.agent,
+      modelSelection: { provider: 'mock', model: 'mock' },
+      signal,
+    })
+    await env.ctx.villvHelix.setTool('s1', 'alpha_tool', false)
+    const result = await env.ctx.tools.execute({
+      agent: env.agent,
+      signal,
+      toolSet: admitted,
+      calls: [{
+        type: 'tool-call', id: ToolCallId('stale-alpha'), name: 'alpha_tool', arguments: '{}',
+      }],
+    })
+    expect(result.results[0]?.result.error?.info?.code).toBe('UNKNOWN_TOOL')
   })
 
   it('refuses a tool the Host does not register globally', async () => {
