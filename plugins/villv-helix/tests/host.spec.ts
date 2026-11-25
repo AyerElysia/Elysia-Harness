@@ -145,6 +145,25 @@ describe('tool restrictions', () => {
       .rejects.toMatchObject({ code: 'villvHelix/TOOL_STATIC_LOCKED' })
   })
 
+  it('does not mistake a preset static read tool for a managed switch', async () => {
+    const env = await setup()
+    await env.agent.ctx.plugin({
+      name: 'test-static-read',
+      inject: ['tools'],
+      apply(scope: Context) {
+        scope.tools.register(defineTool({
+          name: 'read',
+          description: 'Preset-owned read.',
+          parameters: {},
+          output: { schema: { type: 'string' }, render: (_args, value) => text(String(value)) },
+          async execute() { return 'static-read' },
+        }))
+      },
+    })
+    await expect(env.ctx.villvHelix.setTool('s1', 'read', false))
+      .rejects.toMatchObject({ code: 'villvHelix/TOOL_STATIC_LOCKED' })
+  })
+
   it('lifts every installed mask when the plugin unloads', async () => {
     const env = await setup()
     await env.ctx.villvHelix.setTool('s1', 'alpha_tool', false)

@@ -158,14 +158,23 @@ function gateContext(ctx: Context, enabled: Set<string>, owned: Set<string>): Co
           // model-facing declaration. The live guard still catches a stale
           // held tool set as UNKNOWN_TOOL.
           const original = options.when
-          const dispose = target.register(definition, {
-            ...options,
-            when: async (context) => {
-              if (!enabled.has(name)) return false
-              return original === undefined ? true : await original(context)
-            },
-          })
+          // Mark ownership before register: registration emits tools/change
+          // synchronously, and the static snapshot must not mistake this
+          // managed definition for a preset row.
           owned.add(name)
+          let dispose: () => void
+          try {
+            dispose = target.register(definition, {
+              ...options,
+              when: async (context) => {
+                if (!enabled.has(name)) return false
+                return original === undefined ? true : await original(context)
+              },
+            })
+          } catch (error: unknown) {
+            owned.delete(name)
+            throw error
+          }
           return () => {
             owned.delete(name)
             dispose()
@@ -245,6 +254,11 @@ export class SessionToolMounts {
   /** Tools currently registered by a suite mount for one session. */
   mounted(sessionId: string, suiteId: string): readonly string[] {
     return this.sessions.get(sessionId)?.suites.get(suiteId)?.wanted ?? []
+  }
+
+  /** Whether this session's suite mounts, not a preset/static row, own a name. */
+  owns(sessionId: string, toolId: string): boolean {
+    return this.sessions.get(sessionId)?.owned.has(toolId) === true
   }
 
   /** Mount failure for one session/tool, when the optional package could not mount. */

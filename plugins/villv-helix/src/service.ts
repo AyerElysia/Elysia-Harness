@@ -283,7 +283,15 @@ export class VillVHelix extends TypertRemoteService {
     try {
       await this.ready
       const agent = this.requireAgent(sessionId)
+      // Capture the preset-owned surface before any managed suite can mount.
+      // A preset static tool that shares a managed id (read/edit/glob, ...) must
+      // stay locked rather than being mistaken for a switchable special tool.
+      this.capturePresetStatics(agent)
       const global = this.globalDefinitions()
+      const staticIds = this.presetStaticIds.get(sessionId) ?? new Set()
+      if (!global.has(toolId) && staticIds.has(toolId)) {
+        throw new VillvHelixError('TOOL_STATIC_LOCKED', '预设默认工具，不能关闭', { toolId, sessionId })
+      }
       if (!global.has(toolId) && !MANAGED_TOOL_IDS.has(toolId)) {
         if (this.agentDefinitions(agent).has(toolId)) {
           throw new VillvHelixError('TOOL_STATIC_LOCKED', '预设默认工具，不能关闭', { toolId, sessionId })
@@ -494,10 +502,10 @@ export class VillVHelix extends TypertRemoteService {
     const ids = new Set(this.presetStaticIds.get(sessionId) ?? [])
     for (const name of this.agentDefinitions(agent).keys()) {
       if (global.has(name)) continue
-      // A managed suite mounted into the Agent scope is not a preset row. Keep
-      // it out of this set; a genuinely preset-owned id was captured before
-      // the first mount and remains in the set.
-      if (MANAGED_TOOL_IDS.has(name) && !ids.has(name)) continue
+      // A managed suite mounted into the Agent scope is not a preset row. A
+      // same-id registration that is not owned by our mount is static and must
+      // stay locked; ownership, not the id alone, decides this.
+      if (MANAGED_TOOL_IDS.has(name) && !ids.has(name) && this.toolMounts.owns(sessionId, name)) continue
       ids.add(name)
     }
     this.presetStaticIds.set(sessionId, ids)
