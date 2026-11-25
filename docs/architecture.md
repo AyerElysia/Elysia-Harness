@@ -1,6 +1,7 @@
 # Elysia-Harness 架构
 
-> 新建插件前先读 [ElyH 插件开发规范](architecture/elyh-plugin-spec.zh.md)：包形状、全局工具开关、上下文注册、测试与交付清单。
+> 新建插件前先读 [ElyH 插件开发规范](architecture/elyh-plugin-spec.zh.md)：包形状、普通工具注册、上下文注册、测试与交付清单。
+> 编排插件迁移边界与开发顺序见 [Elysia/VillV-Helix 开发步骤](architecture/elysia-villv-helix-development.zh.md)。
 >
 > 状态：目标架构与现状盘点。最近一次核对：2026-11-17（潜意识 Router 表界观察与通用工具接入）。
 > 本文描述「一条主意识 session、四个渠道汇入」的目标形态，并逐层标注当前实现状态。

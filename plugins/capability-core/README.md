@@ -13,7 +13,7 @@ The core owns one source of truth for:
   `capability-host/change` alias);
 - persistence and restart recovery.
 
-The panel package (`@elysia/capability-host`) and the preset manager both
+The panel package (`@elysia/capability-panel`) and the preset manager both
 consume this service. Either can mount it when the other is absent.
 
 ## Mounting and sharing
@@ -28,8 +28,15 @@ The panel and the preset manager both call it, so either of these works:
 - both installed in either order.
 
 The core's tool switches are persisted in `<stateDir>/capability-state.json`.
-`global` is the deployment-wide default; `presets` and `sessions` store explicit
-overrides. An explicit preset `false` hides a globally enabled tool for that
+All consumers must pass the same canonical `stateDir`; this repository uses
+`dshHomePath('capability-core')`, so mount order or removing the panel cannot
+move persistence. `global` is the deployment-wide default; `presets` and
+`sessions` store explicit overrides.
+
+Upgrading a deployment that stored the old panel document in
+`capability-host/capability-state.json`: copy that file to
+`capability-core/capability-state.json` once before removing the old consumer.
+The old file is not read automatically because it is not a canonical core path. An explicit preset `false` hides a globally enabled tool for that
 preset, and a session override wins over both.
 
 ## Service surface
@@ -52,10 +59,13 @@ them.
 
 ## Configuration
 
-The row config is `stateDir` plus optional delivery limits (`hostState`,
+The config is `stateDir` plus optional delivery limits (`hostState`,
 `contextTtlMs`, `contextMaxBytes`, `contextQueueDepth`, `snapshotMaxEvents`,
-`snapshotMaxBytes`, `ownerId`). The core's Host entry is a normal bundle row when
-a deployment wants it explicitly; consumers can also mount it on demand.
+`snapshotMaxBytes`, `ownerId`). This package is a **library/internal service**,
+not a separately installable bundle: it has no `dsh.bundle`, no
+`cordis.patch.yml`, and no bundle row. Every consumer mounts the shared core
+through `ensureCapabilityCore`; the first one creates the root-owned service and
+later consumers reuse it.
 
 ## Tests
 

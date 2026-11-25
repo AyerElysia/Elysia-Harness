@@ -212,7 +212,11 @@ breeze-realtime-review/results/
 # reads, so they stay out of history.
 .playwright-mcp/
 
-# Capability host and preset-manager documents are per-home runtime state.
+# Orchestration and preset documents are per-home runtime state.
+homes/*/villv-helix/
+homes/*/mobius-infinity/
+# Legacy state kept only for migration/reference.
+homes/*/capability-core/
 homes/*/capability-host/
 homes/*/preset-manager/
 # Local profile backups kept by the archived v1 package.

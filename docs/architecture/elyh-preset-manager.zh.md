@@ -1,5 +1,7 @@
 # ElyH 预设管理器方案（v2）
 
+> **旧方案参考。** 预设管理插件的正式身份改为 **Elysia/Mobius-Infinity**（`@elysia/mobius-infinity` / `mobius-infinity`）。其中“模型全局注入预设管理工具”开关和 `capability-core` 依赖已废弃；新架构下工具插件不再提供全局开关。规范见 [ElyH 插件开发规范](elyh-plugin-spec.zh.md)，迁移步骤见 [开发步骤](elysia-villv-helix-development.zh.md)。
+>
 > 状态：已实现（v2.1，2026-11-24）。范围：本地 Web 的预设创建、列表、删除、工具面配置，以及可选的模型预设工具。
 > 不在范围：提示词内容编辑、会话创建、模型选择、cwd/workspace、渠道桥接、记忆检索。
 > 关键约束：预设只做“这个预设是谁、看哪些提示词文件、给哪些工具”；工具面由代码维护的封闭目录生成，每个可选项在宿主启动后都经过一次真实激活探测。
@@ -345,11 +347,11 @@ interface PresetManager {
 
 Client 通过 RPC 调这些方法；不直接写文件、不直接调 `agentPresets.register()`。
 
-Host 行另有一个 `global` 布尔配置（默认 `false`），不属于面板 API：它只作为**预设面板全局开关的首次默认值**。开关状态由 `@elysia/capability-core` 的 global tool state 持久化在 `capability-state.json`，之后的运行时状态以它为准。
+Host 行另有一个 `global` 布尔配置（默认 `false`），不属于面板 API：它只作为**预设面板全局开关的首次默认值**。开关状态由 `@elysia/capability-core` 的 global tool state 持久化在 canonical `homes/<surface>/capability-core/capability-state.json`，之后的运行时状态以它为准。`coreStateDir` 必须与面板的 `stateDir` 使用同一个 `dshHomePath('capability-core')`，不能由首个挂载者决定。
 
 ## 12. 模型工具（v2.1）
 
-预设面板有 **“为模型全局注入预设管理工具”** 开关，默认关闭；它位于页头标题栏右侧，与“新建预设/刷新”同一行，是一行紧凑控件，不单独占“模型工具”卡片。插件只把两个工具发布为 `scope: 'global'` 的 catalog 条目；开关通过 `@elysia/capability-core` 的 `setTool({ kind: 'global' }, ...)` 读写同一份 global tool state，由同一个 catalog/gate/guard 生效。关闭时 catalog 条目仍在，能力面板可按预设/会话启用；打开时 global gate 打开，下一步模型请求即包含两个工具，不需要重新注册工具、重启或新会话。插件只依赖 `@elysia/capability-core`；没有面板时 `ensureCapabilityCore` 自行挂载核心，模型工具仍可用。
+预设面板有 **“为模型全局注入预设管理工具”** 开关，默认关闭；它位于页头标题栏右侧，与“新建预设/刷新”同一行，是一行紧凑控件，不单独占“模型工具”卡片。插件只把两个工具发布为 `scope: 'global'` 的 catalog 条目；开关通过 `@elysia/capability-core` 的 `setTool({ kind: 'global' }, ...)` 读写同一份 global tool state，由同一个 catalog/gate/guard 生效。关闭时 catalog 条目仍在，能力面板可按预设/会话启用；打开时 global gate 打开，下一步模型请求即包含两个工具，不需要重新注册工具、重启或新会话。插件只依赖 `@elysia/capability-core`；没有面板时 `ensureCapabilityCore` 自行挂载核心，模型工具仍可用。开关成功后浏览器广播 `elysia:capability-changed`，已打开的能力面板立即重读快照（无 5 秒轮询）。
 
 核心的挂载是异步的：`apply()` 先 `ensureCapabilityCore`（已有核心则复用，没有则在 application root 挂一次），再用 `ctx.inject(['capabilityHost'], ...)` 等待服务出现，先 `await host.ready` 再注册，并用注入作用域的 effect 管理两条 catalog 注册。预设管理器可单独挂载，面板可单独挂载；两者任意顺序共用一个核心，面板都能看到条目。核心消失或插件卸载时条目会被清理。顺序/独立测试在 `tests/tools.spec.ts`。
 

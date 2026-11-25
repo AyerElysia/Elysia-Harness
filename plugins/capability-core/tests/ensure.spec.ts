@@ -3,11 +3,21 @@
  * reuse the same service even when they start from different contexts.
  */
 
+import { existsSync } from 'node:fs'
+import { readFile } from 'node:fs/promises'
 import { describe, expect, it } from 'vitest'
 import { ensureCapabilityCore, GLOBAL_PROBE_TOOL } from '../src/index.ts'
 import { createEnv } from './harness.ts'
 
 describe('ensureCapabilityCore', () => {
+  it('is a shared library, not a second installable plugin', async () => {
+    const pkg = JSON.parse(await readFile(new URL('../package.json', import.meta.url), 'utf8')) as {
+      dsh?: { bundle?: unknown }
+    }
+    expect(pkg.dsh?.bundle).toBeUndefined()
+    expect(existsSync(new URL('../cordis.patch.yml', import.meta.url))).toBe(false)
+  })
+
   it('mounts one core and reuses it for every consumer', async () => {
     const env = await createEnv()
     const first = await ensureCapabilityCore(env.ctx, { stateDir: env.stateDir })

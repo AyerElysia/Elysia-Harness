@@ -1,8 +1,0 @@
-# Host-only capability core. Mount this row when a deployment wants the shared
-# tool catalog/global state without the capability panel. The panel and the
-# preset manager also mount this service on demand when it is absent.
-- insert:
-    - id: elysia-capability-core
-      name: '@elysia/capability-core'
-      config:
-        stateDir: !!js dshHomePath('capability-core')

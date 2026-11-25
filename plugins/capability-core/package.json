@@ -1,6 +1,6 @@
 {
   "name": "@elysia/capability-core",
-  "description": "Host-only capability core: tool catalog, global/preset/session switches, step gate, call guard, change events, and persistence",
+  "description": "Host-only capability core library: tool catalog, global/preset/session switches, step gate, call guard, change events, and persistence",
   "version": "0.1.0",
   "private": true,
   "type": "module",
@@ -15,15 +15,13 @@
       "types": "./lib/capability-set.d.ts",
       "default": "./lib/capability-set.js"
     },
-    "./package.json": "./package.json",
-    "./cordis.patch.yml": "./cordis.patch.yml"
+    "./package.json": "./package.json"
   },
   "files": [
     "lib/**/*.js",
     "lib/**/*.d.ts",
     "lib/**/*.map",
     "src/**/*.ts",
-    "cordis.patch.yml",
     "README.md"
   ],
   "scripts": {
@@ -62,10 +60,5 @@
     "@types/node": "^22.20.1",
     "typescript": "^6.0.3",
     "vitest": "^4.1.11"
-  },
-  "dsh": {
-    "bundle": {
-      "patch": "./cordis.patch.yml"
-    }
   }
 }

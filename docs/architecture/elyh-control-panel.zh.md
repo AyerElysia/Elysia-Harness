@@ -1,12 +1,16 @@
 # ElyH 上下文事件 + 动态工具管理面板方案（v1.4）
 
+> **已废弃，仅作前端参考。** 新实现是 **Elysia/VillV-Helix**（`@elysia/villv-helix`），见
+> [开发步骤](elysia-villv-helix-development.zh.md) 与
+> [插件规范](elyh-plugin-spec.zh.md)。本文中的 `capability-core`、全局工具状态、catalog 和主面板入口不再作为新插件模板。
+
 > 状态：设计稿，2026-11-24；v1.3 修订动态工具发现：核心读取整个部署里所有预设/会话可见的工具并集，也支持 provider 通过 catalog 显式声明（带 `nameZh`）；只排除当前预设自带的静态工具，其余默认由 gate 关闭；被静态工具覆盖的项直接隐藏。
 > v1.3 日期：2026-11-23；DSH 原生工具的判定基准是 `standard` 预设静态工具面加 base bundle 全局核心工具；`plugin_market`、`cordis_inspect_*` 和外部 MCP 属于插件工具，分类旁提供一键全选复选框。
 > v1.3 面板交互：动态工具按功能分类、可折叠并显示类别启用数；工具名默认翻译，可关；工具组预设支持应用、命名创建、删除；工具开关只改草稿，动态工具区底部的“保存”才写入 Host；静态工具始终排在最后。
 > 状态：v1.2 历史边界仍有效：preset-manager 保留静态工具面，核心管理动态工具与上下文事件，面板只展示/操作；静态工具只读锁定。
 > 不在范围：预设内容编辑、预设创建/删除、提示词文件内容编辑、会话创建、模型选择、渠道桥接实现。
 > 关键约束：预设的静态工具面由 preset-manager 拥有，面板不能关闭；共享 Host 核心拥有动态工具/全局状态/上下文事件；面板只是核心的可选 Client；动态工具默认关闭；不新开会话。
-> v1.4 包边界：`@elysia/capability-core` 是 Host-only 核心；`@elysia/capability-host` 是可选 Client 面板；`@elysia/preset-manager` 只依赖核心。
+> v1.4 包边界：`@elysia/capability-core` 是 Host-only 核心；`@elysia/capability-panel` 是可选 Client 面板；`@elysia/preset-manager` 只依赖核心。核心状态目录统一为 `dshHomePath('capability-core')`，两个消费者传同一个值，不能由首个挂载者决定。面板与预设面板同浏览器时用 `elysia:capability-changed` 事件立即同步，不使用轮询。
 
 ## 1. 一句话
 
@@ -14,8 +18,8 @@
 
 面板由两部分组成：
 
-- `@elysia/capability-core`（Host-only）：负责 Tool Catalog、Gate、Context Bus、State Store、Session Registry、Capability Set、全局工具状态与持久化；不含 React/Client。
-- `@elysia/capability-host`（可选 Client 面板）：Host 入口只调用 `ensureCapabilityCore`（已有核心复用，没有则挂一次）；`dsh.client` 负责会话/预设列表、静态工具只读展示、动态工具开关、上下文事件开关、事件日志、健康面。没有这个包时核心和 preset-manager 仍然工作。
+- `@elysia/capability-core`（Host-only 库，不是插件/bundle）：负责 Tool Catalog、Gate、Context Bus、State Store、Session Registry、Capability Set、全局工具状态与持久化；不含 React/Client，也没有 `dsh.bundle`/`cordis.patch.yml`。
+- `@elysia/capability-panel`（可选 Client 面板，仍是**一个插件包**）：Host 入口只调用 `ensureCapabilityCore`（已有核心复用，没有则挂一次）；`dsh.client` 负责会话/预设列表、静态工具只读展示、动态工具开关、上下文事件开关、事件日志、健康面。没有这个包时核心库和 preset-manager 仍然工作。
 
 ## 2. 组件
 
@@ -27,11 +31,11 @@
 | Gate | `enabled(toolId, agent)`：静态工具恒开且只读；动态工具按 `session > preset > global` 判定；全局默认关；可选扩展 fail-closed，reply 组 fail-loud |
 | Capability Set | 通用桥：由 Host controller 挂到 agent scope，按面板状态注册 agent-scoped 动态工具；不声明具体工具名单，不改预设 |
 | Context Bus | 事件 schema、订阅、每会话队列/游标、去重、TTL、active/passive 分发、背压 |
-| State Store | 存动态工具的 `global / presetId / sessionId -> tools/contexts`；静态工具不落开关；原子写/版本迁移 |
+| State Store | 存动态工具的 `global / presetId / sessionId -> tools/contexts`；静态工具不落开关；原子写/版本迁移；文件固定为 `capability-core/capability-state.json` |
 | Session Registry | live + 持久化会话 -> 预设映射；`presetForSession()` + 持久化列表；不创建会话 |
 | Static Tool Probe | 从预设组合读取静态工具（`agentPresets.compositionInventory()`），标 `origin:'static'`、`locked:true`；不注册、不注销 |
 
-### 2.2 `@elysia/capability-host`（可选 Client 面板）
+### 2.2 `@elysia/capability-panel`（可选 Client 面板）
 
 - 列出会话与预设，自动识别当前会话的预设；离线会话按持久化列表展示。
 - **静态工具**：只读展示，标 `locked`，提示“预设默认工具，不能关闭”；没有开关，不能发 `setTool`。

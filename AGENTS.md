@@ -46,48 +46,40 @@ extending the vendored harness base, and rows in the profile that mount it.
 
 Non-negotiable invariants from that spec:
 
-- **One plugin, one package.** A Host half and its strongly-coupled Web panel
+- **One plugin, one package.** A Host half and its strongly-coupled Web page
   ship in the same package (`dsh.client` + `dsh.bundle`); do not split them into
-  two packages.
+  two packages. There is no shared Host core package in the current target.
 - **One bundle row.** `cordis.patch.yml` mounts the plugin once. Add the package
   to both the profile's `dependencies` and `dsh.profile.bundles`; remove both
   together.
-- **Every tool and context event carries a Chinese name.** Tool catalogs pass
-  `nameZh`; directly registered tools call
-  `capabilityHost.registerToolName(toolId, nameZh)`; context kinds pass
-  `nameZh` to `registerContextKind()`. The panel prefers that name over the raw
-  id; a new plugin without one is incomplete.
-- **Context events must register with the panel.** Providers call
-  `capabilityHost.registerContextKind()` on mount and publish through
-  `capabilityHost.publish()`; registration must be disposed with `ctx.effect`.
-  A context provider without `capabilityHost` fails loud rather than hiding an
-  event kind from the panel.
-- **Tools are not forced into the panel.** Ordinary tools may register directly
-  with `ctx.tools.register()`; only tools that need per-preset panel switches or
-  tool groups use `capabilityHost.registerTool()`. Do not register the same tool
-  through two paths.
-- **Global tool registration is opt-in and off by default.** Every tool-providing
-  plugin exposes a boolean `global` config defaulting to `false`; when false it
-  must not register tools in the root scope. The user-facing global switch must
-  be able to turn it on explicitly and persist that choice. Preset/Agent-scoped
-  tools are unaffected.
-- **Independent global-tool UI switches use the panel's mechanism and exact copy.**
-  A plugin-owned switch must read
-  `为模型全局注入<nameZh>工具` and bind to the Host global tool catalog/state/gate/
-  guard — never a plugin-local boolean or a re-register/restart trick. Toggling
-  must take effect at the next model step (tool schema appears/disappears without
-  a new session or restart), persist across restart, and deny in-flight calls
-  through the guard. The Host currently only has preset/session tool scopes;
-  extend that global scope first, and do not fake it until then.
-- **Actual state, not invented defaults.** The panel displays the tool state that
-  is actually mounted; do not make checkboxes claim a default the runtime does
-  not have. Explicit panel off-switches are authoritative and survive restart.
-- **Service mount is asynchronous.** Never use a one-shot `ctx.get('capabilityHost')`
-  followed by a permanent `return` during `apply`: the Host may mount later and
-  the tool/context registration would be skipped forever. Wait with
-  `ctx.inject(...)`, await `host.ready`, and register from an effect. This exact
-  timing bug hid `preset_create` / `preset_list` from the panel; the diagnosis and
-  both mount-order tests are recorded in the plugin spec.
+- **Tool plugins are ordinary tool plugins.** They register with
+  `ctx.tools.register()` at mount and dispose at unmount. They do **not** expose
+  a `global` switch, do not maintain a private enabled state, and do not need
+  the orchestrator to function.
+- **The orchestrator is one plugin.** **Elysia/VillV-Helix** (`@elysia/villv-helix`)
+  owns session orchestration in one Host + Client package. It pulls global tool
+  definitions, applies per-session `tools.restrict()` masks, owns the context
+  bus, and renders the session tabs. It has no external core dependency.
+- **Preset management is Elysia/Mobius-Infinity.** `@elysia/mobius-infinity`
+  keeps preset management, but no longer exposes a “模型全局注入” switch.
+- **Every tool and context event carries a Chinese name.** Tool display names
+  come from plugin metadata and fall back to the tool id when absent. Context
+  kinds declare `nameZh` at registration. A new plugin without a Chinese name
+  is incomplete.
+- **Context events must register with the orchestrator when it is present.**
+  Providers call `registerContextKind()` and `publish()` through the
+  orchestrator service; registration is disposed with `ctx.effect`. A provider
+  without the orchestrator must degrade explicitly, not invent a private bus
+  that the UI cannot see.
+- **No plugin-level global injection switches.** The session mode capsule in the
+  orchestrator is the only place that changes tool visibility. Do not reintroduce
+  “为模型全局注入……” switches or a core/catalog state machine.
+- **No polling between capability UIs.** Session limits, tool changes, and open
+  views are event-driven. A timer that re-reads a snapshot every few seconds is
+  a regression.
+- **Service mount is asynchronous.** Never use a one-shot `ctx.get()` followed
+  by a permanent `return` during `apply`. Wait with `ctx.inject(...)`, await the
+  service's readiness, and register from an effect.
 - **Everything is disposable and tested.** Every tool, context kind, listener,
   timer, and slot registration lives inside `ctx.effect`; state stays under the
   harness home; the plugin has host and client tests plus `typecheck`, `test`,

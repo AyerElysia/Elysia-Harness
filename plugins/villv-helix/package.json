@@ -1,0 +1,108 @@
+{
+  "name": "@elysia/villv-helix",
+  "description": "Elysia/VillV-Helix (维尔薇·螺旋): the session-scoped capability panel, ported from the original @elysia/capability-panel UI",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "main": "./lib/index.js",
+  "types": "./lib/index.d.ts",
+  "exports": {
+    ".": {
+      "types": "./lib/index.d.ts",
+      "default": "./lib/index.js"
+    },
+    "./client": {
+      "types": "./src/client/index.ts",
+      "default": "./lib/client.js"
+    },
+    "./src/*": "./src/*",
+    "./package.json": "./package.json",
+    "./cordis.patch.yml": "./cordis.patch.yml"
+  },
+  "files": [
+    "lib/**/*.js",
+    "lib/**/*.d.ts",
+    "lib/**/*.map",
+    "src/**/*.ts",
+    "src/**/*.tsx",
+    "src/**/*.css",
+    "cordis.patch.yml",
+    "README.md"
+  ],
+  "scripts": {
+    "build": "tsc -p tsconfig.build.json",
+    "bundle": "tsdown",
+    "test": "vitest run --maxWorkers=1 --no-file-parallelism",
+    "typecheck": "tsc --noEmit"
+  },
+  "license": "MIT",
+  "peerDependencies": {
+    "@deepseek-ai/cordis": "workspace:~",
+    "@deepseek-ai/schemastery": "workspace:~",
+    "@deepseek-ai/dsh-agent": "workspace:*",
+    "@deepseek-ai/dsh-client-connection": "workspace:*",
+    "@deepseek-ai/dsh-client-locale": "workspace:*",
+    "@deepseek-ai/dsh-client-ui-conversation": "workspace:*",
+    "@deepseek-ai/dsh-client-ui-renderer": "workspace:*",
+    "@deepseek-ai/dsh-client-ui-slots": "workspace:*",
+    "@deepseek-ai/dsh-llm": "workspace:*",
+    "@deepseek-ai/dsh-session": "workspace:*",
+    "@deepseek-ai/dsh-session-title": "workspace:*",
+    "@deepseek-ai/dsh-scope": "workspace:*",
+    "@deepseek-ai/dsh-tool-fs": "workspace:*",
+    "@deepseek-ai/dsh-tool-fs-search": "workspace:*",
+    "@deepseek-ai/dsh-tool-jobs": "workspace:*",
+    "@deepseek-ai/dsh-tool-pwsh": "workspace:*",
+    "@deepseek-ai/dsh-plugin-market": "workspace:*",
+    "@deepseek-ai/dsh-plugin-manager": "workspace:*",
+    "@deepseek-ai/dsh-system-prompt": "workspace:*",
+    "@deepseek-ai/dsh-tools": "workspace:*",
+    "@deepseek-ai/dsh-typert-protocol": "workspace:*"
+  },
+  "devDependencies": {
+    "@deepseek-ai/cordis": "link:../../dsh/vendor/cordis",
+    "@deepseek-ai/schemastery": "link:../../dsh/vendor/schemastery",
+    "@deepseek-ai/dsh-agent": "link:../../dsh/packages/core/agent",
+    "@deepseek-ai/dsh-agent-loop-testkit": "link:../../dsh/packages/test-support/agent-loop-testkit",
+    "@deepseek-ai/dsh-client-connection": "link:../../dsh/packages/client/connection",
+    "@deepseek-ai/dsh-client-locale": "link:../../dsh/packages/client/locale",
+    "@deepseek-ai/dsh-client-ui-conversation": "link:../../dsh/packages/client/ui-conversation",
+    "@deepseek-ai/dsh-client-ui-renderer": "link:../../dsh/packages/client/ui-renderer",
+    "@deepseek-ai/dsh-client-ui-slots": "link:../../dsh/packages/client/ui-slots",
+    "@deepseek-ai/dsh-llm": "link:../../dsh/packages/llm/llm",
+    "@deepseek-ai/dsh-session": "link:../../dsh/packages/core/session",
+    "@deepseek-ai/dsh-session-title": "link:../../dsh/packages/session/session-title",
+    "@deepseek-ai/dsh-scope": "link:../../dsh/packages/core/scope",
+    "@deepseek-ai/dsh-tool-fs": "link:../../dsh/packages/fs/tool-fs",
+    "@deepseek-ai/dsh-tool-fs-search": "link:../../dsh/packages/fs/tool-fs-search",
+    "@deepseek-ai/dsh-tool-jobs": "link:../../dsh/packages/jobs/tool-jobs",
+    "@deepseek-ai/dsh-tool-pwsh": "link:../../dsh/packages/shell/tool-pwsh",
+    "@deepseek-ai/dsh-plugin-market": "link:../../dsh/packages/boot/plugin-market",
+    "@deepseek-ai/dsh-plugin-manager": "link:../../dsh/packages/boot/plugin-manager",
+    "@deepseek-ai/dsh-system-prompt": "link:../../dsh/packages/core/system-prompt",
+    "@deepseek-ai/dsh-tools": "link:../../dsh/packages/core/tools",
+    "@deepseek-ai/dsh-typert-protocol": "link:../../dsh/packages/typert/protocol",
+    "@types/node": "^22.20.1",
+    "@types/react": "~18.3.1",
+    "@types/react-dom": "~18.3.0",
+    "react": "^18.2.0",
+    "react-dom": "^18.2.0",
+    "tsdown": "^0.22.2",
+    "typescript": "^6.0.3",
+    "vitest": "^4.1.11"
+  },
+  "dsh": {
+    "client": {
+      "platform": "web",
+      "inject": [
+        "@deepseek-ai/dsh-client-connection",
+        "@deepseek-ai/dsh-client-locale",
+        "@deepseek-ai/dsh-client-ui-conversation",
+        "@deepseek-ai/dsh-client-ui-slots"
+      ]
+    },
+    "bundle": {
+      "patch": "./cordis.patch.yml"
+    }
+  }
+}

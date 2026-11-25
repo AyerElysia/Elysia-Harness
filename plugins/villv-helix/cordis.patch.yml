@@ -1,0 +1,14 @@
+# Elysia/VillV-Helix: one bundle row owning the Host service and the Web page.
+#
+# The orchestrator owns session-scoped tool restrictions, the context event
+# bus, the event log, per-session health, and the session-level `能力` view that
+# renders the ported capability panel. It registers no tools of its own and has
+# no global/preset switch.
+#
+# `stateDir` holds the per-session document (disabled tools, context
+# subscriptions, queues, event log) and the shared tool-group preset library.
+- insert:
+    - id: elysia-villv-helix
+      name: '@elysia/villv-helix'
+      config:
+        stateDir: !!js dshHomePath('villv-helix')

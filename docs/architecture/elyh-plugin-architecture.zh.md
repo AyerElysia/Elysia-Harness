@@ -1,5 +1,9 @@
 # ElyH 插件架构
 
+> **旧架构记录，等待按新方案重写。** 新实现是 **Elysia/VillV-Helix**（`@elysia/villv-helix`）；`capability-core` / `capability-panel` 拆分方案已废弃。规范见 [ElyH 插件开发规范](elyh-plugin-spec.zh.md)，迁移步骤见 [开发步骤](elysia-villv-helix-development.zh.md)。
+>
+> 本文只保留为旧分层与前端参考。
+
 > 新插件的实际模板与验收基线见 [ElyH 插件开发规范](elyh-plugin-spec.zh.md)。本文只描述目标分层。 v2：预设、能力宿主与控制面板
 
 > 状态：设计稿，2026-11-21。范围：现有 15 个 `@elysia/*` 插件、两个基础会话，以及为它们服务的新核心包。
@@ -9,6 +13,9 @@
 ![ElyH 插件架构 v2](elyh-plugin-architecture.png)
 
 *图：PNG 由 [HTML](elyh-plugin-architecture.html) 渲染。*
+
+> 当前能力关系（插件 / `capability-core` / 工具 / 上下文 / 面板）另见
+> [HTML](elyh-capability-relationships.html) 与 [PNG](elyh-capability-relationships.png)。
 
 ## 1. 结论
 
@@ -62,7 +69,7 @@
 - `InboundRouter`：渠道消息 -> 目标会话 `followup`。
 - `SessionRuntime`：只负责创建/恢复会话，不组合提示词或工具。
 
-### 3.2 `@elysia/capability-host`（可选 Client 面板）
+### 3.2 `@elysia/capability-panel`（可选 Client 面板）
 
 - 列出会话与预设，自动识别当前会话的预设。
 - 内置几套能力模板（主意识、Router、渠道、媒体）。
@@ -225,10 +232,10 @@ Provider 向 `contextBus.publish(event)` 发事件。Host 按订阅解析出目�
 | 14 | `voice-call` | 实时语音 | Media Provider | `voice.transcript` + `voice.reply`；抽 `@elysia/voice-core` | P4 |
 | 15 | `gemini-cascade` | 语音/桌宠 | Media Provider | 复用 `@elysia/voice-core`；`voice.transcript` + 桌面工具 | P4 |
 
-### 6.1 新增核心包
+### 6.1 新增核心库
 
-- `@elysia/capability-core`：Host-only，Tool Catalog、Context Bus、State Store（含 global 工具状态）、Gate、Session Registry、Capability Set、变更事件与持久化。
-- `@elysia/capability-host`：可选 Client 面板；Host 入口只 `ensureCapabilityCore`，不拥有工具状态。
+- `@elysia/capability-core`：Host-only **库**，不是可安装插件/bundle；无 `dsh.bundle`、无 `cordis.patch.yml`。提供 Tool Catalog、Context Bus、State Store（含 global 工具状态）、Gate、Session Registry、Capability Set、变更事件与持久化；消费者通过 `ensureCapabilityCore` 挂载共享服务。
+- `@elysia/capability-panel`：可选 Client 面板；Host 入口只 `ensureCapabilityCore`，不拥有工具状态。
 - `@elysia/router-runtime`：观察主意识、心跳、派工桥；可后置。
 - `@elysia/inbound-router`：渠道消息 -> 目标会话 followup；可先并入 Host。
 - `@elysia/channel-kit`（库，不是插件）：standalone 渠道的最小会话/发送工具。

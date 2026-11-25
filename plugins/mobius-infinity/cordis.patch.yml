@@ -1,0 +1,18 @@
+# Host row of Elysia/Mobius-Infinity, the preset manager.
+#
+# The manager document lives under the harness home, beside `sessions/` and
+# `storages/`, so deleting a home removes the roster it owns with it. The
+# browser half is declared by `dsh.client` in package.json; the `prompt-files`
+# child is mounted per preset by the Host service, never as a row here.
+#
+# The model tools are ordinary global tools: mounting this row makes
+# `preset_list` and `preset_create` visible, and unloading it removes them.
+# There is no enable flag, no private state, and no capability core.
+#
+# The state directory follows the plugin identity; the old `preset-manager`
+# directory was moved to `mobius-infinity` with the roster intact.
+- insert:
+    - id: elysia-mobius-infinity
+      name: '@elysia/mobius-infinity'
+      config:
+        stateDir: !!js dshHomePath('mobius-infinity')

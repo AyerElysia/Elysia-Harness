@@ -1,8 +1,8 @@
 # Local web profile patch.
 # The archived v1 ElyH feature plugins under plugins/_archive-elysia-v1 stay
-# unmounted. The v2 packages under plugins/ are mounted by their own bundles;
-# the preset manager's panel switch drives the shared capability core's model
-# tools. The external
+# unmounted. The current ElyH plugins are mounted by their own bundles:
+# Elysia/VillV-Helix owns session orchestration, and Elysia/Mobius-Infinity owns
+# preset management. They have no shared capability core. The external
 # plugins remain: modsearch, remote-web-ui, market, billion-context. Core
 # DSH/Web rows stay.
 #
@@ -42,8 +42,33 @@
 - id: ui-chat
   name: "@deepseek-ai/dsh-client-ui-chat"
   config:
-    transcriptView: verbose
+    transcriptView: detailed
 
 # The main-owner plan gate mounts the same native Schedule Host after setup.
 - id: schedule
   disabled: true
+- id: llm-pi-ai
+  name: "@deepseek-ai/dsh-llm-pi-ai"
+  config:
+    providers:
+      d1:
+        apiKeyEnv: D1_API_KEY
+        api: openai-completions
+        baseURL: https://d1api.xin/v1
+        models:
+          - id: deepseek-v4.1-flash-1017
+            name: deepseek-v4.1-flash-1017
+            input:
+              - text
+              - image
+            reasoningEfforts:
+              off: null
+              low: low
+              high: high
+              max: max
+- id: agent-default-model
+  name: "@deepseek-ai/dsh-agent-default-model"
+  config:
+    provider: d1
+    model: deepseek-v4.1-flash-1017
+    reasoningEffort: max
