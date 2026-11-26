@@ -230,8 +230,8 @@ export class VillVHelix extends TypertRemoteService {
       await this.ready
       const agent = this.requireAgent(sessionId)
       // Capture the preset-owned surface before any managed suite can mount.
-      // A preset static tool that shares a managed id (read/edit/glob, ...) must
-      // stay locked rather than being mistaken for a switchable special tool.
+      // Official presets lock preset-owned managed ids; custom presets keep
+      // those special ids switchable through the session gate.
       this.capturePresetStatics(agent)
       const global = this.globalDefinitions()
       const staticIds = this.presetStaticIds.get(sessionId) ?? new Set()
@@ -410,8 +410,9 @@ export class VillVHelix extends TypertRemoteService {
     for (const name of this.agentDefinitions(agent).keys()) {
       if (global.has(name)) continue
       // A managed suite mounted into the Agent scope is not a preset row. A
-      // same-id registration that is not owned by our mount is static and must
-      // stay locked; ownership, not the id alone, decides this.
+      // same-id registration that is not owned by our mount is preset static:
+      // official presets lock it, custom presets gate it through pre-execute.
+      // Ownership, not the id alone, decides this.
       if (MANAGED_TOOL_IDS.has(name) && !ids.has(name) && this.toolMounts.owns(sessionId, name)) continue
       ids.add(name)
     }
@@ -489,8 +490,15 @@ export class VillVHelix extends TypertRemoteService {
     presetName ??= presetId
     const live = this.ctx.agents.get(SessionId(sessionId)) !== undefined
 
+    // Official presets own their special-tool rows, including managed ids, and
+    // those rows stay locked. A custom preset may also compose a managed id
+    // (read/edit/glob, ...), but that copy is still a Helix special tool: it is
+    // switchable through the session gate, not a locked preset row.
+    const lockedStaticIds = official
+      ? staticIds
+      : new Set([...staticIds].filter(name => !MANAGED_TOOL_IDS.has(name)))
     const staticTools: ToolEntry[] = []
-    for (const name of staticIds) {
+    for (const name of lockedStaticIds) {
       if (!agentScope.has(name)) continue
       staticTools.push({
         id: name,

@@ -23,6 +23,7 @@ It does **not** own context events. Those live in [`@elysia/context-gate`](../co
 official preset static   locked / TOOL_STATIC_LOCKED
 custom preset static     pre-execute gate / disabled => schema + UNKNOWN_TOOL
 Helix extension          stable declaration / disabled => schema + UNKNOWN_TOOL
+custom + managed id      switchable special row, never a locked static row
 ```
 
 `tools.restrict()` only handles global tools. It cannot revoke a preset/Agent-scoped registration; the custom static case uses `tools/pre-execute`.

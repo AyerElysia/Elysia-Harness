@@ -450,7 +450,7 @@ Context Gate 独立注册：
 - 每个 live Agent 安装会话限制；新 Agent 在 `agent/created` 安装；现有 Agent 在启动时枚举安装。
 - 工具注册/注销时监听 `tools/change` 并重算；录制失败不能阻断模型调用。
 - **官方预设静态工具**：`origin: static`、`locked: true`；`setTool` 返回 `TOOL_STATIC_LOCKED`，不安装可关闭门禁。
-- **自定义预设静态工具**：不重复注册同名工具；登记为预设 static，并用 `tools/pre-execute` 按 session enabled set 放行/拒绝。关闭时 schema 仍在，执行返回 `UNKNOWN_TOOL`。
+- **自定义预设静态工具**：不重复注册同名工具；登记为预设 static，并用 `tools/pre-execute` 按 session enabled set 放行/拒绝。关闭时 schema 仍在，执行返回 `UNKNOWN_TOOL`。自定义预设中与特殊工具同名的行仍是可切换的特殊工具，不进入锁定静态卡；只有官方预设的专属静态工具锁定。
 - **Helix 挂载的扩展工具**：在会话 context 中挂载，声明保持稳定；未启用执行返回 `UNKNOWN_TOOL`。
 - `tools.restrict()` 只处理 global 工具；不能撤销预设/Agent scope 的注册。对自定义静态工具，门禁是唯一正确的执行边界。
 - 默认编排会话关闭所有扩展工具，只保留预设静态工具；用户按 session 放行。
