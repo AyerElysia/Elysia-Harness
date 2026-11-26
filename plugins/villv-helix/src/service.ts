@@ -25,6 +25,7 @@ GateHealth, HealthStatus, HostStatus, PublishReceipt, SessionRowEntry,
   ToolEntry, ToolGroupEntry, ToolHealth, ToolPresetEntry,
 } from './types.ts'
 import { ContextBus, type ContextDefaults } from './context-bus.ts'
+import { isOfficialPreset } from './presets.ts'
 import { HelixStore } from './state.ts'
 import { VillvHelixError, describeError } from './errors.ts'
 import { MANAGED_SUITES, MANAGED_TOOL_IDS, SessionToolMounts } from './tool-mounts.ts'
@@ -262,6 +263,7 @@ export class VillVHelix extends TypertRemoteService {
         const store = this.requireStore()
         await this.toolMounts.reconcile(
           agent, store.orchestrated(sessionId), new Set(store.enabledTools(sessionId)),
+          isOfficialPreset(agent.session.header.agentPreset),
         )
       }
       this.emit({ action: 'setMode', sessionId, enabled })
@@ -289,7 +291,8 @@ export class VillVHelix extends TypertRemoteService {
       this.capturePresetStatics(agent)
       const global = this.globalDefinitions()
       const staticIds = this.presetStaticIds.get(sessionId) ?? new Set()
-      if (!global.has(toolId) && staticIds.has(toolId)) {
+      const official = isOfficialPreset(agent.session.header.agentPreset)
+      if (official && !global.has(toolId) && staticIds.has(toolId)) {
         throw new VillvHelixError('TOOL_STATIC_LOCKED', '预设默认工具，不能关闭', { toolId, sessionId })
       }
       if (!global.has(toolId) && !MANAGED_TOOL_IDS.has(toolId)) {
@@ -304,6 +307,7 @@ export class VillVHelix extends TypertRemoteService {
       const store = this.requireStore()
       await this.toolMounts.reconcile(
         agent, store.orchestrated(sessionId), new Set(store.enabledTools(sessionId)),
+        isOfficialPreset(agent.session.header.agentPreset),
       )
       this.emit({ action: 'setTool', sessionId, id: toolId, enabled })
     } catch (error: unknown) {
@@ -452,8 +456,11 @@ export class VillVHelix extends TypertRemoteService {
     const label = (id: string): string => labels.get(id) ?? id
     const enabled = new Set(store.enabledTools(sessionId).filter(id => MANAGED_TOOL_IDS.has(id)))
     const all = [...MANAGED_TOOL_IDS]
+    const official = isOfficialPreset(this.requireAgent(sessionId).session.header.agentPreset)
     const staticIds = this.presetStaticIds.get(sessionId) ?? new Set<string>()
-    const locked = all.filter(id => staticIds.has(id) && !this.toolMounts.owns(sessionId, id))
+    const locked = official
+      ? all.filter(id => staticIds.has(id) && !this.toolMounts.owns(sessionId, id))
+      : []
     const dynamic = all.filter(id => !locked.includes(id))
     return [
       '[VillV-Helix 特殊工具面]',
@@ -480,6 +487,7 @@ export class VillVHelix extends TypertRemoteService {
         const sessionId = agent.session.id
         void this.toolMounts.reconcile(
           agent, store.orchestrated(sessionId), new Set(store.enabledTools(sessionId)),
+          isOfficialPreset(agent.session.header.agentPreset),
         ).then(() => {
           // Mounting a suite emits tools/change; the next snapshot sees it.
           this.emit({ action: 'catalog', sessionId })
@@ -558,6 +566,7 @@ export class VillVHelix extends TypertRemoteService {
     const bus = this.requireBus()
     const sessionId = agent.session.id
     const key = `${'session'}:${sessionId}`
+    const official = isOfficialPreset(agent.session.header.agentPreset)
     const global = this.globalDefinitions()
     const agentScope = this.agentDefinitions(agent)
     const staticIds = this.presetStaticIds.get(sessionId)
@@ -621,7 +630,7 @@ export class VillVHelix extends TypertRemoteService {
     if (orchestrated) {
       for (const suite of MANAGED_SUITES) {
         for (const tool of suite.tools) {
-          if (staticIds.has(tool.id) || global.has(tool.id)) continue
+          if ((official && staticIds.has(tool.id)) || global.has(tool.id)) continue
           if (dynamicTools.some(entry => entry.id === tool.id)) continue
           const enabled = allowed.has(tool.id)
           const failure = this.toolMounts.failure(sessionId, tool.id)

@@ -21,6 +21,7 @@ import {
   effectivePresetId, formatAge, formatClock, isShadowed, scopeKeyOf,
   shadowedToolIds, staticToolsFor, toolKey,
 } from './panel-state.ts'
+import { isOfficialPreset } from '../presets.ts'
 import { DSH_CORE_GLOBAL_TOOL_IDS, toolCategories, type ToolCategory } from './categories.ts'
 import {
   contextLabel, outcomeText, stepText, toolLabel, type ControlPanelTranslate,
@@ -435,9 +436,21 @@ export function ControlPanelView({
   const writable = status.writable
   const presetId = effectivePresetId(snapshot)
   const presetName = snapshot.sessions[0]?.presetName
-  const staticTools = staticToolsFor(snapshot.tools, presetId)
-  const shadowedIds = shadowedToolIds(staticTools)
-  const dynamicTools = snapshot.tools.filter(tool => tool.origin === 'dynamic' && !isShadowed(tool, shadowedIds))
+  const official = isOfficialPreset(presetId)
+  const allStaticTools = staticToolsFor(snapshot.tools, presetId)
+  const allDynamicTools = snapshot.tools.filter(tool => tool.origin === 'dynamic')
+  const staticIds = shadowedToolIds(allStaticTools)
+  const dynamicIds = new Set(allDynamicTools.map(tool => tool.id))
+  // Official presets keep their static ids locked. A custom preset's static
+  // copy of a managed id is behind the session-local Helix definition, so it
+  // disappears from the locked list and the switchable row stays above.
+  const staticTools = official
+    ? allStaticTools
+    : allStaticTools.filter(tool => !dynamicIds.has(tool.id))
+  const shadowedIds = official ? staticIds : new Set<string>()
+  const dynamicTools = official
+    ? allDynamicTools.filter(tool => !isShadowed(tool, staticIds))
+    : allDynamicTools
   // DSH native = the base bundle's host-global tools. Optional/experimental
   // packages (plugin market, Cordis inspection, external MCP) stay outside this
   // parent, exactly as the original panel split the two groups.

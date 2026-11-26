@@ -14,6 +14,7 @@ import type { InjectFace, PropsLocale, PropsRuntime } from '@deepseek-ai/dsh-cli
 import type {
   CapabilitySnapshot, ContextEntry, HostStatus, PresetPrompt, ScopeRef, ToolEntry, ToolPresetEntry,
 } from '../types.ts'
+import { isOfficialPreset } from '../presets.ts'
 import type { VillvHelixApi } from './api.ts'
 import { notifyCapabilityChanged, subscribeCapabilityChanged } from './capability-events.ts'
 import { classifyWriteFailure, describeFailure } from './errors.ts'
@@ -162,8 +163,11 @@ export function ControlPanelPage({ api, t, tab }: ControlPanelPageProps): ReactN
   }
 
   const editableTools = (source: CapabilitySnapshot): readonly ToolEntry[] => {
-    const shadowedIds = shadowedToolIds(staticToolsFor(source.tools, effectivePresetId(source)))
-    return source.tools.filter(tool => tool.origin === 'dynamic' && !isShadowed(tool, shadowedIds))
+    const presetId = effectivePresetId(source)
+    const shadowedIds = shadowedToolIds(staticToolsFor(source.tools, presetId))
+    const official = isOfficialPreset(presetId)
+    return source.tools.filter(tool => tool.origin === 'dynamic'
+      && (!official || !isShadowed(tool, shadowedIds)))
   }
 
   const toggleTool = (tool: ToolEntry, enabled: boolean): void => {

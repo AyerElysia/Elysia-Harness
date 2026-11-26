@@ -10,6 +10,7 @@ import type { CapabilitySnapshot, HostStatus } from '../src/types.ts'
 import { ControlPanelView, type ControlPanelViewProps } from '../src/client/ControlPanelView.tsx'
 import { zh, type ControlPanelLocaleKey } from '../src/client/locales.ts'
 import type { ControlPanelTranslate } from '../src/client/labels.ts'
+import { isOfficialPreset } from '../src/presets.ts'
 
 const t = ((key: ControlPanelLocaleKey, vars?: Readonly<Record<string, string>>): string => {
   const template = zh[key] ?? key
@@ -84,6 +85,15 @@ function render(overrides: Partial<ControlPanelViewProps> = {}): string {
 }
 
 describe('ported panel view', () => {
+  it('locks only the harness-provided preset ids', () => {
+    expect(isOfficialPreset('standard')).toBe(true)
+    expect(isOfficialPreset('minimal')).toBe(true)
+    expect(isOfficialPreset('ptc')).toBe(true)
+    expect(isOfficialPreset('cordis')).toBe(true)
+    expect(isOfficialPreset('custom-demo')).toBe(false)
+    expect(isOfficialPreset(undefined)).toBe(false)
+  })
+
   it('renders the five session tabs and no scope sidebar', () => {
     const markup = render()
     for (const label of ['工具', '事件', '日志', '健康', '预设']) {
@@ -114,6 +124,51 @@ describe('ported panel view', () => {
     expect(markup).toContain('预设工具')
     expect(markup).toContain('来源预设：standard')
     expect(markup).toContain('不能关闭')
+  })
+
+  it('keeps a custom preset managed static id as a switchable dynamic row', () => {
+    const base = snapshot()
+    const custom: CapabilitySnapshot = {
+      ...base,
+      tools: [
+        {
+          id: 'read', nameZh: '读取文件', group: 'static', scope: 'agent', origin: 'static',
+          locked: true, sourcePresetId: 'custom-demo', enabledBy: { 'session:s1': true },
+          stepBy: { 'session:s1': 'active' },
+        },
+        {
+          id: 'read', nameZh: '读取文件', group: 'managed', scope: 'agent', origin: 'dynamic',
+          locked: false, enabledBy: { 'session:s1': false }, stepBy: { 'session:s1': 'hidden' },
+        },
+      ],
+      sessions: [{ ...base.sessions[0]!, presetId: 'custom-demo' }],
+    }
+    const markup = render({ snapshot: custom })
+    expect(markup.match(/data-tool-id="read"/g)?.length).toBe(1)
+    expect(markup).not.toContain('data-tool-id="read" data-origin="static"')
+    expect(markup).toContain('data-tool-id="read"')
+  })
+
+  it('keeps an official preset static id locked and hides the dynamic duplicate', () => {
+    const base = snapshot()
+    const official: CapabilitySnapshot = {
+      ...base,
+      tools: [
+        {
+          id: 'read', nameZh: '读取文件', group: 'static', scope: 'agent', origin: 'static',
+          locked: true, sourcePresetId: 'standard', enabledBy: { 'session:s1': true },
+          stepBy: { 'session:s1': 'active' },
+        },
+        {
+          id: 'read', nameZh: '读取文件', group: 'managed', scope: 'agent', origin: 'dynamic',
+          locked: false, enabledBy: { 'session:s1': false }, stepBy: { 'session:s1': 'hidden' },
+        },
+      ],
+      sessions: [{ ...base.sessions[0]!, presetId: 'standard' }],
+    }
+    const markup = render({ snapshot: official })
+    expect(markup.match(/data-tool-id="read" data-origin="static"/g)?.length).toBe(2)
+    expect(markup).not.toContain('aria-label="切换读取文件"')
   })
 
   it('shows the save action for a dirty tool draft', () => {

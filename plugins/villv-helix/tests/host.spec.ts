@@ -145,7 +145,7 @@ describe('tool restrictions', () => {
       .rejects.toMatchObject({ code: 'villvHelix/TOOL_STATIC_LOCKED' })
   })
 
-  it('does not mistake a preset static read tool for a managed switch', async () => {
+  it('allows a custom preset static read tool to be switched', async () => {
     const env = await setup()
     await env.agent.ctx.plugin({
       name: 'test-static-read',
@@ -160,8 +160,7 @@ describe('tool restrictions', () => {
         }))
       },
     })
-    await expect(env.ctx.villvHelix.setTool('s1', 'read', false))
-      .rejects.toMatchObject({ code: 'villvHelix/TOOL_STATIC_LOCKED' })
+    await expect(env.ctx.villvHelix.setTool('s1', 'read', false)).resolves.toBeUndefined()
   })
 
   it('lifts every installed mask when the plugin unloads', async () => {

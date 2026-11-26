@@ -214,12 +214,12 @@ export class SessionToolMounts {
    * @param orchestrated - whether 会话编排模式 is active for the session.
    * @param enabled - explicitly enabled managed tool ids.
    */
-  async reconcile(agent: Agent, orchestrated: boolean, enabled: ReadonlySet<string>): Promise<void> {
+  async reconcile(agent: Agent, orchestrated: boolean, enabled: ReadonlySet<string>, official = false): Promise<void> {
     const sessionId = agent.session.id
     const previous = this.chains.get(sessionId) ?? Promise.resolve()
     const next = previous.then(
-      () => this.apply(agent, orchestrated, enabled),
-      () => this.apply(agent, orchestrated, enabled),
+      () => this.apply(agent, orchestrated, enabled, official),
+      () => this.apply(agent, orchestrated, enabled, official),
     )
     this.chains.set(sessionId, next)
     try {
@@ -276,7 +276,12 @@ export class SessionToolMounts {
    * @param orchestrated - mode gate.
    * @param enabled - explicit allow set.
    */
-  private async apply(agent: Agent, orchestrated: boolean, enabled: ReadonlySet<string>): Promise<void> {
+  private async apply(
+    agent: Agent,
+    orchestrated: boolean,
+    enabled: ReadonlySet<string>,
+    official: boolean,
+  ): Promise<void> {
     const sessionId = agent.session.id
     if (!orchestrated) {
       this.dispose(sessionId)
@@ -314,10 +319,11 @@ export class SessionToolMounts {
     const present = new Set(
       scope === undefined ? [] : agent.ctx.tools.definitions(scope).map(definition => definition.name),
     )
-    // Preset/static tools keep their own registration; do not mount a suite
-    // definition under a duplicate name. Global names cannot be registered in
-    // this Agent scope either, so they count as present too.
-    const foreign = new Set([...present].filter(id => !mountedIds.has(id)))
+    // Official presets own their static tools, so their names stay foreign. In a
+    // custom preset a managed id may shadow the preset's static copy; Helix then
+    // controls the session-local definition. Real global names never mount here.
+    const foreign = new Set([...present].filter(id => !mountedIds.has(id)
+      && (official || !MANAGED_TOOL_IDS.has(id))))
 
     for (const suite of MANAGED_SUITES) {
       if (session.suites.has(suite.id)) continue
