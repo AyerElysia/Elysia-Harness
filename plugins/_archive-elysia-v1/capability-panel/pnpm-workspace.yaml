@@ -1,0 +1,12 @@
+# This plugin is developed and tested outside the vendored `dsh/` workspace, so
+# it is its own single-package workspace. `devDependencies` reach the vendored
+# sources with `link:` instead of `workspace:`; `vitest.config.ts` imports the
+# official DSH test preset by relative path.
+packages:
+  - .
+
+nodeLinker: hoisted
+autoInstallPeers: false
+
+# Nothing here ships a native or install-script payload.
+onlyBuiltDependencies: []

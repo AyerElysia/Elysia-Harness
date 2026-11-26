@@ -1,0 +1,20 @@
+# The ElyH capability panel. This package is the optional Web consumer of
+# `@elysia/capability-core`: its Host entry calls `ensureCapabilityCore`
+# (reusing an existing core or mounting one root-owned core), and the browser
+# half (`dsh.client` / `./client`) talks to the `capabilityHost` Remote
+# namespace served by that core. The panel owns no tool state of its own.
+#
+# `stateDir` is the canonical shared core document directory. Preset-manager
+# uses the same dshHomePath('capability-core') value, so the first consumer to
+# mount the core cannot move persistence to a different home.
+#
+# Static tools are NOT mounted here. A preset's static tool face belongs to
+# preset-manager's preset rows (`@deepseek-ai/dsh-tool-web` for
+# `web_search`/`web_fetch`); the panel only reads it through
+# `agentPresets.compositionInventory()` and shows it locked. Mounting `tool-web`
+# here would duplicate the preset row and blur who owns the static surface.
+- insert:
+    - id: elysia-capability-panel
+      name: '@elysia/capability-panel'
+      config:
+        stateDir: !!js dshHomePath('capability-core')

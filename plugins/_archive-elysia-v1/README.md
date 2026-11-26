@@ -1,10 +1,12 @@
 # ElyH v1 plugin archive
 
-Archived on 2026-11-21 from `plugins/*` before the v2 preset/capability-host rewrite. These packages are **not mounted** by the local Web or TUI profiles. The server was not touched.
+Archived on 2026-11-21 from `plugins/*` before the v2 preset/capability-host rewrite. The capability core and panel split was retired later, on 2026-11-26, after orchestration was consolidated into `villv-helix` and preset management into `mobius-infinity`. These packages are **not mounted** by the local Web or TUI profiles. The server was not touched.
 
 ## Contents
 
 - `ayla-app`
+- `capability-core` — retired host-side capability library; no bundle row
+- `capability-panel` — retired panel split; superseded by the `villv-helix` Web panel
 - `conscious-mind`
 - `context-inspector`
 - `dsh-livestream`
