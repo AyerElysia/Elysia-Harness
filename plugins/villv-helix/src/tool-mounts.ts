@@ -129,6 +129,8 @@ interface MountedSession {
   readonly enabled: Set<string>
   /** Managed names actually registered by this session's suite mounts. */
   readonly owned: Set<string>
+  /** Managed names supplied by a custom preset and gated in place. */
+  readonly presetStatic: Set<string>
   /** Agent-scoped context whose `tools.register` adds the gate. */
   readonly ctx: Context
   /** Suite mounts owned by the session. */
@@ -292,18 +294,23 @@ export class SessionToolMounts {
     if (session === undefined) {
       const gate = new Set(enabled)
       const owned = new Set<string>()
+      const presetStatic = new Set<string>()
       const disposeGuard = agent.ctx.on('tools/pre-execute', async (exec, next) => {
-        if (!MANAGED_TOOL_IDS.has(exec.name) || !owned.has(exec.name)) return next()
-        if (gate.has(exec.name)) return next()
-        return {
-          kind: 'deny',
-          reason: `unknown tool "${exec.name}"`,
-          info: { name: 'ToolNotFoundError', code: 'UNKNOWN_TOOL' },
+        if (!MANAGED_TOOL_IDS.has(exec.name)) return next()
+        if (owned.has(exec.name) || (!official && presetStatic.has(exec.name))) {
+          if (gate.has(exec.name)) return next()
+          return {
+            kind: 'deny',
+            reason: `unknown tool "${exec.name}"`,
+            info: { name: 'ToolNotFoundError', code: 'UNKNOWN_TOOL' },
+          }
         }
+        return next()
       })
       session = {
         enabled: gate,
         owned,
+        presetStatic,
         ctx: gateContext(agent.ctx, owned),
         suites: new Map(),
         disposeGuard,
@@ -319,11 +326,13 @@ export class SessionToolMounts {
     const present = new Set(
       scope === undefined ? [] : agent.ctx.tools.definitions(scope).map(definition => definition.name),
     )
-    // Official presets own their static tools, so their names stay foreign. In a
-    // custom preset a managed id may shadow the preset's static copy; Helix then
-    // controls the session-local definition. Real global names never mount here.
-    const foreign = new Set([...present].filter(id => !mountedIds.has(id)
-      && (official || !MANAGED_TOOL_IDS.has(id))))
+    // Preset/static and real global definitions cannot be registered a second time
+    // in this Agent scope. Custom presets keep their static implementation; the
+    // pre-execute guard applies the session's enabled set to it.
+    for (const name of present) {
+      if (MANAGED_TOOL_IDS.has(name) && !session.owned.has(name)) session.presetStatic.add(name)
+    }
+    const foreign = new Set([...present].filter(id => !mountedIds.has(id)))
 
     for (const suite of MANAGED_SUITES) {
       if (session.suites.has(suite.id)) continue

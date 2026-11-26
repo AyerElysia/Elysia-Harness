@@ -592,7 +592,7 @@ export class VillVHelix extends TypertRemoteService {
       }
     }
     const title = foldSessionTitle(agent.session.snapshotEvents())?.title
-    presetName ??= title
+    presetName ??= presetId
     const live = this.ctx.agents.get(SessionId(sessionId)) !== undefined
 
     const staticTools: ToolEntry[] = []

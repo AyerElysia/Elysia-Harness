@@ -161,6 +161,27 @@ describe('tool restrictions', () => {
       },
     })
     await expect(env.ctx.villvHelix.setTool('s1', 'read', false)).resolves.toBeUndefined()
+    const signal = new AbortController().signal
+    const toolSet = await env.ctx.tools.resolve({
+      agent: env.agent,
+      modelSelection: { provider: 'mock', model: 'mock' },
+      signal,
+    })
+    const disabled = await env.ctx.tools.execute({
+      agent: env.agent,
+      signal,
+      toolSet,
+      calls: [{ type: 'tool-call', id: ToolCallId('custom-static-read'), name: 'read', arguments: '{}' }],
+    })
+    expect(disabled.results[0]?.result.error?.info?.code).toBe('UNKNOWN_TOOL')
+    await expect(env.ctx.villvHelix.setTool('s1', 'read', true)).resolves.toBeUndefined()
+    const enabled = await env.ctx.tools.execute({
+      agent: env.agent,
+      signal,
+      toolSet,
+      calls: [{ type: 'tool-call', id: ToolCallId('custom-static-read-on'), name: 'read', arguments: '{}' }],
+    })
+    expect(enabled.results[0]?.result.isError).toBe(false)
   })
 
   it('lifts every installed mask when the plugin unloads', async () => {
