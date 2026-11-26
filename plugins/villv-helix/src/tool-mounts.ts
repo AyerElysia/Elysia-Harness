@@ -208,6 +208,8 @@ export class SessionToolMounts {
   private readonly loading = new Map<string, Promise<Plugin | undefined>>()
   private readonly chains = new Map<string, Promise<void>>()
   private readonly failures = new Map<string, string>()
+  /** Names a Helix suite has ever mounted for one session. Retained across a mode off/on so a lingering definition is never reclassified as preset static. */
+  private readonly ownedHistory = new Map<string, Set<string>>()
 
   /**
    * Reconcile one Agent's managed tools. Every service-available suite mounts
@@ -231,20 +233,39 @@ export class SessionToolMounts {
     }
   }
 
-  /** Dispose every mount owned by one session. */
-  dispose(sessionId: string): void {
+  /**
+   * Dispose every mount owned by one session and wait until every suite fiber
+   * has actually unregistered. The wait matters: a mode off/on cycle captures
+   * preset statics before remounting, and a still-registered managed suite
+   * would otherwise be mistaken for a preset-owned static row.
+   * @param sessionId - session whose mounts are removed.
+   * @returns after every suite fiber is disposed.
+   */
+  async dispose(sessionId: string): Promise<void> {
     const session = this.sessions.get(sessionId)
     if (session === undefined) return
     session.disposeGuard()
-    for (const mount of session.suites.values()) void mount.fiber.dispose()
+    for (const mount of session.suites.values()) await mount.fiber.dispose()
     this.sessions.delete(sessionId)
     this.clearFailures(sessionId)
   }
 
-  /** Dispose every mount; called when the Host service unloads. */
-  disposeAll(): void {
-    for (const sessionId of [...this.sessions.keys()]) this.dispose(sessionId)
+  /**
+   * Forget the session's mount history when its Agent is gone.
+   * @param sessionId - session that will no longer be reconciled.
+   */
+  forget(sessionId: string): void {
+    this.ownedHistory.delete(sessionId)
+  }
+
+  /**
+   * Dispose every mount; called when the Host service unloads.
+   * @returns after every session's suite fibers are disposed.
+   */
+  async disposeAll(): Promise<void> {
+    for (const sessionId of [...this.sessions.keys()]) await this.dispose(sessionId)
     this.failures.clear()
+    this.ownedHistory.clear()
   }
 
   /** Tools currently registered by a suite mount for one session. */
@@ -255,6 +276,11 @@ export class SessionToolMounts {
   /** Whether this session's suite mounts, not a preset/static row, own a name. */
   owns(sessionId: string, toolId: string): boolean {
     return this.sessions.get(sessionId)?.owned.has(toolId) === true
+  }
+
+  /** Whether a Helix suite ever owned this name for the session. */
+  everOwned(sessionId: string, toolId: string): boolean {
+    return this.ownedHistory.get(sessionId)?.has(toolId) === true
   }
 
   /** Mount failure for one session/tool, when the optional package could not mount. */
@@ -286,7 +312,7 @@ export class SessionToolMounts {
   ): Promise<void> {
     const sessionId = agent.session.id
     if (!orchestrated) {
-      this.dispose(sessionId)
+      await this.dispose(sessionId)
       return
     }
 
@@ -347,6 +373,12 @@ export class SessionToolMounts {
         continue
       }
       const wanted = suite.tools.map(tool => tool.id)
+      let owned = this.ownedHistory.get(sessionId)
+      if (owned === undefined) {
+        owned = new Set()
+        this.ownedHistory.set(sessionId, owned)
+      }
+      for (const id of wanted) owned.add(id)
       const config = suite.config(wanted, foreign)
       if (config === undefined) continue
       try {

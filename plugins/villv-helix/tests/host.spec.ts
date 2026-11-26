@@ -162,6 +162,11 @@ describe('tool restrictions', () => {
       group: 'managed', origin: 'dynamic', scope: 'agent', locked: false,
       enabledBy: { 'session:s1': false }, stepBy: { 'session:s1': 'hidden' },
     })
+    await env.ctx.villvHelix.setMode('s1', false)
+    await env.ctx.villvHelix.setMode('s1', true)
+    expect((await env.ctx.villvHelix.list('s1')).tools.find(tool => tool.id === 'read')).toMatchObject({
+      group: 'managed', origin: 'dynamic', scope: 'agent', locked: false,
+    })
     await expect(env.ctx.villvHelix.setTool('s1', 'read', false)).resolves.toBeUndefined()
     const signal = new AbortController().signal
     const toolSet = await env.ctx.tools.resolve({

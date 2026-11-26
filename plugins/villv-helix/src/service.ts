@@ -312,7 +312,8 @@ export class VillVHelix extends TypertRemoteService {
       this.presetStaticIds.delete(agent.session.id)
       this.faceContexts.get(agent.session.id)?.()
       this.faceContexts.delete(agent.session.id)
-      this.toolMounts.dispose(agent.session.id)
+      void void this.toolMounts.dispose(agent.session.id)
+      this.toolMounts.forget(agent.session.id)
     })
     this.ctx.on('tools/change', () => {
       // Static preset rows may register after the Agent is created. Keep the
@@ -322,7 +323,7 @@ export class VillVHelix extends TypertRemoteService {
     })
     this.ctx.effect(() => () => {
       this.disposeRestrictions()
-      this.toolMounts.disposeAll()
+      return this.toolMounts.disposeAll()
     }, 'villv-helix.restrictions')
     this.reconcile()
   }
@@ -413,7 +414,8 @@ export class VillVHelix extends TypertRemoteService {
       // same-id registration that is not owned by our mount is preset static:
       // official presets lock it, custom presets gate it through pre-execute.
       // Ownership, not the id alone, decides this.
-      if (MANAGED_TOOL_IDS.has(name) && !ids.has(name) && this.toolMounts.owns(sessionId, name)) continue
+      if (MANAGED_TOOL_IDS.has(name) && !ids.has(name)
+        && (this.toolMounts.owns(sessionId, name) || this.toolMounts.everOwned(sessionId, name))) continue
       ids.add(name)
     }
     this.presetStaticIds.set(sessionId, ids)
