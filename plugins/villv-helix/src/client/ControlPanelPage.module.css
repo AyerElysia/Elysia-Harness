@@ -456,6 +456,13 @@
   display: none !important;
 }
 
+/* Tool editing mode owns exactly the two Helix tabs. The client marks those
+   buttons by label; context-gate's 事件/日志 tabs carry no marker and remain
+   visible when the mode is off. */
+:global(html[data-helix-mode='off']) :global([data-villv-helix-tab]) {
+  display: none !important;
+}
+
 /* Compact session-header switch: label plus a real toggle track. The checked
  * appearance keys off aria-checked, so the visual state cannot disagree with
  * the state assistive technology reads. */

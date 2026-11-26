@@ -213,7 +213,7 @@ export class SessionToolMounts {
    * Reconcile one Agent's managed tools. Every service-available suite mounts
    * for the session; toggling only changes the pre-execute gate.
    * @param agent - live Agent whose scope receives the tools.
-   * @param orchestrated - whether 会话编排模式 is active for the session.
+   * @param orchestrated - whether 工具编辑模式 is active for the session.
    * @param enabled - explicitly enabled managed tool ids.
    */
   async reconcile(agent: Agent, orchestrated: boolean, enabled: ReadonlySet<string>, official = false): Promise<void> {

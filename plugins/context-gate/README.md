@@ -5,7 +5,7 @@
 Provider-registered context kinds, per-session subscriptions, per-session
 queues, and one merged snapshot injected before each step. The gate is the
 context-event owner of the ElyH extension layer; it is independent of
-VillV-Helix and independent of the session orchestration mode.
+VillV-Helix and independent of its tool editing mode.
 
 ## What it owns
 
@@ -17,7 +17,7 @@ VillV-Helix and independent of the session orchestration mode.
 | Web views | Context subscriptions and the injection log, registered by the client half |
 
 Out of scope: tool registration and tool visibility (VillV-Helix), preset
-management (Mobius-Infinity), session orchestration mode, health/status
+management (Mobius-Infinity), Helix's tool editing mode, health/status
 counters, and channel ingress sources. Providers publish through this service;
 the gate is ready for future Event Adapters.
 
@@ -152,7 +152,7 @@ pnpm run bundle       # emits lib/client.js for the Web shell
 The package is outside the vendored `dsh/` workspace, so it resolves workspace
 packages through `node_modules` links to the vendored build (`lib/`), the
 artifact plane the shipped profiles load. Tests mount the real AgentLoop
-dependencies and the real pre-step waterfall; no orchestration plugin is
+dependencies and the real pre-step waterfall; no Helix plugin is
 mounted.
 
 ## Known Limitations and Deferred Work

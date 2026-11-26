@@ -159,13 +159,13 @@ export class HelixStore {
     return this.document.sessions[sessionId] ?? EMPTY_SESSION
   }
 
-  /** Whether 会话编排模式 is active for one session. */
+  /** Whether 工具编辑模式 is active for one session. */
   orchestrated(sessionId: string): boolean {
     return this.session(sessionId).orchestrated
   }
 
   /**
-   * Turn 会话编排模式 on or off for one session.
+   * Turn 工具编辑模式 on or off for one session.
    * @param sessionId - target session.
    * @param enabled - true installs the stored deny mask; false releases it.
    * @returns after the document is durable.

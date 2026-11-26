@@ -4,7 +4,7 @@
  *
  * Both views are registered unconditionally: context subscriptions belong to
  * the session, not to the tool face, so they must work whether or not the
- * session orchestration mode is on and whether or not any tool plugin is
+ * tool editing mode is on and whether or not any tool plugin is
  * mounted.
  *
  * @module @elysia/context-gate/client
@@ -41,8 +41,8 @@ interface ContextView {
 }
 
 const VIEWS: readonly ContextView[] = [
-  { id: 'context-gate-events', tab: 'events', label: 'tabEvents', order: 21 },
-  { id: 'context-gate-log', tab: 'log', label: 'tabLog', order: 22 },
+  { id: 'context-gate-events', tab: 'events', label: 'tabEvents', order: 22 },
+  { id: 'context-gate-log', tab: 'log', label: 'tabLog', order: 23 },
 ]
 
 /**

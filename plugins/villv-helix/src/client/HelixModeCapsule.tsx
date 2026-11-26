@@ -1,5 +1,5 @@
 /**
- * Session-header capsule for 会话编排模式. It reads the session row's mode and
+ * Session-header capsule for 工具编辑模式. It reads the session row's mode and
  * flips the Host state; the actual tool mask is installed by the Host.
  *
  * @module @elysia/villv-helix/client/HelixModeCapsule
@@ -24,6 +24,11 @@ export interface HelixModeCapsuleProps extends HelixModeCapsuleInjected {
 export function HelixModeCapsule({ api, t }: HelixModeCapsuleProps): ReactNode {
   const [mode, setMode] = useState<boolean | undefined>(undefined)
   const [busy, setBusy] = useState(false)
+
+  useEffect(() => {
+    document.documentElement.dataset.helixMode = mode === true ? 'on' : 'off'
+    return () => { delete document.documentElement.dataset.helixMode }
+  }, [mode])
 
   useEffect(() => {
     let current = true

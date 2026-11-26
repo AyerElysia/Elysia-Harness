@@ -2,7 +2,7 @@
 #
 # The tool-face plugin owns session-scoped tool restrictions, static/custom
 # tool semantics, managed extension mounts, the tool/preset views, and the
-# orchestration-mode capsule. It registers no business tools and has no
+# tool-editing-mode capsule. It registers no business tools and has no
 # global/preset switch.
 #
 # Context subscriptions, queues, injection logs, and health live elsewhere:

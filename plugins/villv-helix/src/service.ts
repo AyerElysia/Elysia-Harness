@@ -180,7 +180,7 @@ export class VillVHelix extends TypertRemoteService {
   }
 
   /**
-   * Turn 会话编排模式 on or off for one session.
+   * Turn 工具编辑模式 on or off for one session.
    * @param sessionId - target session.
    * @param enabled - true installs the session tool mask, false releases it.
    * @returns after the document write is durable and the mask is reconciled.

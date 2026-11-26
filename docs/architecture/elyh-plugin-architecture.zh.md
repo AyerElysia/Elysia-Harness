@@ -46,7 +46,7 @@ DSH 原生工具位于 Tool Registry 内，但在本架构中只作为**依赖**
   - 对自定义预设静态工具做执行门禁；
   - 对 Helix 挂载的扩展工具做启用集合；
   - 未启用时保留 schema，执行返回 `UNKNOWN_TOOL`；
-  - 提供工具面板与编排模式胶囊。
+  - 提供工具面板与工具编辑模式胶囊。
 - **不会做**：
   - 注册 `send_text`、`send_voice`、`session_*` 等业务工具；
   - 管理预设创建；
@@ -60,7 +60,7 @@ DSH 原生工具位于 Tool Registry 内，但在本架构中只作为**依赖**
 - **模型工具**：无
 - **Remote**：`contextGate/list`、`contextGate/setContext`
 - **不是**：工具面、预设、Session 创建者、健康面板
-- **边界**：独立于 Helix 和会话编排模式；渠道/内部消息的通用入站缓冲尚未接入，当前只处理上下文事件 publication。
+- **边界**：独立于 Helix 和工具编辑模式；渠道/内部消息的通用入站缓冲尚未接入，当前只处理上下文事件 publication。
 
 详见 [Context Gate](elyh-context-gate.zh.md)。
 
@@ -177,7 +177,7 @@ external state / memory / runtime
   → merged snapshot on agent/pre-step
 ```
 
-Context Gate 只处理模型可见上下文，不是 DSH 的全部事件系统。它独立于 Helix 和编排模式；active 事件在空闲 Agent 上走 `batchMs` 静默窗口，最多等 `maxWaitMs`，忙时只排队等待下一个 pre-step。
+Context Gate 只处理模型可见上下文，不是 DSH 的全部事件系统。它独立于 Helix 和工具编辑模式；active 事件在空闲 Agent 上走 `batchMs` 静默窗口，最多等 `maxWaitMs`，忙时只排队等待下一个 pre-step。
 
 ## 6. 控制流
 

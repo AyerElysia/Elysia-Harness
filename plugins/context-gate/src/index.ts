@@ -3,7 +3,7 @@
  * half is declared by `dsh.client`; the Conversation views talk to the
  * `contextGate` Remote namespace served here.
  *
- * The gate is independent of VillV-Helix and of session orchestration mode. It
+ * The gate is independent of VillV-Helix and of its tool editing mode. It
  * registers no tools, owns no health surface, and has no global enable flag.
  *
  * @module @elysia/context-gate

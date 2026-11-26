@@ -16,7 +16,7 @@
 
 ```text
 @elysia/villv-helix
-  Host：会话编排状态、工具限制、预设预览数据
+  Host：工具编辑状态、工具限制、预设预览数据
   Client：工具/预设视图、模式胶囊
 
 @elysia/context-gate
@@ -55,13 +55,13 @@
 ### 2.3 必须新建
 
 - 一个完整包 `@elysia/villv-helix`，Host + Client 同包；
-- session 的“会话编排模式”标记与持久化；
+- session 的“工具编辑模式”标记与持久化；
 - 全局工具拉取、live Agent 的 `tools.restrict()`、`agent/created` / `tools/change` 自动重算；
 - Helix 视图：`工具 | 预设`；
-- Context Gate 视图：`事件 | 日志`，独立注册且不受编排模式管理；
+- Context Gate 视图：`事件 | 日志`，独立注册且不受工具编辑模式管理；
 - “预设”页签：静态工具面、当前 system prompt、提示词文件预览；
 - 工具中文显示名元数据（上下文 kind 的中文名归 Context Gate）；
-- 普通/编排模式切换只影响工具面，不影响 Context Gate 视图。
+- 工具编辑模式开关只影响工具/预设标签，不影响 Context Gate 视图。
 
 ## 3. 开发顺序
 
@@ -86,10 +86,10 @@ plugins/villv-helix/
 - 不引入 `@elysia/capability-core`；
 - 先只做空 Host + 空 Client，确保能挂载/卸载。
 
-### 第 2 步：会话编排模式
+### 第 2 步：工具编辑模式
 
 - session 标记的存储位置（专用 preset / session metadata / 编排插件状态）；
-- 胶囊开关：`会话编排模式`；
+- 胶囊开关：`工具编辑模式`；
 - 关闭：普通会话，不限制工具；
 - 开启：编排会话，所有 global 工具初始 deny；
 - 切换持久化，下一步生效，不新开会话。
@@ -133,8 +133,8 @@ Context Gate: 事件 | 日志
 ```
 
 - 两组视图分别注册，不互相挤占；
-- 上下文视图不受编排模式管理；
-- 普通模式仍显示工具/预设，并提示编排模式未开启；
+- 上下文视图不受工具编辑模式管理；
+- 工具编辑模式关闭时隐藏工具/预设标签；
 - 窄屏横向滚动，不折行。
 
 ### 第 7 步：切换与清理
@@ -149,7 +149,7 @@ Context Gate: 事件 | 日志
 
 - 普通工具插件不依赖新插件也能运行；
 - 新插件无外部 core 依赖；
-- 现有 live session 切换编排模式；
+- 现有 live session 切换工具编辑模式；
 - 新 session `agent/created` 自动安装限制；
 - 新工具 `tools/change` 自动进入控制；
 - 编排会话初始只有静态工具；

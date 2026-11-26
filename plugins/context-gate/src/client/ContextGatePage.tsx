@@ -3,7 +3,7 @@
  * each subscription gesture into one `setContext` write.
  *
  * The session whose Conversation view renders it is the only scope. Nothing
- * here depends on 会话编排模式 or on tool management, so the views work for any
+ * here depends on 工具编辑模式 or on tool management, so the views work for any
  * session.
  *
  * @module @elysia/context-gate/client/ContextGatePage

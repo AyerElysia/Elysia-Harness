@@ -1,7 +1,7 @@
 # ElyH Context Gate
 
 > 状态：2026-11-26。`@elysia/context-gate` 从 VillV-Helix 拆出，负责上下文事件订阅、队列和注入日志。
-> 它独立于会话编排模式，也不再拥有健康统计。
+> 它独立于 Helix 的工具编辑模式，也不再拥有健康统计。
 >
 > 架构总览见 [ElyH 扩展能力架构](../architecture.md)。
 > 包内实现见 [`plugins/context-gate/README.md`](../../plugins/context-gate/README.md)。
@@ -98,12 +98,12 @@ maxWaitMs = 5000 ms
 
 这是上下文事件的门；未来渠道消息/内部消息的入口缓冲可以复用同样的语义，但当前没有接入这些 source。
 
-## 5. 与会话编排模式无关
+## 5. 与工具编辑模式无关
 
 Context Gate 不读取 Helix 的 `orchestrated` 状态。
 
-- 普通模式：上下文事件订阅和注入照常工作；
-- 编排模式：同样工作；
+- 工具编辑模式关闭：上下文事件订阅和注入照常工作；
+- 工具编辑模式开启：同样工作；
 - Context Gate 和 Helix 可以独立挂载：
   - 只有 Context Gate；
   - 只有 Helix；

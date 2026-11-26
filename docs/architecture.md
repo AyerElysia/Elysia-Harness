@@ -128,7 +128,7 @@ Context-Gate     上下文事件订阅 / 注入队列 / 注入日志
 Mobius-Infinity  预设组合 / 预设 UI
 ```
 
-Context Gate 独立于会话编排模式，也不拥有健康统计。没有“主意识插件”。
+Context Gate 独立于 Helix 的工具编辑模式，也不拥有健康统计。没有“主意识插件”。
 
 ## 4. 当前运行态
 
@@ -207,7 +207,7 @@ Context Gate 独立于会话编排模式，也不拥有健康统计。没有“�
 - active 事件有静默窗口 `batchMs` 与上限 `maxWaitMs`；
 - 注入日志由独立的“事件 / 日志”视图读取。
 
-Context Gate 只负责模型可见上下文，不等同于 DSH 的全部生命周期事件；它不处理渠道消息，也不依赖 Helix 的会话编排模式。
+Context Gate 只负责模型可见上下文，不等同于 DSH 的全部生命周期事件；它不处理渠道消息，也不依赖 Helix 的工具编辑模式。
 
 健康统计已删除：Helix 与 Context Gate 都不再提供健康页或 `status` 计数接口。
 

@@ -109,7 +109,7 @@ export interface SessionRowEntry {
   readonly presetName?: string
   /** Whether the Host has a live Agent for this session. */
   readonly live: boolean
-  /** Whether 会话编排模式 is active for this session. */
+  /** Whether 工具编辑模式 is active for this session. */
   readonly orchestrated?: boolean
   /** Epoch milliseconds of the last activity, when the Host reports one. */
   readonly lastActiveAt?: number
@@ -139,7 +139,7 @@ export interface CapabilitySnapshot {
 
 /** One session's panel state. */
 export interface SessionStateRecord {
-  /** Whether 会话编排模式 is active for this session. */
+  /** Whether 工具编辑模式 is active for this session. */
   readonly orchestrated: boolean
   /** Explicitly allowed global tool ids; every other global tool stays off in orchestrated sessions. */
   readonly enabledTools: readonly string[]

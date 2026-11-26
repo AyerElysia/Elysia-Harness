@@ -2,7 +2,7 @@
 
 **Display identity:** Elysia/VillV-Helix · 维尔薇 · 螺旋
 
-VillV-Helix owns the **session tool face**: official preset lock, custom-preset static gating, managed extension tools, the tool panel, and the orchestration-mode capsule.
+VillV-Helix owns the **session tool face**: official preset lock, custom-preset static gating, managed extension tools, the tool panel, and the tool-editing-mode capsule.
 
 It does **not** own context events. Those live in [`@elysia/context-gate`](../context-gate/README.md): subscriptions, durable queues, batched injection, and the injection log.
 
@@ -12,10 +12,10 @@ It does **not** own context events. Those live in [`@elysia/context-gate`](../co
 |---|---|
 | Host service `villvHelix` | Reads real tool definitions, installs per-session `tools.restrict()` deny masks, mounts managed tool suites, gates custom-preset static tools, and persists tool-face state |
 | Tool face | Official preset static tools are locked; custom preset static tools are gated without duplicate registration; managed extension tools keep stable declarations |
-| State document | Per-session orchestration flag, enabled tools, disabled tools, tool-group preset library; legacy context fields are ignored |
+| State document | Per-session tool-editing flag, enabled tools, disabled tools, tool-group preset library; legacy context fields are ignored |
 | View `helix-tools` | Tool categories, static card, bulk selection, draft/save, tool-group presets |
 | View `helix-preset` | Current preset static tools, system prompt, prompt-file preview (read-only) |
-| Header capsule | Session orchestration mode |
+| Header capsule | Tool editing mode |
 
 ## Tool semantics
 
@@ -29,7 +29,7 @@ Helix extension          stable declaration / disabled => schema + UNKNOWN_TOOL
 
 ## Context views
 
-The `事件` and `日志` conversation views belong to `@elysia/context-gate`. They are registered independently and are not hidden by the orchestration-mode switch.
+The `事件` and `日志` conversation views belong to `@elysia/context-gate`. They are registered independently and stay visible when tool editing mode is off. The `工具` and `预设` tabs are hidden in that mode.
 
 ## Event API
 

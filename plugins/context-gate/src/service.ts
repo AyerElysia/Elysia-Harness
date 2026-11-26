@@ -2,7 +2,7 @@
  * The Host service of the context gate: provider registration, publication,
  * session subscriptions, and the panel snapshot.
  *
- * It is independent of VillV-Helix and of the session orchestration mode. The
+ * It is independent of VillV-Helix and of its tool editing mode. The
  * bus attaches to every live Agent through a global pre-step listener; there
  * is no enable flag and no per-session mode check.
  *

@@ -75,7 +75,7 @@ Non-negotiable invariants from that spec:
 - **Context events belong to Context Gate, not the tool face.** Providers call
   `contextGate.registerContextKind()` and `contextGate.publish()`; registration
   is disposed with `ctx.effect`. Context Gate is independent of the session
-  orchestration mode. A provider without Context Gate must degrade explicitly,
+  tool editing mode. A provider without Context Gate must degrade explicitly,
   not invent a private bus the UI cannot see.
 - **No plugin-level global injection switches.** The session tool face in
   VillV-Helix is the only place that changes tool visibility. Do not reintroduce

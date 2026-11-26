@@ -181,10 +181,10 @@ describe('tool panel view', () => {
     expect(markup).toContain('当前预设不是由预设管理器创建的')
   })
 
-  it('asks for orchestration mode before showing tools', () => {
+  it('asks for tool editing mode before showing tools', () => {
     const base = snapshot()
     const markup = render({ snapshot: { ...base, sessions: [{ ...base.sessions[0]!, orchestrated: false }] } })
-    expect(markup).toContain('请先开启会话编排模式')
+    expect(markup).toContain('请先开启工具编辑模式')
     expect(markup).not.toContain('DSH 基础工具')
   })
 })

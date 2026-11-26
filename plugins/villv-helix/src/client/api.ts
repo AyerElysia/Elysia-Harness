@@ -34,9 +34,9 @@ export interface VillvHelixApi {
   list(signal: AbortSignal): Promise<CapabilitySnapshot>
   /** Disable or enable one global tool for this session. */
   setTool(toolId: string, enabled: boolean, signal: AbortSignal): Promise<void>
-  /** Read 会话编排模式 without requiring a live Agent. */
+  /** Read 工具编辑模式 without requiring a live Agent. */
   getMode(signal: AbortSignal): Promise<boolean>
-  /** Turn 会话编排模式 on or off for this session. */
+  /** Turn 工具编辑模式 on or off for this session. */
   setMode(enabled: boolean, signal: AbortSignal): Promise<void>
   /** Save a named tool selection. */
   createToolPreset(name: string, tools: readonly string[], signal: AbortSignal): Promise<ToolPresetEntry>
