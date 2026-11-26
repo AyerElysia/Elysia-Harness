@@ -1,41 +1,45 @@
 /**
- * The session-scoped context event bus: provider publications, per-session
- * queues and cursors, subscription and visibility filtering, dedupe, TTL, and
- * the one merged snapshot injected per step.
+ * The context gate's delivery bus: provider publications, per-session queues
+ * and cursors, subscription and visibility filtering, dedupe, TTL, and the one
+ * merged snapshot injected before a step.
  *
  * Delivery is subscription AND visibility: a session receives an event only
  * when it subscribed the kind, and only when the publisher's visibility still
- * allows it. A publisher can narrow the target set, never widen it past the
- * panel.
+ * allows it. A publisher can narrow the target set, never widen it.
  *
- * There is no preset layer: a session's own subscription is the only one.
+ * Active events are coalesced while the Agent is idle. The first active event
+ * starts a quiet-window timer; further active events inside that window extend
+ * it, and `maxWaitMs` caps the total postponement. The wake-up is one follow-up
+ * message, and the merged snapshot drains at the next pre-step. A busy Agent is
+ * never given a second turn: its events stay queued for a pre-step or for the
+ * idle transition.
  *
- * @module @elysia/villv-helix/context-bus
+ * @module @elysia/context-gate/context-bus
  */
 
 import type { Context } from '@deepseek-ai/cordis'
-import type { Agent, PreStepDecision } from '@deepseek-ai/dsh-agent'
-import { createUserMessage } from '@deepseek-ai/dsh-llm'
+import type { Session } from '@deepseek-ai/dsh-session'
 import type { ContextFormed, UserMessage } from '@deepseek-ai/dsh-llm'
+import { createUserMessage } from '@deepseek-ai/dsh-llm'
 import type {
   ContextEvent, ContextEventInput, ContextKindRegistration, ContextVisibility, EventOutcome,
   PublishReceipt, ResolvedContextKind,
 } from './types.ts'
-import type { HelixStore } from './state.ts'
+import type { ContextGateStore } from './state.ts'
 import { QUEUE_HISTORY_LIMIT } from './state.ts'
-import { VillvHelixError, describeError } from './errors.ts'
+import { ContextGateError, describeError } from './errors.ts'
 
 declare module '@deepseek-ai/dsh-llm' {
   interface MessageSourceMap {
-    'villv-helix-context-relay': { kind: 'villv-helix-context-relay' } & ContextFormed
+    'context-gate-context-relay': { kind: 'context-gate-context-relay' } & ContextFormed
   }
 }
 
 /** Source kind of every relay message: the wake-up and the merged snapshot. */
-export const RELAY_SOURCE = 'villv-helix-context-relay'
+export const RELAY_SOURCE = 'context-gate-context-relay'
 
 /** Section name the merged snapshot contributes. */
-export const RELAY_SECTION = 'villv-helix-context-relay'
+export const RELAY_SECTION = 'context-gate-context-relay'
 
 /** Traffic defaults for kinds that do not declare their own. */
 export interface ContextDefaults {
@@ -47,14 +51,24 @@ export interface ContextDefaults {
   readonly maxQueueDepth: number
 }
 
+/** The Agent surface the bus reads: identity, lifecycle state, and one wake path. */
+export interface ContextAgent {
+  /** Live session whose queue this Agent drains. */
+  readonly session: Session
+  /** `idle` may receive one wake-up; `running` never does while busy. */
+  readonly status: 'idle' | 'running'
+  /** Queue one follow-up turn; the batch window calls this at most once. */
+  followup(message: UserMessage): void
+}
+
 /** Options one bus instance reads. */
 export interface ContextBusOptions {
-  /** Host context whose `agent/pre-step` listener the bus attaches. */
+  /** Host context whose listeners and timer owners the bus registers. */
   readonly ctx: Context
   /** Persisted queues, subscriptions, and the event log. */
-  readonly store: HelixStore
+  readonly store: ContextGateStore
   /** Live-agent lookup; a persisted session has no Agent. */
-  readonly agentOf: (sessionId: string) => Agent | undefined
+  readonly agentOf: (sessionId: string) => ContextAgent | undefined
   /** Every session a publication may target. */
   readonly candidates: () => readonly string[]
   /** Traffic defaults. */
@@ -63,22 +77,24 @@ export interface ContextBusOptions {
   readonly maxEventsPerSnapshot: number
   /** Maximum bytes of one merged snapshot. */
   readonly maxSnapshotBytes: number
-}
-
-/** One session's delivery accounting. */
-export interface SessionContextCounters {
-  /** Events consumed by a snapshot injection. */
-  readonly consumed: number
-  /** Session deliveries that failed. */
-  readonly failed: number
-  /** Wake-ups coalesced into an already pending wake-up. */
-  readonly merged: number
+  /** Quiet window after the first active event, in milliseconds. */
+  readonly batchMs: number
+  /** Total postponement ceiling from the first active event, in milliseconds. */
+  readonly maxWaitMs: number
 }
 
 /** One session's snapshot request while it is being prepared. */
 interface DrainResult {
   readonly message: UserMessage | undefined
   readonly consumed: number
+}
+
+/** One session's pending quiet-window timer. */
+interface PendingWake {
+  /** When the current batching window started. */
+  readonly firstAt: number
+  /** Timer that fires when the window closes. */
+  readonly timer: ReturnType<typeof setTimeout>
 }
 
 /**
@@ -91,11 +107,11 @@ interface DrainResult {
 export class ContextBus {
   private readonly kinds = new Map<string, ResolvedContextKind>()
   private readonly pendingWake = new Set<string>()
+  private readonly wakeTimers = new Map<string, PendingWake>()
   private readonly queueChains = new Map<string, Promise<unknown>>()
-  private readonly counters = new Map<string, SessionContextCounters>()
   private attached = false
 
-  /** @param options - context, store, session lookup, and limits. */
+  /** @param options - context, store, session lookup, limits, and batching. */
   constructor(private readonly options: ContextBusOptions) {}
 
   /**
@@ -108,10 +124,10 @@ export class ContextBus {
     const kind = registration.kind.trim()
     const nameZh = registration.nameZh.trim()
     const description = registration.description.trim()
-    if (kind === '') throw new Error('villv-helix: a context kind needs a name')
-    if (nameZh === '') throw new Error(`villv-helix: context kind ${JSON.stringify(kind)} needs a Chinese display name`)
-    if (description === '') throw new Error(`villv-helix: context kind ${JSON.stringify(kind)} needs a description`)
-    if (this.kinds.has(kind)) throw new Error(`villv-helix: context kind ${JSON.stringify(kind)} is already declared`)
+    if (kind === '') throw new Error('context-gate: a context kind needs a name')
+    if (nameZh === '') throw new Error(`context-gate: context kind ${JSON.stringify(kind)} needs a Chinese display name`)
+    if (description === '') throw new Error(`context-gate: context kind ${JSON.stringify(kind)} needs a description`)
+    if (this.kinds.has(kind)) throw new Error(`context-gate: context kind ${JSON.stringify(kind)} is already declared`)
     this.kinds.set(kind, {
       kind,
       nameZh,
@@ -134,50 +150,63 @@ export class ContextBus {
     return this.kinds.has(kind)
   }
 
-  /** One session's delivery accounting. */
-  sessionCounters(sessionId: string): SessionContextCounters {
-    return this.counters.get(sessionId) ?? { consumed: 0, failed: 0, merged: 0 }
-  }
-
   /**
-   * Attach the one global `agent/pre-step` listener. Calling it again is a no-op.
+   * Attach the global pre-step, status, and timer owners. Calling it again is a no-op.
    */
   attach(): void {
     if (this.attached) return
     this.attached = true
-    this.options.ctx.on('agent/pre-step', async ({ agent, signal }, next): Promise<PreStepDecision> => {
-      const decision = await next()
-      if (decision.kind === 'reject' || signal.aborted) return decision
-      let injected: UserMessage | undefined
-      try {
-        injected = (await this.drain(agent)).message
-      } catch (error: unknown) {
-        // Nothing was consumed: leaving the queue intact lets the next step retry.
-        this.fail(agent.session.id, `context injection failed: ${describeError(error)}`)
-        return decision
-      }
-      if (injected === undefined) return decision
-      return { ...decision, messages: [...decision.messages, injected] }
-    }, { prepend: true })
+    this.options.ctx.effect(
+      () => this.options.ctx.on('agent/pre-step', async ({ agent, signal }, next) => {
+        const decision = await next()
+        if (decision.kind === 'reject' || signal.aborted) return decision
+        let injected: UserMessage | undefined
+        try {
+          injected = (await this.drain(agent)).message
+        } catch (error: unknown) {
+          // Nothing was consumed: leaving the queue intact lets the next step retry.
+          this.fail(agent.session.id, `context injection failed: ${describeError(error)}`)
+          return decision
+        }
+        if (injected === undefined) return decision
+        return { ...decision, messages: [...decision.messages, injected] }
+      }, { prepend: true }),
+      'context-gate.pre-step',
+    )
+    this.options.ctx.effect(
+      () => this.options.ctx.on('agent/status', ({ agent, status }) => {
+        if (status === 'idle') this.resume(agent)
+      }),
+      'context-gate.agent-status',
+    )
+    this.options.ctx.effect(() => () => { this.dispose() }, 'context-gate.wake-timers')
+  }
+
+  /** Cancel every quiet-window timer owned by this bus. */
+  dispose(): void {
+    for (const pending of this.wakeTimers.values()) clearTimeout(pending.timer)
+    this.wakeTimers.clear()
+    this.pendingWake.clear()
   }
 
   /**
    * Publish one event to every subscribed, visible session.
    * @param input - the publication.
    * @returns delivery accounting for the publication.
-   * @throws VillvHelixError `CONTEXT_UNKNOWN`, `EVENT_INVALID`, `EVENT_PAYLOAD_INVALID`, or `EVENT_TOO_LARGE`.
+   * @throws ContextGateError `CONTEXT_UNKNOWN`, `EVENT_INVALID`, `EVENT_PAYLOAD_INVALID`, or `EVENT_TOO_LARGE`.
    */
   async publish(input: ContextEventInput): Promise<PublishReceipt> {
     const kind = this.kinds.get(input.kind)
     if (kind === undefined) {
-      throw new VillvHelixError('CONTEXT_UNKNOWN', `context kind ${JSON.stringify(input.kind)} is not registered in this Host`, {
+      throw new ContextGateError('CONTEXT_UNKNOWN', `context kind ${JSON.stringify(input.kind)} is not registered in this Host`, {
         eventKind: input.kind,
       })
     }
     const event = this.normalize(input, kind)
     const now = Date.now()
     const receipt = { eventId: event.id, delivered: 0, suppressed: 0, failed: 0 }
-    for (const candidate of this.options.candidates()) {
+    const candidates = this.options.candidates()
+    for (const candidate of candidates) {
       if (!this.subscribed(candidate, event.kind) || !visibleTo(event.visibility, candidate)) {
         receipt.suppressed += 1
         continue
@@ -207,13 +236,13 @@ export class ContextBus {
         }
         receipt.delivered += 1
         await this.log(candidate, event.kind, 'delivered', `queue accepted event ${event.id}`)
-        if (event.active) this.wake(candidate)
+        if (event.active) this.schedule(candidate)
       } catch (error: unknown) {
         receipt.failed += 1
         this.fail(candidate, `publish failed: ${describeError(error)}`, event.kind)
       }
     }
-    for (const candidate of this.options.candidates()) {
+    for (const candidate of candidates) {
       if (!this.subscribed(candidate, event.kind)) continue
       await this.log(candidate, event.kind, 'published', `from ${event.source}: ${event.summary}`)
     }
@@ -225,16 +254,16 @@ export class ContextBus {
    * @param agent - Agent whose undelivered events are injected.
    * @returns the snapshot message and the number of consumed events.
    */
-  private async drain(agent: Agent): Promise<DrainResult> {
+  private async drain(agent: ContextAgent): Promise<DrainResult> {
     const sessionId = agent.session.id
     return await this.withQueue(sessionId, async () => {
+      this.clearWake(sessionId)
       const queue = this.options.store.queue(sessionId)
       const now = Date.now()
       const kept: ContextEvent[] = []
       let expired = 0
       for (const event of queue.events) {
-        const ttl = event.ttlMs ?? this.kinds.get(event.kind)?.ttlMs ?? this.options.defaults.ttlMs
-        if (now - event.createdAt > ttl) {
+        if (now - event.createdAt > this.ttlOf(event)) {
           expired += 1
           continue
         }
@@ -271,8 +300,6 @@ export class ContextBus {
         consumed: [...queue.consumed, ...consumedIds].slice(-QUEUE_HISTORY_LIMIT),
         dedupe: queue.dedupe,
       }))
-      this.bump(sessionId, counters => ({ ...counters, consumed: counters.consumed + selected.length }))
-      this.pendingWake.delete(sessionId)
       for (const event of selected) {
         await this.log(sessionId, event.kind, 'consumed', `injected ${event.id}`)
       }
@@ -290,20 +317,53 @@ export class ContextBus {
   }
 
   /**
-   * Wake one session for an active event, coalescing repeats.
+   * Arm or extend one session's quiet-window timer after an active event.
    * @param sessionId - session that accepted an active event.
    */
-  private wake(sessionId: string): void {
+  private schedule(sessionId: string): void {
+    const existing = this.wakeTimers.get(sessionId)
+    if (existing !== undefined) {
+      this.arm(sessionId, existing.firstAt)
+      return
+    }
+    if (this.pendingWake.has(sessionId)) return
     const agent = this.options.agentOf(sessionId)
-    if (agent === undefined) {
-      // Offline: the queue is the wake-up; the next step injects it.
-      this.bump(sessionId, counters => ({ ...counters, merged: counters.merged + 1 }))
+    if (agent === undefined || agent.status !== 'idle') {
+      // Busy or offline: the queue is the wake-up. A pre-step drains it while a
+      // turn is open; the idle transition retries the batch while it is not.
       return
     }
-    if (this.pendingWake.has(sessionId)) {
-      this.bump(sessionId, counters => ({ ...counters, merged: counters.merged + 1 }))
-      return
-    }
+    if (!this.hasLiveActiveEvent(sessionId)) return
+    this.arm(sessionId, Date.now())
+  }
+
+  /**
+   * Replace the timer for one batching window, preserving its start time.
+   * @param sessionId - target session.
+   * @param firstAt - when the current window started.
+   */
+  private arm(sessionId: string, firstAt: number): void {
+    const current = this.wakeTimers.get(sessionId)
+    if (current !== undefined) clearTimeout(current.timer)
+    const elapsed = Math.max(0, Date.now() - firstAt)
+    const remaining = Math.max(0, this.options.maxWaitMs - elapsed)
+    const delay = Math.min(Math.max(0, this.options.batchMs), remaining)
+    const timer = setTimeout(() => { this.flush(sessionId) }, delay)
+    this.wakeTimers.set(sessionId, { firstAt, timer })
+  }
+
+  /**
+   * Close one batching window and open at most one follow-up turn.
+   * @param sessionId - session whose quiet window closed.
+   */
+  private flush(sessionId: string): void {
+    this.wakeTimers.delete(sessionId)
+    if (this.pendingWake.has(sessionId)) return
+    const agent = this.options.agentOf(sessionId)
+    // A running Agent is mid-turn: do not open another turn. The queue drains at
+    // its next pre-step, or the idle transition re-arms this batch.
+    if (agent === undefined || agent.status !== 'idle') return
+    if (!this.hasLiveActiveEvent(sessionId)) return
     this.pendingWake.add(sessionId)
     try {
       agent.followup(createUserMessage({
@@ -317,12 +377,45 @@ export class ContextBus {
   }
 
   /**
+   * Re-arm the batch for one Agent that just became idle with active events queued.
+   * @param agent - Agent whose status flipped to idle.
+   */
+  private resume(agent: ContextAgent): void {
+    const sessionId = agent.session.id
+    if (this.wakeTimers.has(sessionId) || this.pendingWake.has(sessionId)) return
+    if (!this.hasLiveActiveEvent(sessionId)) return
+    if (agent.status !== 'idle') return
+    this.arm(sessionId, Date.now())
+  }
+
+  /** Cancel the timer and pending-wake marker for one session. */
+  private clearWake(sessionId: string): void {
+    const pending = this.wakeTimers.get(sessionId)
+    if (pending !== undefined) {
+      clearTimeout(pending.timer)
+      this.wakeTimers.delete(sessionId)
+    }
+    this.pendingWake.delete(sessionId)
+  }
+
+  /** Whether one session has an active, unexpired queued event. */
+  private hasLiveActiveEvent(sessionId: string): boolean {
+    const now = Date.now()
+    return this.options.store.queue(sessionId).events.some(event => event.active && now - event.createdAt <= this.ttlOf(event))
+  }
+
+  /** The TTL one queued event observes. */
+  private ttlOf(event: ContextEvent): number {
+    return event.ttlMs ?? this.kinds.get(event.kind)?.ttlMs ?? this.options.defaults.ttlMs
+  }
+
+  /**
    * Remove every earlier relay snapshot from one Agent's visible surface, so
    * the new snapshot replaces the previous turn's annotation instead of
    * accumulating beside it.
    * @param agent - Agent whose surface is rewritten.
    */
-  private retireSnapshots(agent: Agent): void {
+  private retireSnapshots(agent: ContextAgent): void {
     for (const seq of [...agent.session.surface.nodes]) {
       const event = agent.session.eventAt(seq)
       if (event?.type !== 'user/message' || event.data.source.kind !== RELAY_SOURCE) continue
@@ -342,19 +435,19 @@ export class ContextBus {
 
   private normalize(input: ContextEventInput, kind: ResolvedContextKind): ContextEvent {
     if (typeof input.summary !== 'string') {
-      throw new VillvHelixError('EVENT_INVALID', 'a context event needs a summary string', { eventKind: kind.kind })
+      throw new ContextGateError('EVENT_INVALID', 'a context event needs a summary string', { eventKind: kind.kind })
     }
     if (typeof input.source !== 'string' || input.source === '') {
-      throw new VillvHelixError('EVENT_INVALID', 'a context event needs a source', { eventKind: kind.kind })
+      throw new ContextGateError('EVENT_INVALID', 'a context event needs a source', { eventKind: kind.kind })
     }
     const id = input.id ?? crypto.randomUUID()
     const maxBytes = input.maxBytes ?? kind.maxBytes
     const ttlMs = input.ttlMs ?? kind.ttlMs
     if (!Number.isFinite(ttlMs) || ttlMs <= 0) {
-      throw new VillvHelixError('EVENT_INVALID', `ttlMs must be a positive finite number, got ${String(ttlMs)}`, { eventKind: kind.kind })
+      throw new ContextGateError('EVENT_INVALID', `ttlMs must be a positive finite number, got ${String(ttlMs)}`, { eventKind: kind.kind })
     }
     if (!Number.isFinite(maxBytes) || maxBytes <= 0) {
-      throw new VillvHelixError('EVENT_INVALID', `maxBytes must be a positive finite number, got ${String(maxBytes)}`, { eventKind: kind.kind })
+      throw new ContextGateError('EVENT_INVALID', `maxBytes must be a positive finite number, got ${String(maxBytes)}`, { eventKind: kind.kind })
     }
     let serialized: string
     try {
@@ -362,13 +455,13 @@ export class ContextBus {
       if (json === undefined) throw new Error('the payload has no JSON form')
       serialized = json
     } catch (error: unknown) {
-      throw new VillvHelixError('EVENT_PAYLOAD_INVALID', `payload is not JSON-serializable: ${describeError(error)}`, {
+      throw new ContextGateError('EVENT_PAYLOAD_INVALID', `payload is not JSON-serializable: ${describeError(error)}`, {
         eventKind: kind.kind, eventId: id,
       })
     }
     const bytes = Buffer.byteLength(serialized, 'utf8')
     if (bytes > maxBytes) {
-      throw new VillvHelixError('EVENT_TOO_LARGE', `payload is ${String(bytes)} bytes; the limit is ${String(maxBytes)}`, {
+      throw new ContextGateError('EVENT_TOO_LARGE', `payload is ${String(bytes)} bytes; the limit is ${String(maxBytes)}`, {
         eventKind: kind.kind, eventId: id, bytes, maxBytes,
       })
     }
@@ -389,12 +482,7 @@ export class ContextBus {
     }
   }
 
-  private bump(sessionId: string, update: (counters: SessionContextCounters) => SessionContextCounters): void {
-    this.counters.set(sessionId, update(this.sessionCounters(sessionId)))
-  }
-
   private fail(sessionId: string, message: string, kind?: string): void {
-    this.bump(sessionId, counters => ({ ...counters, failed: counters.failed + 1 }))
     void this.log(sessionId, kind ?? 'context', 'failed', message)
   }
 
@@ -421,7 +509,7 @@ function normalizeVisibility(visibility: ContextVisibility | undefined, kind: st
   const sessionIds = visibility.sessionIds
   if (sessionIds === undefined) return {}
   if (!Array.isArray(sessionIds) || sessionIds.some(entry => typeof entry !== 'string' || entry === '')) {
-    throw new VillvHelixError('EVENT_INVALID', 'visibility.sessionIds must be a non-empty string array', { eventKind: kind })
+    throw new ContextGateError('EVENT_INVALID', 'visibility.sessionIds must be a non-empty string array', { eventKind: kind })
   }
   return { sessionIds: [...sessionIds] }
 }

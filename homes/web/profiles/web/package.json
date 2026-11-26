@@ -3,6 +3,7 @@
   "private": true,
   "dependencies": {
     "@elysia/villv-helix": "link:../../../../plugins/villv-helix",
+    "@elysia/context-gate": "link:../../../../plugins/context-gate",
     "@elysia/mobius-infinity": "link:../../../../plugins/mobius-infinity",
     "@linxin666/dsh-client-ui-skill-explorer": "0.4.20",
     "@linxin666/dsh-remote-web-ui": "0.4.20",
@@ -21,6 +22,7 @@
         "@liustack/modsearch",
         "billion-context",
         "@elysia/villv-helix",
+        "@elysia/context-gate",
         "@elysia/mobius-infinity",
         "@linxin666/dsh-client-ui-skill-explorer"
       ]

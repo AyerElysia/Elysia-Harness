@@ -1,5 +1,5 @@
 /**
- * Stable refusal codes of the orchestrator.
+ * Stable refusal codes of the tool panel Host.
  *
  * The Remote layer prefixes each code with `villvHelix/`, so a browser half can
  * tell a stale render (a locked static tool) from a real failure.
@@ -11,11 +11,7 @@
 export type HelixErrorCode =
   | 'TOOL_UNKNOWN'
   | 'TOOL_STATIC_LOCKED'
-  | 'CONTEXT_UNKNOWN'
   | 'SESSION_NOT_FOUND'
-  | 'EVENT_INVALID'
-  | 'EVENT_PAYLOAD_INVALID'
-  | 'EVENT_TOO_LARGE'
   | 'STATE_INVALID'
   | 'STATE_WRITE_FAILED'
 
@@ -50,16 +46,8 @@ declare module '@deepseek-ai/dsh-typert-protocol' {
     'villvHelix/TOOL_UNKNOWN': Readonly<Record<string, unknown>> | undefined
     /** A switch targeted a preset static tool. */
     'villvHelix/TOOL_STATIC_LOCKED': Readonly<Record<string, unknown>> | undefined
-    /** A subscription named an unregistered context kind. */
-    'villvHelix/CONTEXT_UNKNOWN': Readonly<Record<string, unknown>> | undefined
     /** The session has no live Agent. */
     'villvHelix/SESSION_NOT_FOUND': Readonly<Record<string, unknown>> | undefined
-    /** A publication carried an invalid field. */
-    'villvHelix/EVENT_INVALID': Readonly<Record<string, unknown>> | undefined
-    /** A publication payload could not be represented as JSON. */
-    'villvHelix/EVENT_PAYLOAD_INVALID': Readonly<Record<string, unknown>> | undefined
-    /** A publication exceeded its size ceiling. */
-    'villvHelix/EVENT_TOO_LARGE': Readonly<Record<string, unknown>> | undefined
     /** The state document could not be read. */
     'villvHelix/STATE_INVALID': Readonly<Record<string, unknown>> | undefined
     /** The state write failed. */

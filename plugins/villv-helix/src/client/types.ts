@@ -7,8 +7,6 @@
  */
 
 export type {
-  CapabilitySnapshot, ContextEntry, ContextEvent, ContextKindRegistration, EventLogEntry, EventOutcome,
-  GateHealth, HealthStatus, HostStatus, PresetPrompt, PublishReceipt, QueueRecord, ScopeKey, ScopeRef,
-  SessionRowEntry, StepGate, ToolEntry, ToolGroupEntry, ToolOrigin, ToolPresetEntry, ToolScope,
-  ContextHealth, ToolHealth,
+  CapabilitySnapshot, PresetPrompt, ScopeKey, ScopeRef, SessionRowEntry, StepGate,
+  ToolEntry, ToolGroupEntry, ToolOrigin, ToolPresetEntry, ToolScope,
 } from '../types.ts'

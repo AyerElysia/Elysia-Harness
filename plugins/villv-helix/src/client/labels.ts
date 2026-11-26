@@ -1,16 +1,15 @@
 /**
- * Label resolution for Host-owned ids. A known id renders its localized name; an
- * id this build does not know renders verbatim, because it is Host data the
- * panel must not hide.
+ * Label resolution for Host-owned tool ids. A known id renders its localized
+ * name; an id this build does not know renders verbatim, because it is Host
+ * data the panel must not hide.
  *
  * @module @elysia/villv-helix/client/labels
  */
 
 import type { Translate } from '@deepseek-ai/dsh-client-ui-slots'
-import type { EventOutcome, StepGate } from '../types.ts'
+import type { StepGate } from '../types.ts'
 import {
-  CONTEXT_LABEL_KEYS, OUTCOME_LABEL_KEYS, STEP_LABEL_KEYS, TOOL_LABEL_KEYS,
-  type ControlPanelLocaleKey,
+  STEP_LABEL_KEYS, TOOL_LABEL_KEYS, type ControlPanelLocaleKey,
 } from './locales.ts'
 
 /** The panel's translate seat, narrowed to its own dictionary. */
@@ -76,19 +75,6 @@ export function toolLabel(t: ControlPanelTranslate, id: string, translate = true
 }
 
 /**
- * Localized name of one context event kind.
- * @param t - panel copy.
- * @param kind - event kind from the Host.
- * @param nameZh - provider-supplied Chinese display name, preferred when present.
- * @returns the provider name, localized label, or the kind when unknown.
- */
-export function contextLabel(t: ControlPanelTranslate, kind: string, nameZh?: string): string {
-  if (nameZh !== undefined && nameZh.trim() !== '') return nameZh
-  const key = CONTEXT_LABEL_KEYS[kind]
-  return key === undefined ? kind : t(key)
-}
-
-/**
  * Localized current-step verdict.
  * @param t - panel copy.
  * @param gate - the tool's verdict; absent reads as active.
@@ -97,15 +83,4 @@ export function contextLabel(t: ControlPanelTranslate, kind: string, nameZh?: st
 export function stepText(t: ControlPanelTranslate, gate: StepGate | undefined): string {
   const key = STEP_LABEL_KEYS[gate ?? 'active']
   return key === undefined ? gate ?? 'active' : t(key)
-}
-
-/**
- * Localized event-log outcome.
- * @param t - panel copy.
- * @param outcome - the outcome from the Host.
- * @returns the localized outcome, or the raw value when unknown.
- */
-export function outcomeText(t: ControlPanelTranslate, outcome: EventOutcome): string {
-  const key = OUTCOME_LABEL_KEYS[outcome]
-  return key === undefined ? outcome : t(key)
 }

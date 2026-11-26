@@ -1,4 +1,4 @@
-/* Capability panel. Tokens only: no literal colors. */
+/* Tool panel. Tokens only: no literal colors. */
 .shell {
   display: flex;
   flex-direction: column;
@@ -14,25 +14,9 @@
   color: var(--dsw-alias-label-primary);
 }
 
-.header {
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  gap: 12px;
-}
-
-.title {
-  margin: 0;
-  font-size: 17px;
-  line-height: 24px;
-  font-weight: 600;
-}
-
-.subtitle,
 .hint,
 .notice,
 .toolMeta,
-.healthMeta,
 .groupNote {
   margin: 0;
   font-size: 13px;
@@ -54,14 +38,7 @@
   color: var(--dsw-alias-state-error-primary);
 }
 
-.actions {
-  display: flex;
-  align-items: center;
-  gap: 8px;
-  flex: none;
-}
-
-/* The loaded view: scope list on the left, panels on the right. */
+/* The loaded view: the one session's tool face. */
 .page {
   display: flex;
   flex: 1 1 auto;
@@ -69,25 +46,6 @@
   gap: 12px;
   width: 100%;
   min-height: 0;
-}
-
-.columns {
-  display: grid;
-  flex: 1 1 auto;
-  grid-template-columns: minmax(220px, 1fr) minmax(0, 3fr);
-  gap: 20px;
-  align-items: stretch;
-  min-height: 0;
-}
-
-.scopeColumn {
-  display: flex;
-  flex-direction: column;
-  gap: 8px;
-  min-width: 0;
-  min-height: 0;
-  overflow-y: auto;
-  scrollbar-gutter: stable;
 }
 
 .panel {
@@ -156,77 +114,14 @@
   font-weight: 600;
 }
 
-.sectionTitle {
-  margin: 8px 0 0;
-  font-size: 13px;
-  line-height: 20px;
-  font-weight: 600;
-  color: var(--dsw-alias-label-tertiary);
-}
-
-.filterRow {
-  display: flex;
-  align-items: center;
-  gap: 8px;
-  font-size: 12px;
-  line-height: 18px;
-  color: var(--dsw-alias-label-tertiary);
-}
-
-.filterSelect {
-  min-width: 0;
-  flex: 1;
-  border: 0.5px solid var(--dsw-alias-border-l3);
-  border-radius: var(--dsw-radius-sm);
-  padding: 4px 6px;
-  background: var(--dsw-alias-bg-module-platform);
-  color: var(--dsw-alias-label-primary);
-  font: inherit;
-}
-
-.scopeList,
 .toolList,
-.memberList,
-.contextList,
-.eventList {
+.memberList {
   display: flex;
   flex-direction: column;
   gap: 6px;
   margin: 0;
   padding: 0;
   list-style: none;
-}
-
-.scopeButton {
-  display: flex;
-  flex-direction: column;
-  gap: 4px;
-  width: 100%;
-  box-sizing: border-box;
-  border: 0.5px solid var(--dsw-alias-border-l3);
-  border-radius: var(--dsw-radius-sm);
-  padding: 8px 10px;
-  background: transparent;
-  color: var(--dsw-alias-label-primary);
-  font: inherit;
-  text-align: left;
-  cursor: pointer;
-}
-
-.scopeButton:hover {
-  background: var(--dsw-alias-interactive-bg-hover);
-}
-
-.scopeButtonActive {
-  border-color: var(--dsw-alias-state-business-primary);
-  background: var(--dsw-alias-bg-module-platform);
-}
-
-.scopeTitle {
-  font-size: 13px;
-  line-height: 18px;
-  font-weight: 600;
-  overflow-wrap: anywhere;
 }
 
 .badgeRow {
@@ -237,8 +132,6 @@
 }
 
 .badgeMuted,
-.badgeOk,
-.badgeWarn,
 .badgeError {
   border-radius: var(--dsw-radius-sm);
   padding: 1px 8px;
@@ -247,14 +140,6 @@
   white-space: nowrap;
   background: var(--dsw-alias-bg-module-platform);
   color: var(--dsw-alias-label-tertiary);
-}
-
-.badgeOk {
-  color: var(--dsw-alias-state-success-primary);
-}
-
-.badgeWarn {
-  color: var(--dsw-alias-state-warn-primary);
 }
 
 .badgeError {
@@ -279,22 +164,11 @@
   flex-wrap: wrap;
 }
 
-.groupTitle {
-  margin: 0;
-  font-size: 14px;
-  line-height: 20px;
-  font-weight: 600;
-}
-
 .dynamicHeaderRow {
   display: flex;
   align-items: center;
   flex-wrap: wrap;
   gap: 8px;
-}
-
-.dynamicHeaderRow .groupTitle {
-  margin-right: auto;
 }
 
 .inlineSwitch {
@@ -431,16 +305,6 @@
   padding: 0 12px 10px;
 }
 
-.saveBar {
-  display: flex;
-  align-items: center;
-  justify-content: flex-end;
-  flex-wrap: wrap;
-  gap: 10px;
-  border-top: 0.5px solid var(--dsw-alias-border-l3);
-  padding-top: 10px;
-}
-
 .unsavedHint {
   margin: 0;
   font-size: 12px;
@@ -563,78 +427,6 @@
   color: var(--dsw-alias-label-secondary);
 }
 
-.contextRow {
-  display: flex;
-  flex-direction: column;
-  gap: 4px;
-  border-top: 0.5px solid var(--dsw-alias-border-l3);
-  padding: 6px 0;
-}
-
-.contextRow:first-child {
-  border-top: none;
-}
-
-.eventRow {
-  display: flex;
-  align-items: baseline;
-  flex-wrap: wrap;
-  gap: 8px;
-  border-top: 0.5px solid var(--dsw-alias-border-l3);
-  padding: 4px 0;
-  font-size: 12px;
-}
-
-.eventRow:first-child {
-  border-top: none;
-}
-
-.eventTime {
-  font-variant-numeric: tabular-nums;
-  color: var(--dsw-alias-label-tertiary);
-}
-
-.eventKind {
-  color: var(--dsw-alias-label-secondary);
-}
-
-.eventDetail {
-  color: var(--dsw-alias-label-tertiary);
-  overflow-wrap: anywhere;
-}
-
-.health {
-  display: flex;
-  flex-direction: column;
-  gap: 6px;
-  margin: 0;
-}
-
-.healthRow {
-  display: grid;
-  grid-template-columns: minmax(0, 120px) minmax(0, 1fr);
-  gap: 12px;
-  align-items: baseline;
-}
-
-.healthRow dt {
-  font-size: 12px;
-  color: var(--dsw-alias-label-secondary);
-}
-
-.healthRow dd {
-  display: flex;
-  flex-direction: column;
-  gap: 2px;
-  margin: 0;
-  font-size: 13px;
-  color: var(--dsw-alias-label-primary);
-}
-
-.healthMeta {
-  font-size: 12px;
-}
-
 .primary,
 .secondary {
   border: 0.5px solid var(--dsw-alias-border-l4);
@@ -657,33 +449,7 @@
   cursor: default;
 }
 
-@media (max-width: 1000px) {
-  .columns {
-    grid-template-columns: minmax(0, 1fr);
-    grid-template-rows: minmax(160px, 32%) minmax(0, 1fr);
-  }
-
-  .healthRow {
-    grid-template-columns: minmax(0, 1fr);
-    gap: 2px;
-  }
-}
-/* The current session card is identification, not a scope switch: it keeps the
-   selected-row styling without a pointer cursor or hover state. */
-.scopeCard {
-  display: flex;
-  flex-direction: column;
-  gap: 4px;
-  width: 100%;
-  box-sizing: border-box;
-  border: 0.5px solid var(--dsw-alias-state-business-primary);
-  border-radius: var(--dsw-radius-sm);
-  padding: 8px 10px;
-  background: var(--dsw-alias-bg-module-platform);
-  color: var(--dsw-alias-label-primary);
-}
-
-/* A top-level capability tab is a page, not a chat turn: while any panel page is
+/* A top-level tool tab is a page, not a chat turn: while any panel page is
    mounted, hide the conversation composer and its spacer so the page owns the
    whole content band. Switching back to 对话 unmounts the panel and restores it. */
 :global(body:has([data-villv-helix-panel])) :global([data-composer-seat]) {
@@ -805,20 +571,9 @@
   flex-wrap: wrap !important;
 }
 
-/* The five orchestration tabs belong to the orchestration mode. The native
-   view roster is root-scoped, so gate the rendered buttons from the session
-   header; switching mode off removes them from the row immediately. */
-:global(html[data-helix-mode='off']) :global([data-conversation-tabs]) > button:nth-child(3),
-:global(html[data-helix-mode='off']) :global([data-conversation-tabs]) > button:nth-child(4),
-:global(html[data-helix-mode='off']) :global([data-conversation-tabs]) > button:nth-child(5),
-:global(html[data-helix-mode='off']) :global([data-conversation-tabs]) > button:nth-child(6),
-:global(html[data-helix-mode='off']) :global([data-conversation-tabs]) > button:nth-child(7) {
-  display: none !important;
-}
-
 /* Keep the save bar attached to the viewport bottom instead of letting it
-   ride under the long tool/context content. The sidebar is 280px on the
-   desktop shell; the bar starts after it and spans the content pane. */
+   ride under the long tool content. The sidebar is 280px on the desktop shell;
+   the bar starts after it and spans the content pane. */
 .panelFooter {
   position: fixed;
   left: 280px;

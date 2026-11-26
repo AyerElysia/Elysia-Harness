@@ -37,7 +37,7 @@ DSH 原生工具位于 Tool Registry 内，但在本架构中只作为**依赖**
 
 ### `@elysia/villv-helix`
 
-- **职责**：会话级工具面、门禁、Context Bus、能力面板
+- **职责**：会话级工具面、门禁、工具面板
 - **不是**：工具提供者、会话创建者、主意识插件
 - **会做**：
   - 读取当前 Agent 的实际工具定义；
@@ -46,12 +46,23 @@ DSH 原生工具位于 Tool Registry 内，但在本架构中只作为**依赖**
   - 对自定义预设静态工具做执行门禁；
   - 对 Helix 挂载的扩展工具做启用集合；
   - 未启用时保留 schema，执行返回 `UNKNOWN_TOOL`；
-  - 提供 Context Bus 与面板。
+  - 提供工具面板与编排模式胶囊。
 - **不会做**：
   - 注册 `send_text`、`send_voice`、`session_*` 等业务工具；
   - 管理预设创建；
+  - 管理上下文事件订阅/队列/注入日志（已拆到 Context Gate）；
   - 创建或切换 Session；
   - 用私有布尔值代替宿主工具状态。
+
+### `@elysia/context-gate`
+
+- **职责**：上下文事件 kind、session 订阅、持久队列、TTL/dedupe/背压、下一 step 注入、注入日志
+- **模型工具**：无
+- **Remote**：`contextGate/list`、`contextGate/setContext`
+- **不是**：工具面、预设、Session 创建者、健康面板
+- **边界**：独立于 Helix 和会话编排模式；渠道/内部消息的通用入站缓冲尚未接入，当前只处理上下文事件 publication。
+
+详见 [Context Gate](elyh-context-gate.zh.md)。
 
 ### `@elysia/mobius-infinity`
 
@@ -80,7 +91,7 @@ DSH 原生工具位于 Tool Registry 内，但在本架构中只作为**依赖**
 | Service | 为工具/事件提供底层能力 | sender、TTS、ASR、SQLite、索引 |
 | Policy / Gate | 控制可见性与执行 | 工具面、确认、权限、压缩策略 |
 | UI | 浏览器面板或页面 | 能力面板、预设管理、请求查看器 |
-| Orchestration | 组合和调度扩展 | Helix 工具面、Mobius 预设 |
+| Orchestration | 组合和调度扩展 | Helix 工具面、Context Gate 队列、Mobius 预设 |
 
 一个包可以同时承担多项，但文档必须把它写成“提供哪些扩展点”，不能写成“某个意识的插件”。
 
@@ -160,12 +171,13 @@ llm/stream
 
 ```text
 external state / memory / runtime
-  → Context Bus publish
+  → Context Gate publish
   → session subscription
+  → durable queue + TTL/dedupe/backpressure
   → merged snapshot on agent/pre-step
 ```
 
-Context Bus 只处理模型可见上下文，不是 DSH 的全部事件系统。
+Context Gate 只处理模型可见上下文，不是 DSH 的全部事件系统。它独立于 Helix 和编排模式；active 事件在空闲 Agent 上走 `batchMs` 静默窗口，最多等 `maxWaitMs`，忙时只排队等待下一个 pre-step。
 
 ## 6. 控制流
 
@@ -195,7 +207,7 @@ UI / Helix state
 
 ```text
 Provider publish
-  → Context Bus queue
+  → Context Gate queue
   → subscribed session
   → merged snapshot
   → agent/pre-step
@@ -206,7 +218,7 @@ Provider publish
 
 | 状态 | 含义 |
 |---|---|
-| 当前启用 | `villv-helix`、`mobius-infinity`、profile 第三方包 |
+| 当前启用 | `villv-helix`（工具）、`context-gate`（上下文）、`mobius-infinity`（预设）、profile 第三方包 |
 | 目标能力 | 渠道消息、会话通信、语音媒体、可观测 |
 | 可选能力 | 感知 / 记忆 |
 | 已归档 | 旧 conscious-mind、subconscious、渠道、语音、直播、归档插件 |

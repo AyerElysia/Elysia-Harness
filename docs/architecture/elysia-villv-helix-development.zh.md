@@ -5,6 +5,10 @@
 > [工具面与控制面板](elyh-control-panel.zh.md)。
 > 规范见 [ElyH 插件开发规范](elyh-plugin-spec.zh.md)。
 > 插件身份：**Elysia/VillV-Helix** / `@elysia/villv-helix` / `villv-helix`（Vill-V of Helix）。
+>
+> **2026-11-26 更新**：上下文事件订阅、注入队列与日志已拆到独立 `@elysia/context-gate`；健康统计已删除。
+> 本文中涉及“Helix 事件总线 / 日志 / 健康 / 单排全部标签”的段落是拆分前历史步骤，以
+> [Context Gate](elyh-context-gate.zh.md) 和 [工具面文档](elyh-control-panel.zh.md) 为准。
 
 ## 1. 这次重写做什么
 
@@ -12,8 +16,12 @@
 
 ```text
 @elysia/villv-helix
-  Host：会话编排状态、全局工具限制、事件总线、预设预览数据
-  Client：会话页签、模式胶囊、工具/事件/日志/健康/预设页面
+  Host：会话编排状态、工具限制、预设预览数据
+  Client：工具/预设视图、模式胶囊
+
+@elysia/context-gate
+  Host：上下文 kind 订阅、持久队列、合并注入、注入日志
+  Client：事件/日志视图
 ```
 
 旧代码只保留为前端参考和迁移材料。新插件不依赖 `capability-core`，也不依赖旧的面板包。
@@ -26,7 +34,7 @@
 |---|---|
 | `capability-panel` 的工具列表、行、分组、折叠、空状态 | 搬视觉与交互；数据接口重写 |
 | 上下文事件页、事件行、订阅开关 | 搬 UI；改为 session 作用域 |
-| 事件日志/健康页的展示组件 | 搬 UI；改为 per-session 数据 |
+| Context Gate 的事件/日志视图 | 已拆到独立包；per-session 数据，不再有健康页 |
 | CSS modules、图标、配色、间距、响应式规则 | 可参考复用；去掉旧主面板布局 |
 | `locales.ts` 的中英文文案 | 逐条审查后复用；删除“全局注入”旧文案 |
 | 客户端 API 的响应校验/错误分类 | 参考实现，按新 RPC 重写 |
@@ -49,11 +57,11 @@
 - 一个完整包 `@elysia/villv-helix`，Host + Client 同包；
 - session 的“会话编排模式”标记与持久化；
 - 全局工具拉取、live Agent 的 `tools.restrict()`、`agent/created` / `tools/change` 自动重算；
-- 同排顶部标签：`对话 | 轨迹 | 上下文 | 工具 | 事件 | 日志 | 健康 | 预设`；
-- per-session 事件日志与健康数据；
+- Helix 视图：`工具 | 预设`；
+- Context Gate 视图：`事件 | 日志`，独立注册且不受编排模式管理；
 - “预设”页签：静态工具面、当前 system prompt、提示词文件预览；
-- 工具/事件中文显示名元数据；
-- 普通/编排模式切换与标签条件显示。
+- 工具中文显示名元数据（上下文 kind 的中文名归 Context Gate）；
+- 普通/编排模式切换只影响工具面，不影响 Context Gate 视图。
 
 ## 3. 开发顺序
 
@@ -98,13 +106,13 @@ plugins/villv-helix/
 - Helix 挂载的扩展工具保留稳定声明，未启用执行 `UNKNOWN_TOOL`；
 - 普通会话不安装编排限制。
 
-### 第 4 步：事件总线与日志
+### 第 4 步：Context Gate（拆分后）
 
-- 从旧 `context-bus` 只参考队列/TTL/订阅语义，代码重写；
-- provider 注册 `kind`、`nameZh`、描述、TTL、大小限制；
-- per-session 队列、消费、失败统计；
-- 日志页只显示当前 session；
-- 去掉旧的全局日志占位。
+- 从旧 `context-bus` 只参考队列/TTL/订阅语义，代码重写到独立包；
+- provider 向 `contextGate.registerContextKind()` / `publish()` 注册与发布；
+- per-session 队列、TTL、dedupe、背压、合并注入；
+- 事件/日志两个视图独立于 Helix；
+- 健康统计删除，不再有 status/健康页。
 
 ### 第 5 步：预设页签
 
@@ -117,16 +125,16 @@ plugins/villv-helix/
 
 需要新的只读 RPC/查询，不从旧 `capabilityHost/list` 硬拼。
 
-### 第 6 步：顶部标签
+### 第 6 步：顶部视图（拆分后）
 
 ```text
-对话 | 轨迹 | 上下文 | 工具 | 事件 | 日志 | 健康 | 预设
+Helix:        工具 | 预设
+Context Gate: 事件 | 日志
 ```
 
-- 不换排、不加第二排；
-- 普通会话只显示前三个；
-- 编排会话显示全部；
-- 当前编排标签在关闭模式时回到“对话”；
+- 两组视图分别注册，不互相挤占；
+- 上下文视图不受编排模式管理；
+- 普通模式仍显示工具/预设，并提示编排模式未开启；
 - 窄屏横向滚动，不折行。
 
 ### 第 7 步：切换与清理
@@ -146,7 +154,7 @@ plugins/villv-helix/
 - 新工具 `tools/change` 自动进入控制；
 - 编排会话初始只有静态工具；
 - 预设页签数据正确、只读；
-- 单排标签、胶囊、中文/英文 locale；
+- 工具/预设与 Context Gate 的事件/日志视图各自注册；模式胶囊、中文/英文 locale；
 - typecheck / test / build / bundle 全绿。
 
 ## 4. 待定但不阻塞开发

@@ -84,41 +84,6 @@ export function currentScope(snapshot: CapabilitySnapshot): ScopeRef | undefined
   return row === undefined ? undefined : { kind: 'session', id: row.id }
 }
 
-/** Age buckets the health surface renders. */
-export type AgeUnit = 'justNow' | 'seconds' | 'minutes' | 'hours'
-
-/** One age measurement split into a bucket and a count. */
-export interface Age {
-  /** Which localized template renders it. */
-  readonly unit: AgeUnit
-  /** Bucket count; zero for {@link AgeUnit} `justNow`. */
-  readonly count: number
-}
-
-/**
- * Split a millisecond age into the bucket the health surface renders.
- * @param ms - age in milliseconds; negative and non-finite values read as just now.
- * @returns the bucket and its count.
- */
-export function formatAge(ms: number): Age {
-  if (!Number.isFinite(ms) || ms < 1000) return { unit: 'justNow', count: 0 }
-  const seconds = Math.floor(ms / 1000)
-  if (seconds < 60) return { unit: 'seconds', count: seconds }
-  const minutes = Math.floor(seconds / 60)
-  if (minutes < 60) return { unit: 'minutes', count: minutes }
-  return { unit: 'hours', count: Math.floor(minutes / 60) }
-}
-
-/**
- * Render an epoch timestamp as a fixed UTC clock time, so the log reads the same
- * in every time zone the Host and browser could disagree on.
- * @param at - epoch milliseconds.
- * @returns `HH:MM:SS`.
- */
-export function formatClock(at: number): string {
-  return new Date(at).toISOString().slice(11, 19)
-}
-
 /** The verdict a rendered dynamic switch reads for the session. */
 export function toolStep(tool: ToolEntry, key: ScopeKey): StepGate {
   return tool.stepBy?.[key] ?? (tool.enabledBy?.[key] === true ? 'active' : 'hidden')

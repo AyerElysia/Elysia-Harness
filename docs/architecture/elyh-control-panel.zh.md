@@ -5,14 +5,15 @@
 
 ## 1. 职责
 
-`@elysia/villv-helix` 是**会话级工具面、执行门禁、Context Bus 和能力面板**。
+`@elysia/villv-helix` 是**会话级工具面、执行门禁和工具面板**。
 
 它不是：
 
 - 主意识插件；
 - 业务工具提供者；
 - Session 创建者；
-- 预设管理器。
+- 预设管理器；
+- 上下文事件管理器（已拆到 `@elysia/context-gate`）。
 
 它不注册 `send_text`、`send_voice`、`session_*` 等业务工具。业务工具由各自的 Tool Provider 注册；Helix 只负责当前会话的可见性与执行门禁。
 
@@ -62,17 +63,24 @@ plugin_market / plugin_manager
 
 关闭工具不会注销定义，也不会让名字从模型 schema 消失后诱发替代工具。
 
-## 3. 顶部标签
+## 3. 顶部视图
+
+Helix 只注册两个原生 Conversation view：
 
 ```text
-对话 | 轨迹 | 上下文 | 工具 | 事件 | 日志 | 健康 | 预设
+工具 | 预设
 ```
 
-- 普通会话显示基础标签；
-- 编排会话显示全部；
-- 关闭编排模式时如果停留在编排标签，回到对话；
-- 不新增第二排标签；
-- 窄屏横向滚动。
+上下文事件的两个视图由 `@elysia/context-gate` 注册：
+
+```text
+事件 | 日志
+```
+
+- 两组视图互不依赖；
+- Context Gate 的“事件 / 日志”不随会话编排模式开关隐藏；
+- 关闭编排模式时，工具/预设仍可见并显示“编排模式未开启”的提示；
+- 不新增第二排标签；窄屏横向滚动。
 
 ## 4. 工具标签
 
@@ -84,37 +92,20 @@ plugin_market / plugin_manager
 
 UI 不伪造工具状态：显示的是 Host 实际快照。
 
-## 5. 事件 / 日志 / 健康
+## 5. 上下文事件（已拆分）
 
-### 事件
+上下文订阅、队列、注入日志不再属于 Helix。
 
-Context Bus 的 kind 订阅：
-
-- Provider 注册 kind；
-- Session 订阅；
-- 合并快照在下一 step 注入；
-- 面板显示订阅、队列、TTL、背压。
-
-Context Bus 不是 DSH 全部生命周期事件；它只承载模型可见上下文。
-
-### 日志
-
-记录：
+由 `@elysia/context-gate` 提供：
 
 ```text
-delivered / consumed / dropped / denied
+事件 — kind 订阅、TTL、积压
+日志 — published / delivered / consumed / failed / dropped
 ```
 
-并带 kind、session、原因。
+完整说明见 [Context Gate](elyh-context-gate.zh.md)。
 
-### 健康
-
-- 工具注册 / 启用 / 静态数量；
-- Context 队列深度；
-- 失败 gate；
-- 最后采样时间。
-
-健康数据只做摘要，不能替代真实工具调用验收。
+健康统计已删除：Helix 和 Context Gate 都不再提供 `status` / 健康页。
 
 ## 6. 预设标签
 
@@ -130,10 +121,10 @@ delivered / consumed / dropped / denied
 ## 7. 状态与边界
 
 - 状态目录：`dshHomePath('villv-helix')`；
-- 文档：`villv-helix-state.json`；
+- 文档：`villv-helix-state.json`，只含工具面、编排状态和工具组预设；
+- 旧的 `contexts` / `events` / `queues` 字段读取时忽略，不迁移；
 - 工具组预设是共享库，应用目标按 session；
-- 面板刷新由自身写入、跨面板事件和页面可见性触发，不轮询；
-- 没有 Server push，Provider 注册新 kind 后可能需要刷新才出现在面板。
+- 面板刷新由自身写入、跨面板事件和页面可见性触发，不轮询。
 
 ## 8. 验收
 

@@ -1,0 +1,14 @@
+# Elysia/Context-Gate: one bundle row owning the Host service and the Web page.
+#
+# The gate owns provider-registered context kinds, per-session subscriptions,
+# per-session queues, TTL/dedupe/backpressure, and one merged snapshot injected
+# before each step. It is independent of VillV-Helix and of session orchestration
+# mode: every live Agent gets the pre-step listener, and passive events never
+# open a turn.
+#
+# `stateDir` holds the context-gate document (subscriptions, queues, event log).
+- insert:
+    - id: elysia-context-gate
+      name: '@elysia/context-gate'
+      config:
+        stateDir: !!js dshHomePath('context-gate')

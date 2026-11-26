@@ -1,7 +1,7 @@
 /**
- * Browser half: five native Conversation views named 工具, 事件, 日志, 健康 and
- * 预设. Each view renders one face of the ported capability panel for the
- * active session; there is no intermediate 能力 page and no drawer.
+ * Browser half: two native Conversation views named 工具 and 预设. Each renders
+ * the session's tool face; there is no intermediate 能力 page and no drawer.
+ * Context subscriptions and the injection log live in `@elysia/context-gate`.
  *
  * @module @elysia/villv-helix/client
  */
@@ -21,7 +21,7 @@ import { HelixModeCapsule, type HelixModeCapsuleInjected } from './HelixModeCaps
 
 declare module '@deepseek-ai/dsh-client-ui-slots' {
   interface LocaleNamespaceMap {
-    /** VillV-Helix capability panel copy. */
+    /** VillV-Helix tool panel copy. */
     villvHelix: ControlPanelLocaleKey
   }
 }
@@ -33,20 +33,17 @@ export const inject = ['slots', 'locale', 'connection']
 interface HelixView {
   readonly id: string
   readonly tab: PanelTab
-  readonly label: 'tabTools' | 'tabEvents' | 'tabLog' | 'tabHealth' | 'tabPreset'
+  readonly label: 'tabTools' | 'tabPreset'
   readonly order: number
 }
 
 const VIEWS: readonly HelixView[] = [
   { id: 'helix-tools', tab: 'tools', label: 'tabTools', order: 20 },
-  { id: 'helix-events', tab: 'contexts', label: 'tabEvents', order: 21 },
-  { id: 'helix-log', tab: 'events', label: 'tabLog', order: 22 },
-  { id: 'helix-health', tab: 'health', label: 'tabHealth', order: 23 },
   { id: 'helix-preset', tab: 'static', label: 'tabPreset', order: 24 },
 ]
 
 /**
- * Register the dictionaries and the five session-scoped views; every
+ * Register the dictionaries and the two session-scoped views; every
  * registration belongs to this plugin's fiber and leaves with it.
  * @param ctx - client root context.
  */

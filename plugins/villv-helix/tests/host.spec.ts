@@ -1,13 +1,13 @@
 /**
- * Behavior of the session-scoped orchestrator Host: the snapshot, real
- * `tools.restrict()` masks, static-tool locks, context subscriptions and
- * publication, tool-group presets, persistence, and teardown.
+ * Behavior of the session-scoped tool-panel Host: the snapshot, real
+ * `tools.restrict()` masks, static-tool locks, tool-group presets, state
+ * persistence (including legacy context fields), and teardown.
  *
  * The AgentLoop testkit mounts the real tool registry and Agent scope, so these
  * specs assert the registry's own visibility rather than a hand-built stub.
  */
 import { describe, expect, it, onTestFinished } from 'vitest'
-import { mkdtemp, rm } from 'node:fs/promises'
+import { mkdtemp, rm, writeFile } from 'node:fs/promises'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import { Context } from '@deepseek-ai/cordis'
@@ -58,7 +58,7 @@ async function setup(options: { stateDir?: string; sessionId?: string; enableToo
 }
 
 describe('snapshot', () => {
-  it('reports one live session, its global tools enabled, and writable status', async () => {
+  it('reports one live session and its enabled global tools', async () => {
     const env = await setup()
     const snapshot = await env.ctx.villvHelix.list('s1')
     expect(snapshot.sessions.map(row => row.id)).toEqual(['s1'])
@@ -68,11 +68,8 @@ describe('snapshot', () => {
     expect(alpha?.locked).toBe(false)
     expect(alpha?.enabledBy?.['session:s1']).toBe(true)
     expect(alpha?.stepBy?.['session:s1']).toBe('active')
-    expect(snapshot.events).toEqual([])
-    const status = await env.ctx.villvHelix.status('s1')
-    expect(status.writable).toBe(true)
-    expect(status.mode).toBe('live')
-    expect(status.health.tools).toMatchObject({ registered: 1, enabled: 1, global: 1, static: 0 })
+    expect('contexts' in snapshot).toBe(false)
+    expect('events' in snapshot).toBe(false)
   })
 
   it('refuses an unknown session', async () => {
@@ -207,59 +204,38 @@ describe('tool restrictions', () => {
   })
 })
 
-describe('context events', () => {
-  it('delivers a subscribed publication and logs it for the session', async () => {
-    const env = await setup()
-    const disposeKind = env.ctx.villvHelix.registerContextKind({
-      kind: 'demo.ping',
-      nameZh: '示例事件',
-      description: 'A test event.',
-      activeByDefault: false,
-    })
-    onTestFinished(() => { disposeKind() })
-    await env.ctx.villvHelix.setContext('s1', 'demo.ping', true)
-    const receipt = await env.ctx.villvHelix.publish({
-      kind: 'demo.ping', source: 'test', summary: 'hello', payload: { n: 1 },
-    })
-    expect(receipt).toMatchObject({ delivered: 1, failed: 0 })
+describe('state document', () => {
+  it('ignores legacy context, queue, and event fields and drops them on write', async () => {
+    const stateDir = await mkdtemp(join(tmpdir(), 'villv-helix-legacy-'))
+    const legacy = {
+      version: 1,
+      sessions: {
+        s1: {
+          orchestrated: true,
+          enabledTools: ['alpha_tool'],
+          disabledTools: [],
+          contexts: { 'demo.ping': true },
+          events: [{ id: 'event-1', kind: 'demo.ping', outcome: 'delivered', at: 1 }],
+        },
+      },
+      queues: { s1: { events: [], consumed: [], dedupe: {} } },
+      toolPresets: [],
+      updatedAt: new Date(0).toISOString(),
+    }
+    await writeFile(join(stateDir, DOCUMENT_FILE_NAME), `${JSON.stringify(legacy, null, 2)}\n`, 'utf8')
 
+    const env = await setup({ stateDir, enableTools: false })
     const snapshot = await env.ctx.villvHelix.list('s1')
-    expect(snapshot.contexts.find(entry => entry.kind === 'demo.ping')).toMatchObject({
-      nameZh: '示例事件', active: false, backlog: 1,
-      enabledBy: { 'session:s1': true },
-    })
-    expect(snapshot.events.map(entry => entry.outcome)).toContain('delivered')
-    const status = await env.ctx.villvHelix.status('s1')
-    expect(status.health.contexts.queueDepth).toBe(1)
-  })
+    expect(snapshot.tools.find(tool => tool.id === 'alpha_tool')?.enabledBy?.['session:s1']).toBe(true)
+    expect(env.ctx.tools.schemas(env.agent).map(tool => tool.name)).toContain('alpha_tool')
 
-  it('suppresses a publication the session did not subscribe', async () => {
-    const env = await setup()
-    const disposeKind = env.ctx.villvHelix.registerContextKind({
-      kind: 'demo.silent', nameZh: '静默事件', description: 'A test event.',
-    })
-    onTestFinished(() => { disposeKind() })
-    const receipt = await env.ctx.villvHelix.publish({
-      kind: 'demo.silent', source: 'test', summary: 'ignored', payload: null,
-    })
-    expect(receipt.delivered).toBe(0)
-    expect(receipt.suppressed).toBeGreaterThanOrEqual(1)
-  })
-
-  it('refuses an unregistered kind and an unsubscribed write', async () => {
-    const env = await setup()
-    await expect(env.ctx.villvHelix.publish({
-      kind: 'demo.absent', source: 'test', summary: 'x', payload: null,
-    })).rejects.toMatchObject({ code: 'villvHelix/CONTEXT_UNKNOWN' })
-    await expect(env.ctx.villvHelix.setContext('s1', 'demo.absent', true))
-      .rejects.toMatchObject({ code: 'villvHelix/CONTEXT_UNKNOWN' })
-  })
-
-  it('requires a Chinese display name from the provider', async () => {
-    const env = await setup()
-    expect(() => env.ctx.villvHelix.registerContextKind({
-      kind: 'demo.noname', nameZh: '  ', description: 'x',
-    })).toThrow(/Chinese display name/)
+    const written = JSON.parse(await readFile(join(stateDir, DOCUMENT_FILE_NAME), 'utf8')) as {
+      readonly queues?: unknown
+      readonly sessions: Record<string, Record<string, unknown>>
+    }
+    expect(written).not.toHaveProperty('queues')
+    expect(written.sessions['s1']).not.toHaveProperty('contexts')
+    expect(written.sessions['s1']).not.toHaveProperty('events')
   })
 })
 

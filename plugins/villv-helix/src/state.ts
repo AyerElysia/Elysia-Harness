@@ -1,10 +1,14 @@
 /**
- * The session-scoped state document: disabled tools, context subscriptions,
- * context queues, the event log, and the shared tool-group preset library.
+ * The session-scoped state document: orchestration mode, enabled/disabled
+ * tools, and the shared tool-group preset library.
  *
  * Every mutation rewrites the whole document through a temporary file and one
  * rename, so a reader never observes a partial write. Mutations are serialized
- * because a publication and a step injection can interleave on the event loop.
+ * because a tool switch and a mode change can interleave on the event loop.
+ *
+ * The document stays at version 1. Fields written by older builds for the
+ * context bus (per-session `contexts`/`events`, top-level `queues`) are ignored
+ * on read and dropped on the next write; they are not migrated.
  *
  * @module @elysia/villv-helix/state
  */
@@ -12,10 +16,7 @@
 import { randomUUID } from 'node:crypto'
 import { mkdir, readFile, rename, writeFile } from 'node:fs/promises'
 import { isAbsolute, join } from 'node:path'
-import type {
-  ContextEvent, EventLogEntry, EventOutcome, HelixDocument, QueueRecord, SessionStateRecord,
-  ToolPresetEntry,
-} from './types.ts'
+import type { HelixDocument, SessionStateRecord, ToolPresetEntry } from './types.ts'
 import { VillvHelixError, describeError } from './errors.ts'
 
 /** File name of the panel document inside the configured state directory. */
@@ -24,21 +25,12 @@ export const DOCUMENT_FILE_NAME = 'villv-helix-state.json'
 /** Document generation this build writes and reads. */
 export const DOCUMENT_VERSION = 1
 
-/** Retained event-log rows per session. The panel renders the newest 20. */
-export const EVENT_LOG_LIMIT = 50
-
-/** Retained consumed ids and dedupe keys per session. */
-export const QUEUE_HISTORY_LIMIT = 64
-
 /** A session with no stored state. */
-const EMPTY_SESSION: SessionStateRecord = { orchestrated: false, enabledTools: [], disabledTools: [], contexts: {}, events: [] }
-
-/** A session with no queued events. */
-const EMPTY_QUEUE: QueueRecord = { events: [], consumed: [], dedupe: {} }
+const EMPTY_SESSION: SessionStateRecord = { orchestrated: false, enabledTools: [], disabledTools: [] }
 
 /** A fresh, never-written document. */
 function emptyDocument(): HelixDocument {
-  return { version: DOCUMENT_VERSION, sessions: {}, queues: {}, toolPresets: [], updatedAt: new Date(0).toISOString() }
+  return { version: DOCUMENT_VERSION, sessions: {}, toolPresets: [], updatedAt: new Date(0).toISOString() }
 }
 
 function isRecord(value: unknown): value is Record<string, unknown> {
@@ -60,84 +52,16 @@ function stringArray(value: unknown, label: string, file: string): string[] {
   return [...value]
 }
 
-function booleanRecord(value: unknown, label: string, file: string): Record<string, boolean> {
-  if (!isRecord(value) || Object.values(value).some(entry => typeof entry !== 'boolean')) {
-    throw invalid(file, `${label} must be a boolean record`)
-  }
-  return { ...value } as Record<string, boolean>
-}
-
-function requiredString(value: unknown, label: string, file: string): string {
-  if (typeof value !== 'string') throw invalid(file, `${label} must be a string`)
-  return value
-}
-
-
-
-function parseEvent(value: unknown, label: string, file: string): ContextEvent {
-  if (!isRecord(value)) throw invalid(file, `${label} is not an object`)
-  const visibility = value['visibility']
-  if (!isRecord(visibility)) throw invalid(file, `${label}.visibility must be an object`)
-  const sessionIds = visibility['sessionIds']
-  return {
-    id: requiredString(value['id'], `${label}.id`, file),
-    kind: requiredString(value['kind'], `${label}.kind`, file),
-    source: requiredString(value['source'], `${label}.source`, file),
-    summary: requiredString(value['summary'], `${label}.summary`, file),
-    payload: value['payload'],
-    visibility: sessionIds === undefined ? {} : { sessionIds: stringArray(sessionIds, `${label}.visibility.sessionIds`, file) },
-    active: value['active'] === true,
-    dedupeKey: typeof value['dedupeKey'] === 'string' ? value['dedupeKey'] : '',
-    ...(typeof value['ttlMs'] === 'number' ? { ttlMs: value['ttlMs'] } : {}),
-    ...(typeof value['maxBytes'] === 'number' ? { maxBytes: value['maxBytes'] } : {}),
-    createdAt: typeof value['createdAt'] === 'number' ? value['createdAt'] : 0,
-  }
-}
-
-function parseLogEntry(value: unknown, label: string, file: string): EventLogEntry {
-  if (!isRecord(value)) throw invalid(file, `${label} is not an object`)
-  const outcome = value['outcome']
-  const outcomes: readonly EventOutcome[] = ['published', 'delivered', 'consumed', 'failed', 'dropped']
-  if (typeof value['id'] !== 'string' || typeof value['kind'] !== 'string'
-    || !outcomes.includes(outcome as EventOutcome) || typeof value['at'] !== 'number') {
-    throw invalid(file, `${label} is not an event-log row`)
-  }
-  return {
-    id: value['id'],
-    kind: value['kind'],
-    outcome: outcome as EventOutcome,
-    at: value['at'],
-    ...(typeof value['detail'] === 'string' ? { detail: value['detail'] } : {}),
-  }
-}
-
 function parseSession(value: unknown, label: string, file: string): SessionStateRecord {
   if (!isRecord(value)) throw invalid(file, `${label} is not an object`)
+  // `contexts` and `events` were written by builds that owned the context bus.
+  // They are ignored here and disappear on the next commit.
   return {
     orchestrated: value['orchestrated'] === true,
     enabledTools: value['enabledTools'] === undefined
       ? []
       : stringArray(value['enabledTools'], `${label}.enabledTools`, file),
     disabledTools: stringArray(value['disabledTools'], `${label}.disabledTools`, file),
-    contexts: booleanRecord(value['contexts'], `${label}.contexts`, file),
-    events: Array.isArray(value['events'])
-      ? value['events'].map((entry, index) => parseLogEntry(entry, `${label}.events[${String(index)}]`, file))
-      : [],
-  }
-}
-
-function parseQueue(value: unknown, label: string, file: string): QueueRecord {
-  if (!isRecord(value)) throw invalid(file, `${label} is not an object`)
-  const events = value['events']
-  if (!Array.isArray(events)) throw invalid(file, `${label}.events must be an array`)
-  const dedupe = value['dedupe']
-  if (dedupe !== undefined && (!isRecord(dedupe) || Object.values(dedupe).some(entry => typeof entry !== 'number'))) {
-    throw invalid(file, `${label}.dedupe must be a number record`)
-  }
-  return {
-    events: events.map((entry, index) => parseEvent(entry, `${label}.events[${String(index)}]`, file)),
-    consumed: value['consumed'] === undefined ? [] : stringArray(value['consumed'], `${label}.consumed`, file),
-    dedupe: dedupe === undefined ? {} : { ...dedupe } as Record<string, number>,
   }
 }
 
@@ -150,18 +74,12 @@ function parseDocument(value: unknown, file: string): HelixDocument {
     if (!isRecord(sessionSection)) throw invalid(file, '"sessions" must be an object')
     for (const [id, entry] of Object.entries(sessionSection)) sessions[id] = parseSession(entry, `sessions.${id}`, file)
   }
-  const queues: Record<string, QueueRecord> = {}
-  const queueSection = value['queues']
-  if (queueSection !== undefined) {
-    if (!isRecord(queueSection)) throw invalid(file, '"queues" must be an object')
-    for (const [id, entry] of Object.entries(queueSection)) queues[id] = parseQueue(entry, `queues.${id}`, file)
-  }
+  // A top-level `queues` section from an older build is ignored, not migrated.
   const presets = value['toolPresets']
   if (presets !== undefined && !Array.isArray(presets)) throw invalid(file, '"toolPresets" must be an array')
   return {
     version: DOCUMENT_VERSION,
     sessions,
-    queues,
     toolPresets: (presets ?? []).map((entry, index) => {
       const label = `toolPresets[${String(index)}]`
       if (!isRecord(entry) || typeof entry['id'] !== 'string' || typeof entry['name'] !== 'string'
@@ -291,76 +209,6 @@ export class HelixStore {
         [sessionId]: { ...current, enabledTools },
       },
     })
-  }
-
-  /** Context subscriptions of one session; a missing kind means off. */
-  contexts(sessionId: string): Readonly<Record<string, boolean>> {
-    return this.session(sessionId).contexts
-  }
-
-  /**
-   * Subscribe or unsubscribe one context kind for one session.
-   * @param sessionId - target session.
-   * @param kind - registered kind.
-   * @param enabled - false unsubscribes it.
-   * @returns after the document is durable.
-   */
-  async setContext(sessionId: string, kind: string, enabled: boolean): Promise<void> {
-    const current = this.session(sessionId)
-    await this.commit({
-      ...this.document,
-      sessions: {
-        ...this.document.sessions,
-        [sessionId]: { ...current, contexts: { ...current.contexts, [kind]: enabled } },
-      },
-    })
-  }
-
-  /**
-   * Append one event-log row for one session, newest first.
-   * @param sessionId - target session.
-   * @param entry - the row.
-   * @returns after the document is durable.
-   */
-  async logEvent(sessionId: string, entry: EventLogEntry): Promise<void> {
-    const current = this.session(sessionId)
-    await this.commit({
-      ...this.document,
-      sessions: {
-        ...this.document.sessions,
-        [sessionId]: { ...current, events: [entry, ...current.events].slice(0, EVENT_LOG_LIMIT) },
-      },
-    })
-  }
-
-  /** One session's recent event-log rows, newest first. */
-  events(sessionId: string): readonly EventLogEntry[] {
-    return this.session(sessionId).events
-  }
-
-  /** The queue of one session. */
-  queue(sessionId: string): QueueRecord {
-    return this.document.queues[sessionId] ?? EMPTY_QUEUE
-  }
-
-  /** Total undelivered events across every session. */
-  queuedCount(): number {
-    let total = 0
-    for (const queue of Object.values(this.document.queues)) total += queue.events.length
-    return total
-  }
-
-  /**
-   * Replace one session's queue.
-   * @param sessionId - target session.
-   * @param mutate - receives the current queue and returns the next one.
-   * @returns after the document is durable.
-   */
-  async mutateQueue(sessionId: string, mutate: (queue: QueueRecord) => QueueRecord): Promise<void> {
-    const current = this.queue(sessionId)
-    const next = mutate(current)
-    if (next === current) return
-    await this.commit({ ...this.document, queues: { ...this.document.queues, [sessionId]: next } })
   }
 
   /** Saved tool selections, in creation order. */

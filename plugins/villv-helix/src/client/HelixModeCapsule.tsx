@@ -26,11 +26,6 @@ export function HelixModeCapsule({ api, t }: HelixModeCapsuleProps): ReactNode {
   const [busy, setBusy] = useState(false)
 
   useEffect(() => {
-    document.documentElement.dataset.helixMode = mode === true ? 'on' : 'off'
-    return () => { delete document.documentElement.dataset.helixMode }
-  }, [mode])
-
-  useEffect(() => {
     let current = true
     const controller = new AbortController()
     const load = (): void => {

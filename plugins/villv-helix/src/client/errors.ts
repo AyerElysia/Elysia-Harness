@@ -16,11 +16,7 @@ export const STATIC_LOCKED_CODE = 'villvHelix/TOOL_STATIC_LOCKED'
 export const ERROR_KEYS: Readonly<Record<string, ControlPanelLocaleKey>> = {
   'villvHelix/TOOL_UNKNOWN': 'errorToolUnknown',
   [STATIC_LOCKED_CODE]: 'errorToolStaticLocked',
-  'villvHelix/CONTEXT_UNKNOWN': 'errorContextUnknown',
   'villvHelix/SESSION_NOT_FOUND': 'errorScopeNotFound',
-  'villvHelix/EVENT_TOO_LARGE': 'errorEventTooLarge',
-  'villvHelix/EVENT_PAYLOAD_INVALID': 'errorEventInvalid',
-  'villvHelix/EVENT_INVALID': 'errorEventInvalid',
   'villvHelix/STATE_INVALID': 'errorState',
   'villvHelix/STATE_WRITE_FAILED': 'errorState',
 }

@@ -9,6 +9,7 @@
 > [插件开发规范](architecture/elyh-plugin-spec.zh.md) ·
 > [扩展组件架构](architecture/elyh-plugin-architecture.zh.md) ·
 > [工具面与控制面板](architecture/elyh-control-panel.zh.md) ·
+> [上下文事件门](architecture/elyh-context-gate.zh.md) ·
 > [预设管理](architecture/elyh-preset-manager.zh.md) ·
 > [旧实现迁移映射](architecture/elyh-legacy-migration.zh.md)
 
@@ -110,22 +111,32 @@ Event Adapter 可以是：
 | UI | 请求查看器、上下文与 token 指标 | 未启用；旧实现归档 |
 | 旧实现 | `request-archive`、`context-inspector` | 归档 |
 
-### F. 编排与预设
+### F. 工具面、上下文与预设
 
 | 项 | 内容 | 当前状态 |
 |---|---|---|
-| 编排 | 工具面、会话级启停、静态工具锁定、Context Bus、能力面板 | 当前启用 |
+| 工具面 | 会话级工具启停、静态工具锁定、扩展工具声明、能力面板 | 当前启用 |
+| 上下文 | kind 订阅、持久队列、TTL/dedupe/背压、下一 step 合并注入、事件日志 | 当前启用 |
 | 预设 | 预设组合、工具组、提示词文件、`preset_list` / `preset_create` | 当前启用 |
-| 包 | `@elysia/villv-helix`、`@elysia/mobius-infinity` | 当前启用 |
+| 包 | `@elysia/villv-helix`、`@elysia/context-gate`、`@elysia/mobius-infinity` | 当前启用 |
 
-编排不是 Tool Provider，也不是“主意识插件”。它管理工具面与上下文，不创建主体。
+这三个包职责分离：
+
+```text
+VillV-Helix      工具面 / 门禁 / 工具面板
+Context-Gate     上下文事件订阅 / 注入队列 / 注入日志
+Mobius-Infinity  预设组合 / 预设 UI
+```
+
+Context Gate 独立于会话编排模式，也不拥有健康统计。没有“主意识插件”。
 
 ## 4. 当前运行态
 
 当前 Web profile 实际挂载的 ElyH 插件：
 
 ```text
-@elysia/villv-helix      工具面 / 门禁 / Context Bus / 能力面板
+@elysia/villv-helix      工具面 / 门禁 / 能力面板
+@elysia/context-gate     上下文订阅 / 队列 / 注入日志
 @elysia/mobius-infinity  预设组合 / preset_list / preset_create / 预设 UI
 ```
 
@@ -185,16 +196,20 @@ Event Adapter 可以是：
 
 `session/event`、`agent/pre-step`、`agent/request`、`llm/stream`、`tools/change`、`tools/pre-execute` 等是宿主 hook。监听者应通过 `ctx.effect` 注册并在卸载时清理。
 
-### Context Bus
+### Context Gate
 
-`villv-helix` 提供 Context Bus：
+`@elysia/context-gate` 提供上下文事件门：
 
 - Provider 注册 kind；
-- Session 订阅；
-- 合并快照在下一 step 注入；
-- UI 显示订阅、队列、TTL、背压和投递日志。
+- Session 独立订阅；
+- 每 session 持久队列，支持 TTL、dedupe、背压；
+- `agent/pre-step` 合并快照注入；
+- active 事件有静默窗口 `batchMs` 与上限 `maxWaitMs`；
+- 注入日志由独立的“事件 / 日志”视图读取。
 
-Context Bus 只负责模型可见上下文，不等同于 DSH 的全部生命周期事件。
+Context Gate 只负责模型可见上下文，不等同于 DSH 的全部生命周期事件；它不处理渠道消息，也不依赖 Helix 的会话编排模式。
+
+健康统计已删除：Helix 与 Context Gate 都不再提供健康页或 `status` 计数接口。
 
 ## 7. 旧实现如何映射
 
@@ -236,6 +251,7 @@ office
 ## 9. 图
 
 - [扩展组件架构](architecture/elyh-plugin-architecture.zh.md) / [PNG](architecture/elyh-plugin-architecture.png)
+- [上下文事件门](architecture/elyh-context-gate.zh.md)
 - [能力关系](architecture/elyh-capability-relationships.html) / [PNG](architecture/elyh-capability-relationships.png)
 - [用例图](architecture/elyh-usecase.html) / [PNG](architecture/elyh-usecase.png)
 - [数据流](architecture/elyh-dataflow.html) / [PNG](architecture/elyh-dataflow.png)

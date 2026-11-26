@@ -1,6 +1,7 @@
 /**
- * The Host service: session-scoped tool restrictions, the context event bus,
- * the event log, per-session health, and the panel snapshot.
+ * The Host service: session-scoped tool restrictions, static-tool locks, the
+ * managed tool mounts, the model-facing special-tool face, and the tool-panel
+ * snapshot.
  *
  * It registers no tools of its own. It pulls the real global tool definitions
  * from `ctx.tools`, and for every live Agent installs the stored `deny` mask
@@ -20,14 +21,11 @@ import type { PromptAssembly } from '@deepseek-ai/dsh-system-prompt'
 import type {} from '@deepseek-ai/dsh-tools'
 import { Remote, RemoteError, TypertRemoteService } from '@deepseek-ai/dsh-typert-protocol'
 import type {
-  CapabilitySnapshot, ContextEntry, ContextEventInput, ContextKindRegistration, ContextHealth,
-GateHealth, HealthStatus, HostStatus, PublishReceipt, SessionRowEntry,
-  ToolEntry, ToolGroupEntry, ToolHealth, ToolPresetEntry,
+  CapabilitySnapshot, SessionRowEntry, ToolEntry, ToolGroupEntry, ToolPresetEntry,
 } from './types.ts'
-import { ContextBus, type ContextDefaults } from './context-bus.ts'
 import { isOfficialPreset } from './presets.ts'
 import { HelixStore } from './state.ts'
-import { VillvHelixError, describeError } from './errors.ts'
+import { VillvHelixError } from './errors.ts'
 import { MANAGED_SUITES, MANAGED_TOOL_IDS, SessionToolMounts } from './tool-mounts.ts'
 
 declare module '@deepseek-ai/cordis' {
@@ -37,7 +35,7 @@ declare module '@deepseek-ai/cordis' {
 
   interface Events {
     /**
-     * A session's capability surface changed.
+     * A session's tool surface changed.
      * @param change - what changed and which session it applies to.
      * @mode emit
      */
@@ -45,13 +43,13 @@ declare module '@deepseek-ai/cordis' {
   }
 }
 
-/** One observable change to a session's capability surface. */
+/** One observable change to a session's tool surface. */
 export interface HelixChange {
   /** Which kind of change happened. */
-  readonly action: 'setTool' | 'setContext' | 'setMode' | 'catalog' | 'toolPresets' | 'restriction'
+  readonly action: 'setTool' | 'setMode' | 'catalog' | 'toolPresets' | 'restriction'
   /** Session the change applies to; absent for the shared tool-preset library. */
   readonly sessionId?: string
-  /** Tool id or context kind the change names. */
+  /** Tool id the change names. */
   readonly id?: string
   /** Enablement the change set, when it set one. */
   readonly enabled?: boolean
@@ -61,12 +59,6 @@ export interface HelixChange {
 export interface HostConfig {
   /** Absolute directory holding the state document. */
   readonly stateDir: string
-  /** Traffic defaults for context kinds that do not declare their own. */
-  readonly context: ContextDefaults
-  /** Ceiling on events merged into one snapshot. */
-  readonly maxEventsPerSnapshot: number
-  /** Ceiling on bytes of one merged snapshot. */
-  readonly maxSnapshotBytes: number
 }
 
 /** One installed restriction and the exact deny list it carries. */
@@ -88,7 +80,7 @@ function fail(error: unknown): never {
 }
 
 /**
- * Host-side owner of the session capability panel.
+ * Host-side owner of the session tool panel.
  *
  * Construction registers the service and starts the state document; Remote
  * callers await {@link ready} first, so a snapshot never observes a half-built
@@ -98,26 +90,23 @@ export class VillVHelix extends TypertRemoteService {
   /** Prerequisite services of the Host row. */
   static inject = ['agents', 'tools']
 
-  /** Resolves once the document is open and the bus is attached. */
+  /** Resolves once the document is open and the stored masks are installed. */
   readonly ready: Promise<void>
 
   private store: HelixStore | undefined
-  private bus: ContextBus | undefined
   private readonly restrictions = new Map<string, AppliedRestriction>()
   private readonly presetStaticIds = new Map<string, ReadonlySet<string>>()
   private readonly toolMounts = new SessionToolMounts()
   private readonly faceContexts = new Map<string, () => void>()
   private readonly toolNames = new Map<string, string>()
   private reconciling = false
-  private restrictionFailures = 0
-  private lastRestrictionError: string | undefined
 
   /** @param ctx - Host context carrying `agents` and `tools`. */
   private readonly config: HostConfig
 
   /**
    * @param ctx - Host context carrying `agents` and `tools`.
-   * @param config - state directory and delivery limits.
+   * @param config - state directory.
    */
   constructor(ctx: Context, config: HostConfig) {
     super(ctx, 'villvHelix', { namespace: 'villvHelix' })
@@ -149,36 +138,7 @@ export class VillVHelix extends TypertRemoteService {
   }
 
   /**
-   * Declare one publishable context kind.
-   * @param registration - kind name, Chinese name, description, and delivery limits.
-   * @returns a disposer that removes the declaration.
-   */
-  registerContextKind(registration: ContextKindRegistration): () => void {
-    const bus = this.requireBus()
-    const dispose = bus.registerKind(registration)
-    this.emit({ action: 'catalog', id: registration.kind })
-    return () => {
-      dispose()
-      this.emit({ action: 'catalog', id: registration.kind })
-    }
-  }
-
-  /**
-   * Publish one context event to every subscribed session.
-   * @param input - the publication.
-   * @returns delivery accounting.
-   */
-  async publish(input: ContextEventInput): Promise<PublishReceipt> {
-    try {
-      await this.ready
-      return await this.requireBus().publish(input)
-    } catch (error: unknown) {
-      fail(error)
-    }
-  }
-
-  /**
-   * Read the session's capability surface.
+   * Read the session's tool surface.
    * @param sessionId - the session whose view renders the panel.
    * @returns the snapshot the panel renders.
    * @throws VillvHelixError `SESSION_NOT_FOUND` when no live Agent owns the id.
@@ -189,22 +149,6 @@ export class VillVHelix extends TypertRemoteService {
       await this.ready
       const agent = this.requireAgent(sessionId)
       return await this.buildSnapshot(agent)
-    } catch (error: unknown) {
-      fail(error)
-    }
-  }
-
-  /**
-   * Read the session's health sample.
-   * @param sessionId - the session whose view renders the panel.
-   * @returns write authority and the health sample.
-   */
-  @Remote('status')
-  async status(sessionId: string): Promise<HostStatus> {
-    try {
-      await this.ready
-      const agent = this.requireAgent(sessionId)
-      return { writable: true, mode: this.mode(), health: this.health(agent) }
     } catch (error: unknown) {
       fail(error)
     }
@@ -316,45 +260,6 @@ export class VillVHelix extends TypertRemoteService {
   }
 
   /**
-   * Subscribe or unsubscribe one context kind for one session.
-   * @param sessionId - target session.
-   * @param eventKind - registered kind.
-   * @param enabled - false unsubscribes it.
-   * @returns after the document write is durable.
-   * @throws VillvHelixError `CONTEXT_UNKNOWN`.
-   */
-  @Remote('setContext')
-  async setContext(sessionId: string, eventKind: string, enabled: boolean): Promise<void> {
-    try {
-      await this.ready
-      this.requireAgent(sessionId)
-      if (!this.requireBus().hasKind(eventKind)) {
-        throw new VillvHelixError('CONTEXT_UNKNOWN', `context kind ${JSON.stringify(eventKind)} is not registered`, {
-          eventKind, sessionId,
-        })
-      }
-      await this.requireStore().setContext(sessionId, eventKind, enabled)
-      this.emit({ action: 'setContext', sessionId, id: eventKind, enabled })
-    } catch (error: unknown) {
-      fail(error)
-    }
-  }
-
-  /**
-   * Publish one context event through the Remote channel.
-   * @param event - the publication.
-   * @returns delivery accounting.
-   */
-  @Remote('publish')
-  async publishRemote(event: ContextEventInput): Promise<PublishReceipt> {
-    try {
-      return await this.publish(event)
-    } catch (error: unknown) {
-      fail(error)
-    }
-  }
-
-  /**
    * Save one named tool selection.
    * @param name - operator-provided display name.
    * @param tools - dynamic tool ids the preset switches on.
@@ -393,20 +298,10 @@ export class VillVHelix extends TypertRemoteService {
     }
   }
 
-  /** Open the document, compose the bus, attach it, and install stored masks. */
+  /** Open the document, install stored masks, and attach the Agent listeners. */
   private async start(): Promise<void> {
     const store = await HelixStore.open(this.config.stateDir)
     this.store = store
-    this.bus = new ContextBus({
-      ctx: this.ctx,
-      store,
-      agentOf: (sessionId) => this.agentOf(sessionId),
-      candidates: () => this.candidates(),
-      defaults: this.config.context,
-      maxEventsPerSnapshot: this.config.maxEventsPerSnapshot,
-      maxSnapshotBytes: this.config.maxSnapshotBytes,
-    })
-    this.bus.attach()
     this.ctx.on('agent/created', ({ agent }) => {
       this.installFaceContext(agent)
       this.reconcile()
@@ -471,7 +366,7 @@ export class VillVHelix extends TypertRemoteService {
     ].join('\n')
   }
 
-/** Reinstall every live Agent's stored deny mask and managed mounts when they differ. */
+  /** Reinstall every live Agent's stored deny mask and managed mounts when they differ. */
   private reconcile(): void {
     if (this.reconciling) return
     this.reconciling = true
@@ -491,9 +386,9 @@ export class VillVHelix extends TypertRemoteService {
         ).then(() => {
           // Mounting a suite emits tools/change; the next snapshot sees it.
           this.emit({ action: 'catalog', sessionId })
-        }, (error: unknown) => {
-          this.restrictionFailures += 1
-          this.lastRestrictionError = describeError(error)
+        }, () => {
+          // The snapshot reports the failed suite on its tool rows; the change
+          // event only asks the panel to re-read it.
           this.emit({ action: 'restriction', sessionId })
         })
       }
@@ -543,9 +438,9 @@ export class VillVHelix extends TypertRemoteService {
     try {
       const release = agent.ctx.tools.restrict({ deny: desired })
       this.restrictions.set(sessionId, { deny: desired, release })
-    } catch (error: unknown) {
-      this.restrictionFailures += 1
-      this.lastRestrictionError = describeError(error)
+    } catch {
+      // The mask could not be installed. The panel still reads the stored
+      // state; the restriction event asks it to refresh.
       this.emit({ action: 'restriction', sessionId })
     }
   }
@@ -557,13 +452,12 @@ export class VillVHelix extends TypertRemoteService {
   }
 
   /**
-   * Compose one session's panel snapshot.
+   * Compose one session's tool-panel snapshot.
    * @param agent - the live Agent behind the session.
    * @returns the snapshot the panel renders.
    */
   private async buildSnapshot(agent: Agent): Promise<CapabilitySnapshot> {
     const store = this.requireStore()
-    const bus = this.requireBus()
     const sessionId = agent.session.id
     const key = `${'session'}:${sessionId}`
     const official = isOfficialPreset(agent.session.header.agentPreset)
@@ -661,16 +555,6 @@ export class VillVHelix extends TypertRemoteService {
           tools: dynamicTools.map(tool => tool.id),
         }]
 
-    const queue = store.queue(sessionId)
-    const contexts: ContextEntry[] = bus.listKinds().map(kind => ({
-      kind: kind.kind,
-      nameZh: kind.nameZh,
-      active: kind.activeByDefault,
-      ttlMs: kind.ttlMs,
-      backlog: queue.events.filter(event => event.kind === kind.kind).length,
-      enabledBy: { [key]: store.contexts(sessionId)[kind.kind] ?? false },
-    }))
-
     const sessions: SessionRowEntry[] = [{
       id: sessionId,
       ...(title === undefined ? {} : { title }),
@@ -684,61 +568,9 @@ export class VillVHelix extends TypertRemoteService {
     return {
       tools: [...staticTools, ...dynamicTools],
       groups,
-      contexts,
       sessions,
       toolPresets: store.toolPresets().map(preset => ({ ...preset, tools: [...preset.tools] })),
-      events: store.events(sessionId),
     }
-  }
-
-  /**
-   * Compose one session's health sample.
-   * @param agent - the live Agent behind the session.
-   * @returns tool, context, and restriction counters.
-   */
-  private health(agent: Agent): HealthStatus {
-    const store = this.requireStore()
-    const bus = this.requireBus()
-    const sessionId = agent.session.id
-    const global = this.globalDefinitions()
-    const agentScope = this.agentDefinitions(agent)
-    const allowed = new Set(store.enabledTools(sessionId))
-    const enabled = store.orchestrated(sessionId)
-      ? [...global.keys()].filter(name => allowed.has(name)).length
-      : global.size
-    const staticCount = [...agentScope.keys()].filter(name => global.get(name) !== agentScope.get(name)).length
-    const queue = store.queue(sessionId)
-    const oldest = queue.events.reduce<number | undefined>(
-      (earliest, event) => earliest === undefined || event.createdAt < earliest ? event.createdAt : earliest,
-      undefined,
-    )
-    const counters = bus.sessionCounters(sessionId)
-    const tools: ToolHealth = {
-      static: staticCount,
-      registered: global.size,
-      enabled,
-      failed: 0,
-      global: global.size,
-      agent: staticCount,
-    }
-    const contexts: ContextHealth = {
-      queueDepth: queue.events.length,
-      oldestAgeMs: oldest === undefined ? 0 : Math.max(0, Date.now() - oldest),
-      consumed: counters.consumed,
-      failed: counters.failed,
-      merged: counters.merged,
-    }
-    const gate: GateHealth = {
-      failClosed: this.restrictionFailures,
-      failLoud: 0,
-      ...(this.lastRestrictionError === undefined ? {} : { lastError: this.lastRestrictionError }),
-    }
-    return { tools, contexts, gate, capturedAt: Date.now() }
-  }
-
-  /** The Host lifecycle the panel explains. */
-  private mode(): HostStatus['mode'] {
-    return this.lastRestrictionError === undefined ? 'live' : 'degraded'
   }
 
   /** Every globally registered tool definition, keyed by name. */
@@ -778,22 +610,9 @@ export class VillVHelix extends TypertRemoteService {
     return this.ctx.agents.get(SessionId(sessionId))
   }
 
-  /** Every session a publication may target: live Agents plus persisted state. */
-  private candidates(): readonly string[] {
-    const ids = new Set<string>()
-    for (const agent of this.ctx.agents.list()) ids.add(agent.session.id)
-    for (const id of this.requireStore().sessionIds()) ids.add(id)
-    return [...ids]
-  }
-
   private requireStore(): HelixStore {
     if (this.store === undefined) throw new Error('villv-helix is not ready')
     return this.store
-  }
-
-  private requireBus(): ContextBus {
-    if (this.bus === undefined) throw new Error('villv-helix is not ready')
-    return this.bus
   }
 
   private emit(change: HelixChange): void {

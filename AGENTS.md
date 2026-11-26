@@ -60,8 +60,9 @@ Non-negotiable invariants from that spec:
   owns the session tool face in one Host + Client package. It pulls actual tool
   definitions, applies per-session `tools.restrict()` masks to global tools,
   locks official preset static tools, gates custom preset static tools through
-  `tools/pre-execute`, owns the context bus, and renders the session tabs. It
-  has no external core dependency.
+  `tools/pre-execute`, and renders the tool/preset views. It has no external
+  core dependency. Context events are owned by `@elysia/context-gate`, not by
+  Helix.
 - **Preset management is Elysia/Mobius-Infinity.** `@elysia/mobius-infinity`
   keeps preset management, but no longer exposes a “模型全局注入” switch.
 - **No "conscious mind" or "subconscious" plugin types.** Those are product
@@ -71,11 +72,11 @@ Non-negotiable invariants from that spec:
   come from plugin metadata and fall back to the tool id when absent. Context
   kinds declare `nameZh` at registration. A new plugin without a Chinese name
   is incomplete.
-- **Context events must register with the orchestrator when it is present.**
-  Providers call `registerContextKind()` and `publish()` through the
-  orchestrator service; registration is disposed with `ctx.effect`. A provider
-  without the orchestrator must degrade explicitly, not invent a private bus
-  that the UI cannot see.
+- **Context events belong to Context Gate, not the tool face.** Providers call
+  `contextGate.registerContextKind()` and `contextGate.publish()`; registration
+  is disposed with `ctx.effect`. Context Gate is independent of the session
+  orchestration mode. A provider without Context Gate must degrade explicitly,
+  not invent a private bus the UI cannot see.
 - **No plugin-level global injection switches.** The session tool face in
   VillV-Helix is the only place that changes tool visibility. Do not reintroduce
   “为模型全局注入……” switches or a core/catalog state machine.

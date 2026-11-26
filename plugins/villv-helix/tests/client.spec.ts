@@ -1,10 +1,11 @@
 /**
  * Browser-half behavior that does not need a DOM: the Remote adapter's session
- * binding and payload guards, and the pure projections the panel renders from.
+ * binding and payload guards, and the pure projections the tool panel renders
+ * from.
  */
 import { describe, expect, it } from 'vitest'
 import type { ClientConnectionRpc } from '@deepseek-ai/dsh-client-connection/client'
-import type { CapabilitySnapshot, HostStatus } from '../src/types.ts'
+import type { CapabilitySnapshot } from '../src/types.ts'
 import { createVillvHelixApi, VillvHelixRemoteError } from '../src/client/api.ts'
 import {
   currentScope, effectivePresetId, isShadowed, scopeKeyOf, shadowedToolIds, staticToolsFor, toolStep,
@@ -23,23 +24,8 @@ function snapshot(): CapabilitySnapshot {
       },
     ],
     groups: [{ id: 'registered', scope: 'global', origin: 'dynamic', atomic: false, locked: false, tools: ['alpha_tool'] }],
-    contexts: [{ kind: 'demo.ping', nameZh: '示例事件', active: false, ttlMs: 60_000, backlog: 0, enabledBy: { 'session:s1': true } }],
-    sessions: [{ id: 's1', title: 'Hello', live: true, presetId: 'standard' }],
+    sessions: [{ id: 's1', title: 'Hello', live: true, presetId: 'standard', orchestrated: true }],
     toolPresets: [{ id: 'p1', name: '组', tools: ['alpha_tool'], createdAt: 1 }],
-    events: [{ id: 'e1', kind: 'demo.ping', outcome: 'delivered', at: 1, detail: 'ok' }],
-  }
-}
-
-function status(): HostStatus {
-  return {
-    writable: true,
-    mode: 'live',
-    health: {
-      tools: { static: 1, registered: 1, enabled: 0, failed: 0, global: 1, agent: 1 },
-      contexts: { queueDepth: 0, oldestAgeMs: 0, consumed: 0, failed: 0, merged: 0 },
-      gate: { failClosed: 0, failLoud: 0 },
-      capturedAt: 1,
-    },
   }
 }
 
@@ -62,20 +48,27 @@ function fakeRpc(handler: (call: Call) => unknown): { rpc: Pick<ClientConnection
 
 describe('Remote adapter', () => {
   it('binds every call to the session the view renders', async () => {
-    const { rpc, calls } = fakeRpc(call => call.endpoint === 'villvHelix/status'
-      ? { ok: true, value: status() }
+    const { rpc, calls } = fakeRpc(call => call.endpoint === 'villvHelix/getMode'
+      ? { ok: true, value: true }
       : { ok: true, value: snapshot() })
     const api = createVillvHelixApi(rpc, 's1')
     await api.list(new AbortController().signal)
-    await api.status(new AbortController().signal)
     await api.setTool('alpha_tool', false, new AbortController().signal)
-    await api.setContext('demo.ping', true, new AbortController().signal)
+    await api.getMode(new AbortController().signal)
     expect(calls.map(call => call.endpoint)).toEqual([
-      'villvHelix/list', 'villvHelix/status', 'villvHelix/setTool', 'villvHelix/setContext',
+      'villvHelix/list', 'villvHelix/setTool', 'villvHelix/getMode',
     ])
     expect(calls[0]?.args).toEqual({ sessionId: 's1' })
-    expect(calls[2]?.args).toEqual({ sessionId: 's1', toolId: 'alpha_tool', enabled: false })
-    expect(calls[3]?.args).toEqual({ sessionId: 's1', eventKind: 'demo.ping', enabled: true })
+    expect(calls[1]?.args).toEqual({ sessionId: 's1', toolId: 'alpha_tool', enabled: false })
+  })
+
+  it('offers the tool face only, with no context or status operations', () => {
+    const { rpc } = fakeRpc(() => ({ ok: true, value: snapshot() }))
+    const api = createVillvHelixApi(rpc, 's1')
+    expect(Object.keys(api).sort()).toEqual([
+      'createToolPreset', 'deleteToolPreset', 'getMode', 'list', 'readPresetPrompt', 'readSystemPrompt',
+      'setMode', 'setTool',
+    ])
   })
 
   it('surfaces the Host refusal code', async () => {

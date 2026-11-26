@@ -1,71 +1,44 @@
 /**
- * Presentational capability panel: one pure render of a loaded session snapshot
- * and status, with the session card on the left and the static tools, global
- * tool groups, subscriptions, event log, and health on the right.
+ * Presentational tool panel: one pure render of a loaded session snapshot and
+ * the tool draft, with the static preset tools, the switchable global tool
+ * groups, and the read-only preset prompt.
  *
- * This is the original panel's layout with the preset/session scope list
- * replaced by the one session this view belongs to. Static tools come from the
- * preset composition and carry no switch; every global tool is a dynamic row
- * the session may disable. It owns no state and performs no request, so a spec
- * can drive every state by props.
+ * Static tools come from the preset composition and carry no switch; every
+ * global tool is a dynamic row the session may disable. It owns no request, so
+ * a spec can drive every state by props.
  *
  * @module @elysia/villv-helix/client/ControlPanelView
  */
 
 import { useState, type ReactNode } from 'react'
 import type {
-  CapabilitySnapshot, ContextEntry, HostStatus, PresetPrompt, ScopeKey, ScopeRef,
-  ToolEntry, ToolPresetEntry,
+  CapabilitySnapshot, PresetPrompt, ScopeKey, ScopeRef, ToolEntry, ToolPresetEntry,
 } from '../types.ts'
 import {
-  effectivePresetId, formatAge, formatClock, isShadowed, scopeKeyOf,
-  shadowedToolIds, staticToolsFor, toolKey,
+  effectivePresetId, isShadowed, scopeKeyOf, shadowedToolIds, staticToolsFor, toolKey,
 } from './panel-state.ts'
 import { isOfficialPreset } from '../presets.ts'
 import { DSH_CORE_GLOBAL_TOOL_IDS, toolCategories, type ToolCategory } from './categories.ts'
-import {
-  contextLabel, outcomeText, stepText, toolLabel, type ControlPanelTranslate,
-} from './labels.ts'
+import { stepText, toolLabel, type ControlPanelTranslate } from './labels.ts'
 import css from './ControlPanelPage.module.css'
 
 /** The panel's translate seat, narrowed to its own dictionary. */
 type T = ControlPanelTranslate
 
-/** How many event-log rows the panel shows. */
-const EVENT_LOG_LIMIT = 20
-
 /** One top-level session tab. */
-export type PanelTab = 'tools' | 'contexts' | 'events' | 'health' | 'static'
+export type PanelTab = 'tools' | 'static'
 
-const PANEL_TABS: readonly { id: PanelTab; label: 'tabTools' | 'tabEvents' | 'tabLog' | 'tabHealth' | 'tabPreset' }[] = [
+const PANEL_TABS: readonly { id: PanelTab; label: 'tabTools' | 'tabPreset' }[] = [
   { id: 'tools', label: 'tabTools' },
-  { id: 'contexts', label: 'tabEvents' },
-  { id: 'events', label: 'tabLog' },
-  { id: 'health', label: 'tabHealth' },
   { id: 'static', label: 'tabPreset' },
 ]
-
-function ttlText(t: T, ttlMs: number): string {
-  if (ttlMs >= 60_000 && ttlMs % 60_000 === 0) return t('ttlMinutes', { count: String(ttlMs / 60_000) })
-  return t('ttlSeconds', { count: String(Math.round(ttlMs / 1000)) })
-}
-
-function ageText(t: T, ms: number): string {
-  const age = formatAge(ms)
-  if (age.unit === 'justNow') return t('justNow')
-  if (age.unit === 'seconds') return t('secondsAgo', { count: String(age.count) })
-  if (age.unit === 'minutes') return t('minutesAgo', { count: String(age.count) })
-  return t('hoursAgo', { count: String(age.count) })
-}
 
 /** Props of the whole panel; the container supplies every value. */
 export interface ControlPanelViewProps {
   /** Localized copy. */
   readonly t: T
-  /** Every tool and context kind the Host reports for this session. */
+  /** Every tool the Host reports for this session. */
   readonly snapshot: CapabilitySnapshot
-  /** Write authority and the health sample. */
-  readonly status: HostStatus
   /** The session scope; absent when the snapshot carries no session row. */
   readonly selected: ScopeRef | undefined
   /** Native top tab this page renders; omit for the standalone in-page tabs. */
@@ -80,12 +53,6 @@ export interface ControlPanelViewProps {
   readonly dirty: boolean
   /** Whether a tool save is in flight. */
   readonly saving: boolean
-  /** Unsaved context-subscription changes keyed by event kind. */
-  readonly contextDraft: Readonly<Record<string, boolean>>
-  /** Whether the current context draft differs from the Host snapshot. */
-  readonly contextDirty: boolean
-  /** Whether a context save is in flight. */
-  readonly contextSaving: boolean
   /** Saved tool groups the Host reports. */
   readonly toolPresets: readonly ToolPresetEntry[]
   /** Saved tool group selected in the toolbar. */
@@ -96,8 +63,6 @@ export interface ControlPanelViewProps {
   readonly onToggleTools: (tools: readonly ToolEntry[], enabled: boolean) => void
   /** Save every pending tool change. */
   readonly onSaveTools: () => void
-  /** Save every pending context change. */
-  readonly onSaveContexts: () => void
   /** Select a saved tool group. */
   readonly onSelectToolPreset: (id: string | undefined) => void
   /** Apply a saved tool group to the draft. */
@@ -106,8 +71,6 @@ export interface ControlPanelViewProps {
   readonly onCreateToolPreset: (name: string) => Promise<boolean>
   /** Delete a saved tool group. */
   readonly onDeleteToolPreset: (preset: ToolPresetEntry) => void
-  /** Subscribe or unsubscribe one context event kind. */
-  readonly onToggleContext: (entry: ContextEntry, enabled: boolean) => void
 }
 
 /** The preset's static tool face: always on, locked, and never written. */
@@ -354,48 +317,6 @@ function CreateToolPresetDialog({
   )
 }
 
-/** One context event kind with its session subscription switch. */
-function ContextRow({
-  t, entry, checked, writable, busy, onToggle,
-}: {
-  readonly t: T
-  readonly entry: ContextEntry
-  readonly checked: boolean
-  readonly writable: boolean
-  readonly busy: boolean
-  readonly onToggle: (entry: ContextEntry, enabled: boolean) => void
-}): ReactNode {
-  const label = contextLabel(t, entry.kind, entry.nameZh)
-  return (
-    <li className={css.contextRow} data-context-kind={entry.kind}>
-      <label className={css.switchRow}>
-        <input
-          type="checkbox"
-          className={css.checkbox}
-          checked={checked}
-          disabled={!writable || busy}
-          aria-label={t('contextToggleLabel', { kind: label })}
-          onChange={(event) => { onToggle(entry, event.currentTarget.checked) }}
-        />
-        <span className={css.toolName}>{label}</span>
-        <code className={css.toolId}>{entry.kind}</code>
-      </label>
-      <span className={css.badgeRow}>
-        <span className={entry.active ? css.badgeWarn : css.badgeMuted}>
-          {t(entry.active ? 'contextActive' : 'contextPassive')}
-        </span>
-        {entry.ttlMs === undefined ? null : <span className={css.badgeMuted}>{ttlText(t, entry.ttlMs)}</span>}
-        {entry.backlog === undefined ? null : (
-          <span className={css.badgeMuted}>{t('contextBacklog', { count: String(entry.backlog) })}</span>
-        )}
-      </span>
-      {entry.failure === undefined ? null : (
-        <p className={css.failure} role="alert">{t('contextFailure', { failure: entry.failure })}</p>
-      )}
-    </li>
-  )
-}
-
 /** Render the panel's loading state. */
 export function ControlPanelLoading({ t }: { readonly t: T }): ReactNode {
   return <p className={css.hint}>{t('loading')}</p>
@@ -420,11 +341,10 @@ export function ControlPanelFailure({
 
 /** Render the loaded panel. */
 export function ControlPanelView({
-  t, snapshot, status, selected, forcedTab, presetPrompt, busy, draft, dirty, saving,
-  contextDraft, contextDirty, contextSaving,
+  t, snapshot, selected, forcedTab, presetPrompt, busy, draft, dirty, saving,
   toolPresets, selectedToolPresetId,
-  onToggleTool, onToggleTools, onSaveTools, onSaveContexts, onSelectToolPreset, onApplyToolPreset,
-  onCreateToolPreset, onDeleteToolPreset, onToggleContext,
+  onToggleTool, onToggleTools, onSaveTools, onSelectToolPreset, onApplyToolPreset,
+  onCreateToolPreset, onDeleteToolPreset,
 }: ControlPanelViewProps): ReactNode {
   const [translateNames, setTranslateNames] = useState(true)
   const [createOpen, setCreateOpen] = useState(false)
@@ -433,7 +353,6 @@ export function ControlPanelView({
   const [nativeOpen, setNativeOpen] = useState(true)
   const [pluginOpen, setPluginOpen] = useState(true)
   const key = selected === undefined ? undefined : scopeKeyOf(selected)
-  const writable = status.writable
   const presetId = effectivePresetId(snapshot)
   const presetName = snapshot.sessions[0]?.presetName
   const official = isOfficialPreset(presetId)
@@ -476,8 +395,6 @@ export function ControlPanelView({
   }
   return (
     <div className={css.page} data-villv-helix-panel>
-      {status.mode === 'live' ? null : <p className={css.notice}>{t('degradedNotice')}</p>}
-      {status.writable ? null : <p className={css.notice}>{t('readOnlyNotice')}</p>}
       {busy ? <p className={css.notice}>{t('pending')}</p> : null}
       <section className={css.panel}>
           {forcedTab === undefined ? (
@@ -523,7 +440,7 @@ export function ControlPanelView({
                   t={t}
                   presets={toolPresets}
                   selectedId={selectedToolPresetId}
-                  disabled={!writable || busy || saving}
+                  disabled={busy || saving}
                   onSelect={onSelectToolPreset}
                   onApply={onApplyToolPreset}
                   onCreate={() => { setCreateOpen(true) }}
@@ -557,7 +474,7 @@ export function ControlPanelView({
                           type="checkbox"
                           className={css.checkbox}
                           checked={nativeEnabledCount === nativeTools.length && nativeTools.length > 0}
-                          disabled={!writable || busy || saving}
+                          disabled={busy || saving}
                           aria-label={t('selectCategoryTools', { category: t('nativeToolsGroup') })}
                           onChange={(event) => { onToggleTools(nativeTools, event.currentTarget.checked) }}
                         />
@@ -570,7 +487,7 @@ export function ControlPanelView({
                         category={category}
                         draft={draft}
                         translate={translateNames}
-                        disabled={!writable || busy || saving}
+                        disabled={busy || saving}
                         scopeKey={key}
                         shadowedIds={shadowedIds}
                         onToggleTool={onToggleTool}
@@ -599,7 +516,7 @@ export function ControlPanelView({
                           type="checkbox"
                           className={css.checkbox}
                           checked={pluginEnabledCount === pluginTools.length && pluginTools.length > 0}
-                          disabled={!writable || busy || saving}
+                          disabled={busy || saving}
                           aria-label={t('selectCategoryTools', { category: t('pluginToolsGroup') })}
                           onChange={(event) => { onToggleTools(pluginTools, event.currentTarget.checked) }}
                         />
@@ -612,7 +529,7 @@ export function ControlPanelView({
                         category={category}
                         draft={draft}
                         translate={translateNames}
-                        disabled={!writable || busy || saving}
+                        disabled={busy || saving}
                         scopeKey={key}
                         shadowedIds={shadowedIds}
                         onToggleTool={onToggleTool}
@@ -642,105 +559,6 @@ export function ControlPanelView({
             )}
           </div>
 
-          <div className={css.tabPanel} role="tabpanel" hidden={activeTab !== 'contexts'}>
-            {selected === undefined || key === undefined ? (
-              <p className={css.hint}>{t('noScopeHint')}</p>
-            ) : (
-              <>
-                <p className={css.hint}>{t('contextsScopeHint')}</p>
-                {snapshot.contexts.length === 0 ? <p className={css.hint}>{t('emptyContexts')}</p> : null}
-                <ul className={css.contextList}>
-                  {snapshot.contexts.map(entry => (
-                    <ContextRow
-                      key={entry.kind}
-                      t={t}
-                      entry={entry}
-                      checked={contextDraft[entry.kind] ?? entry.enabledBy[key] ?? false}
-                      writable={writable}
-                      busy={busy || contextSaving}
-                      onToggle={onToggleContext}
-                    />
-                  ))}
-                </ul>
-              </>
-            )}
-          </div>
-
-          <div className={css.tabPanel} role="tabpanel" hidden={activeTab !== 'events'}>
-            <p className={css.hint}>{t('eventLogHint')}</p>
-            {snapshot.events.length === 0 ? <p className={css.hint}>{t('emptyEvents')}</p> : null}
-            <ul className={css.eventList}>
-              {snapshot.events.slice(0, EVENT_LOG_LIMIT).map(entry => (
-                <li key={entry.id} className={css.eventRow} data-outcome={entry.outcome}>
-                  <time className={css.eventTime} dateTime={new Date(entry.at).toISOString()}>
-                    {formatClock(entry.at)}
-                  </time>
-                  <span className={entry.outcome === 'failed' ? css.badgeError : css.badgeMuted}>
-                    {outcomeText(t, entry.outcome)}
-                  </span>
-                  <span className={css.eventKind}>{contextLabel(t, entry.kind)}</span>
-                  {entry.detail === undefined ? null : <span className={css.eventDetail}>{entry.detail}</span>}
-                </li>
-              ))}
-            </ul>
-          </div>
-
-          <div className={css.tabPanel} role="tabpanel" hidden={activeTab !== 'health'}>
-            <dl className={css.health}>
-              <div className={css.healthRow}>
-                <dt>{t('healthTools')}</dt>
-                <dd>
-                  <span>
-                    {t('healthToolsValue', {
-                      static: String(status.health.tools.static),
-                      registered: String(status.health.tools.registered),
-                      enabled: String(status.health.tools.enabled),
-                      failed: String(status.health.tools.failed),
-                    })}
-                  </span>
-                  <span className={css.healthMeta}>
-                    {t('healthScopesValue', {
-                      global: String(status.health.tools.global),
-                      agent: String(status.health.tools.agent),
-                    })}
-                  </span>
-                </dd>
-              </div>
-              <div className={css.healthRow}>
-                <dt>{t('healthContexts')}</dt>
-                <dd>
-                  <span>
-                    {t('healthContextsValue', {
-                      depth: String(status.health.contexts.queueDepth),
-                      consumed: String(status.health.contexts.consumed),
-                      failed: String(status.health.contexts.failed),
-                    })}
-                  </span>
-                  <span className={css.healthMeta}>
-                    {t('healthMerged', { merged: String(status.health.contexts.merged) })}
-                    {' · '}
-                    {t('healthOldest', { age: ageText(t, status.health.contexts.oldestAgeMs) })}
-                  </span>
-                </dd>
-              </div>
-              <div className={css.healthRow}>
-                <dt>{t('healthGate')}</dt>
-                <dd>
-                  <span>
-                    {t('healthGateValue', {
-                      closed: String(status.health.gate.failClosed),
-                      loud: String(status.health.gate.failLoud),
-                    })}
-                  </span>
-                  {status.health.gate.lastError === undefined ? null : (
-                    <span className={css.failure}>{t('healthGateError', { error: status.health.gate.lastError })}</span>
-                  )}
-                </dd>
-              </div>
-            </dl>
-            <p className={css.hint}>{t('healthCaptured', { at: formatClock(status.health.capturedAt) })}</p>
-          </div>
-
           <div className={css.tabPanel} role="tabpanel" hidden={activeTab !== 'static'}>
             {selected === undefined || key === undefined ? (
               <p className={css.hint}>{t('noScopeHint')}</p>
@@ -762,24 +580,10 @@ export function ControlPanelView({
               <button
                 type="button"
                 className={css.primary}
-                disabled={!writable || busy || saving || !dirty}
+                disabled={busy || saving || !dirty}
                 onClick={onSaveTools}
               >
                 {saving ? t('pending') : t('saveTools')}
-              </button>
-            </div>
-          ) : activeTab === 'contexts' ? (
-            <div className={css.panelFooter}>
-              <span className={contextDirty ? css.unsavedHint : css.hint}>
-                {contextDirty ? t('contextsUnsaved') : t('noContextChanges')}
-              </span>
-              <button
-                type="button"
-                className={css.primary}
-                disabled={!writable || busy || contextSaving || !contextDirty}
-                onClick={onSaveContexts}
-              >
-                {contextSaving ? t('pending') : t('saveContexts')}
               </button>
             </div>
           ) : null}

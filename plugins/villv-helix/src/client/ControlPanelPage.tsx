@@ -1,19 +1,15 @@
 /**
- * The Capabilities main panel for one session: it loads the Host snapshot plus
- * its status and turns every switch gesture into the exact set of `setTool` /
- * `setContext` writes the Host expects.
+ * The tool panel for one session: it loads the Host snapshot and turns every
+ * switch gesture into the exact set of `setTool` writes the Host expects.
  *
- * This is the original capability panel page with the scope switcher removed:
- * the session whose Conversation view renders it is the only scope, so no
+ * The session whose Conversation view renders it is the only scope, so no
  * selection state survives a refresh and every write targets that session.
  *
  * @module @elysia/villv-helix/client/ControlPanelPage
  */
 import { useEffect, useState, type ReactNode } from 'react'
 import type { InjectFace, PropsLocale, PropsRuntime } from '@deepseek-ai/dsh-client-ui-slots'
-import type {
-  CapabilitySnapshot, ContextEntry, HostStatus, PresetPrompt, ScopeRef, ToolEntry, ToolPresetEntry,
-} from '../types.ts'
+import type { CapabilitySnapshot, PresetPrompt, ScopeRef, ToolEntry, ToolPresetEntry } from '../types.ts'
 import { isOfficialPreset } from '../presets.ts'
 import type { VillvHelixApi } from './api.ts'
 import { notifyCapabilityChanged, subscribeCapabilityChanged } from './capability-events.ts'
@@ -41,20 +37,17 @@ export type ControlPanelPageProps = PropsRuntime<'conversation.view'>
 type LoadState =
   | { readonly status: 'loading' }
   | { readonly status: 'error' }
-  | { readonly status: 'ready'; readonly snapshot: CapabilitySnapshot; readonly host: HostStatus }
+  | { readonly status: 'ready'; readonly snapshot: CapabilitySnapshot }
 
-/** Render the capability panel for the current session. */
+/** Render the tool panel for the current session. */
 export function ControlPanelPage({ api, t, tab }: ControlPanelPageProps): ReactNode {
   const [request, setRequest] = useState(0)
   const [load, setLoad] = useState<LoadState>({ status: 'loading' })
-  const [busy, setBusy] = useState(false)
   const [notice, setNotice] = useState<string | undefined>(undefined)
   const [failure, setFailure] = useState<string | undefined>(undefined)
   const [draft, setDraft] = useState<Readonly<Record<string, boolean>>>({})
   const [dirty, setDirty] = useState(false)
   const [saving, setSaving] = useState(false)
-  const [contextDraft, setContextDraft] = useState<Readonly<Record<string, boolean>>>({})
-  const [contextDirty, setContextDirty] = useState(false)
   const [toolPresets, setToolPresets] = useState<readonly ToolPresetEntry[]>([])
   const [selectedToolPresetId, setSelectedToolPresetId] = useState<string | undefined>(undefined)
   const [presetPrompt, setPresetPrompt] = useState<PresetPrompt | undefined>(undefined)
@@ -63,9 +56,9 @@ export function ControlPanelPage({ api, t, tab }: ControlPanelPageProps): ReactN
     let current = true
     const controller = new AbortController()
     setLoad(previous => previous.status === 'ready' ? previous : { status: 'loading' })
-    void Promise.all([api.list(controller.signal), api.status(controller.signal)]).then(
-      ([snapshot, host]) => {
-        if (current) setLoad({ status: 'ready', snapshot, host })
+    void api.list(controller.signal).then(
+      (snapshot) => {
+        if (current) setLoad({ status: 'ready', snapshot })
       },
       () => {
         if (current) setLoad({ status: 'error' })
@@ -77,9 +70,9 @@ export function ControlPanelPage({ api, t, tab }: ControlPanelPageProps): ReactN
     }
   }, [api, request])
 
-  // A panel write is visible to every other open capability UI through the
-  // browser event channel; refreshing on that event and on page visibility
-  // keeps two open views consistent without polling.
+  // A panel write is visible to every other open tool UI through the browser
+  // event channel; refreshing on that event and on page visibility keeps two
+  // open views consistent without polling.
   useEffect(() => {
     const refresh = (): void => {
       if (document.visibilityState === 'visible') setRequest(value => value + 1)
@@ -153,7 +146,7 @@ export function ControlPanelPage({ api, t, tab }: ControlPanelPageProps): ReactN
    * @param error - the caught refusal.
    */
   const reportWriteFailure = (error: unknown): void => {
-    setBusy(false)
+    setSaving(false)
     if (classifyWriteFailure(error) === 'static-locked') {
       setNotice(t('noticeStaticLocked'))
     } else {
@@ -171,7 +164,7 @@ export function ControlPanelPage({ api, t, tab }: ControlPanelPageProps): ReactN
   }
 
   const toggleTool = (tool: ToolEntry, enabled: boolean): void => {
-    if (selected === undefined || busy || saving) return
+    if (selected === undefined || saving) return
     setDraft(current => ({ ...current, [tool.id]: enabled }))
     setDirty(true)
     setNotice(undefined)
@@ -179,7 +172,7 @@ export function ControlPanelPage({ api, t, tab }: ControlPanelPageProps): ReactN
   }
 
   const toggleTools = (tools: readonly ToolEntry[], enabled: boolean): void => {
-    if (busy || saving || tools.length === 0) return
+    if (saving || tools.length === 0) return
     setDraft(current => {
       const next = { ...current }
       for (const tool of tools) next[tool.id] = enabled
@@ -191,7 +184,7 @@ export function ControlPanelPage({ api, t, tab }: ControlPanelPageProps): ReactN
   }
 
   const saveTools = (): void => {
-    if (selected === undefined || snapshot === undefined || busy || saving) return
+    if (selected === undefined || snapshot === undefined || saving) return
     const key = scopeKeyOf(selected)
     const writes = editableTools(snapshot).flatMap((tool) => {
       const next = draft[tool.id]
@@ -221,16 +214,12 @@ export function ControlPanelPage({ api, t, tab }: ControlPanelPageProps): ReactN
         notifyCapabilityChanged()
         setRequest(value => value + 1)
       },
-      (error: unknown) => {
-        setSaving(false)
-        setFailure(describeFailure(error, t))
-        setRequest(value => value + 1)
-      },
+      reportWriteFailure,
     )
   }
 
   const applyToolPreset = (preset: ToolPresetEntry): void => {
-    if (selected === undefined || snapshot === undefined || busy || saving) return
+    if (selected === undefined || snapshot === undefined || saving) return
     const next: Record<string, boolean> = {}
     for (const tool of editableTools(snapshot)) next[tool.id] = preset.tools.includes(tool.id)
     setDraft(next)
@@ -241,7 +230,7 @@ export function ControlPanelPage({ api, t, tab }: ControlPanelPageProps): ReactN
   }
 
   const createToolPreset = async (name: string): Promise<boolean> => {
-    if (selected === undefined || snapshot === undefined || busy || saving) return false
+    if (selected === undefined || snapshot === undefined || saving) return false
     const key = scopeKeyOf(selected)
     const enabled = editableTools(snapshot)
       .filter(tool => draft[tool.id] ?? tool.enabledBy?.[key] ?? true)
@@ -268,7 +257,7 @@ export function ControlPanelPage({ api, t, tab }: ControlPanelPageProps): ReactN
   }
 
   const deleteToolPreset = (preset: ToolPresetEntry): void => {
-    if (busy || saving) return
+    if (saving) return
     setSaving(true)
     setFailure(undefined)
     void api.deleteToolPreset(preset.id, new AbortController().signal).then(
@@ -285,51 +274,8 @@ export function ControlPanelPage({ api, t, tab }: ControlPanelPageProps): ReactN
     )
   }
 
-  const toggleContext = (entry: ContextEntry, enabled: boolean): void => {
-    if (selected === undefined || busy) return
-    setContextDraft(current => ({ ...current, [entry.kind]: enabled }))
-    setContextDirty(true)
-    setNotice(undefined)
-    setFailure(undefined)
-  }
-
-  const saveContexts = (): void => {
-    if (selected === undefined || snapshot === undefined || busy || saving) return
-    const key = scopeKeyOf(selected)
-    const writes = snapshot.contexts.flatMap((entry) => {
-      const next = contextDraft[entry.kind]
-      const before = entry.enabledBy[key] ?? false
-      return next !== undefined && next !== before ? [{ kind: entry.kind, enabled: next }] : []
-    })
-    if (writes.length === 0) {
-      setContextDraft({})
-      setContextDirty(false)
-      setNotice(t('noContextChanges'))
-      return
-    }
-    setBusy(true)
-    setFailure(undefined)
-    setNotice(undefined)
-    const controller = new AbortController()
-    void (async () => {
-      for (const write of writes) {
-        await api.setContext(write.kind, write.enabled, controller.signal)
-      }
-    })().then(
-      () => {
-        setBusy(false)
-        setContextDraft({})
-        setContextDirty(false)
-        setNotice(t('contextsSaved'))
-        notifyCapabilityChanged()
-        setRequest(value => value + 1)
-      },
-      reportWriteFailure,
-    )
-  }
-
   return (
-    <div className={css.shell} aria-busy={load.status === 'loading' || busy || saving}>
+    <div className={css.shell} aria-busy={load.status === 'loading' || saving}>
       {notice === undefined ? null : <p className={css.notice} role="status">{notice}</p>}
       {failure === undefined ? null : <p className={css.failure} role="alert">{failure}</p>}
 
@@ -341,28 +287,22 @@ export function ControlPanelPage({ api, t, tab }: ControlPanelPageProps): ReactN
         <ControlPanelView
           t={t}
           snapshot={load.snapshot}
-          status={load.host}
           selected={selected}
           forcedTab={tab}
           presetPrompt={presetPrompt}
-          busy={busy}
+          busy={saving}
           draft={draft}
           dirty={dirty}
           saving={saving}
-          contextDraft={contextDraft}
-          contextDirty={contextDirty}
-          contextSaving={busy}
           toolPresets={toolPresets}
           selectedToolPresetId={selectedToolPresetId}
           onToggleTool={toggleTool}
           onToggleTools={toggleTools}
           onSaveTools={saveTools}
-          onSaveContexts={saveContexts}
           onSelectToolPreset={setSelectedToolPresetId}
           onApplyToolPreset={applyToolPreset}
           onCreateToolPreset={createToolPreset}
           onDeleteToolPreset={deleteToolPreset}
-          onToggleContext={toggleContext}
         />
       ) : null}
     </div>

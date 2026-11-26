@@ -1,19 +1,18 @@
 /**
- * Browser-side Remote adapter for the orchestrator. A plugin outside the
- * vendored harness has no generated `ctx.remote` namespace, so this module
+ * Browser-side Remote adapter for the orchestrator's tool face. A plugin outside
+ * the vendored harness has no generated `ctx.remote` namespace, so this module
  * speaks the same `/api` channel the generated wrappers use.
  *
  * Every call is bound to one session id: the panel has exactly one scope, and
- * the Host answers `list`/`status` for that session only. A malformed Host
- * payload becomes a clear error state instead of a render crash.
+ * the Host answers `list` for that session only. A malformed Host payload
+ * becomes a clear error state instead of a render crash.
  *
  * @module @elysia/villv-helix/client/api
  */
 
 import type { ClientConnectionRpc } from '@deepseek-ai/dsh-client-connection/client'
 import type {
-  CapabilitySnapshot, ContextEntry, ContextEvent, EventLogEntry, EventOutcome, HealthStatus,
-  HostStatus, PresetPrompt, PublishReceipt, SessionRowEntry, StepGate, ToolEntry, ToolGroupEntry, ToolOrigin,
+  CapabilitySnapshot, PresetPrompt, SessionRowEntry, StepGate, ToolEntry, ToolGroupEntry, ToolOrigin,
   ToolPresetEntry, ToolScope,
 } from '../types.ts'
 
@@ -29,22 +28,16 @@ export class VillvHelixRemoteError extends Error {
   }
 }
 
-/** Every capability operation the page performs. */
+/** Every tool operation the page performs. */
 export interface VillvHelixApi {
-  /** Read the session's tool and context surface. */
+  /** Read the session's tool surface. */
   list(signal: AbortSignal): Promise<CapabilitySnapshot>
-  /** Read write authority and the session's health sample. */
-  status(signal: AbortSignal): Promise<HostStatus>
   /** Disable or enable one global tool for this session. */
   setTool(toolId: string, enabled: boolean, signal: AbortSignal): Promise<void>
   /** Read 会话编排模式 without requiring a live Agent. */
   getMode(signal: AbortSignal): Promise<boolean>
   /** Turn 会话编排模式 on or off for this session. */
   setMode(enabled: boolean, signal: AbortSignal): Promise<void>
-  /** Subscribe or unsubscribe one context event kind for this session. */
-  setContext(eventKind: string, enabled: boolean, signal: AbortSignal): Promise<void>
-  /** Publish one context event. No panel surface calls this yet. */
-  publish(event: ContextEvent, signal: AbortSignal): Promise<PublishReceipt>
   /** Save a named tool selection. */
   createToolPreset(name: string, tools: readonly string[], signal: AbortSignal): Promise<ToolPresetEntry>
   /** Delete a named tool selection. */
@@ -58,12 +51,9 @@ export interface VillvHelixApi {
 /** Endpoint names the Host's Remote service publishes. */
 const ENDPOINTS = {
   list: 'villvHelix/list',
-  status: 'villvHelix/status',
   setTool: 'villvHelix/setTool',
   getMode: 'villvHelix/getMode',
   setMode: 'villvHelix/setMode',
-  setContext: 'villvHelix/setContext',
-  publish: 'villvHelix/publish',
   createToolPreset: 'villvHelix/createToolPreset',
   deleteToolPreset: 'villvHelix/deleteToolPreset',
   readPresetPrompt: 'presetManager/readPrompt',
@@ -102,7 +92,6 @@ function isBooleanRecord(value: unknown): value is Readonly<Record<string, boole
   return isRecord(value) && Object.values(value).every(entry => typeof entry === 'boolean')
 }
 
-const EVENT_OUTCOMES: readonly EventOutcome[] = ['published', 'delivered', 'consumed', 'failed', 'dropped']
 const STEP_GATES: readonly StepGate[] = ['active', 'frozen', 'hidden']
 
 function isStepRecord(value: unknown): value is Readonly<Record<string, StepGate>> {
@@ -134,17 +123,6 @@ function isToolGroup(value: unknown): value is ToolGroupEntry {
     && isStringArray(value['tools'])
 }
 
-function isContextEntry(value: unknown): value is ContextEntry {
-  return isRecord(value)
-    && typeof value['kind'] === 'string'
-    && typeof value['active'] === 'boolean'
-    && isBooleanRecord(value['enabledBy'])
-    && isOptionalString(value['nameZh'])
-    && isOptionalNumber(value['ttlMs'])
-    && isOptionalNumber(value['backlog'])
-    && isOptionalString(value['failure'])
-}
-
 function isSessionRow(value: unknown): value is SessionRowEntry {
   return isRecord(value)
     && typeof value['id'] === 'string'
@@ -152,16 +130,9 @@ function isSessionRow(value: unknown): value is SessionRowEntry {
     && isOptionalString(value['title'])
     && isOptionalString(value['workspace'])
     && isOptionalString(value['presetId'])
+    && isOptionalString(value['presetName'])
+    && (value['orchestrated'] === undefined || typeof value['orchestrated'] === 'boolean')
     && isOptionalNumber(value['lastActiveAt'])
-}
-
-function isEventEntry(value: unknown): value is EventLogEntry {
-  return isRecord(value)
-    && typeof value['id'] === 'string'
-    && typeof value['kind'] === 'string'
-    && EVENT_OUTCOMES.includes(value['outcome'] as EventOutcome)
-    && isFiniteNumber(value['at'])
-    && isOptionalString(value['detail'])
 }
 
 function isToolPreset(value: unknown): value is ToolPresetEntry {
@@ -176,33 +147,8 @@ function isSnapshot(value: unknown): value is CapabilitySnapshot {
   return isRecord(value)
     && Array.isArray(value['tools']) && value['tools'].every(isToolEntry)
     && Array.isArray(value['groups']) && value['groups'].every(isToolGroup)
-    && Array.isArray(value['contexts']) && value['contexts'].every(isContextEntry)
     && Array.isArray(value['sessions']) && value['sessions'].every(isSessionRow)
     && Array.isArray(value['toolPresets']) && value['toolPresets'].every(isToolPreset)
-    && Array.isArray(value['events']) && value['events'].every(isEventEntry)
-}
-
-const TOOL_HEALTH_FIELDS = ['static', 'registered', 'enabled', 'failed', 'global', 'agent'] as const
-const CONTEXT_HEALTH_FIELDS = ['queueDepth', 'oldestAgeMs', 'consumed', 'failed', 'merged'] as const
-const GATE_HEALTH_FIELDS = ['failClosed', 'failLoud'] as const
-
-function isHealth(value: unknown): value is HealthStatus {
-  if (!isRecord(value)) return false
-  const tools = value['tools']
-  const contexts = value['contexts']
-  const gate = value['gate']
-  return isRecord(tools) && TOOL_HEALTH_FIELDS.every(name => isFiniteNumber(tools[name]))
-    && isRecord(contexts) && CONTEXT_HEALTH_FIELDS.every(name => isFiniteNumber(contexts[name]))
-    && isRecord(gate) && GATE_HEALTH_FIELDS.every(name => isFiniteNumber(gate[name]))
-    && isOptionalString(gate['lastError'])
-    && isFiniteNumber(value['capturedAt'])
-}
-
-function isStatus(value: unknown): value is HostStatus {
-  return isRecord(value)
-    && typeof value['writable'] === 'boolean'
-    && (value['mode'] === 'live' || value['mode'] === 'starting' || value['mode'] === 'degraded')
-    && isHealth(value['health'])
 }
 
 function isPresetPrompt(value: unknown): value is PresetPrompt {
@@ -212,14 +158,6 @@ function isPresetPrompt(value: unknown): value is PresetPrompt {
     && isStringArray(value['files'])
     && typeof value['text'] === 'string'
     && isStringArray(value['missing'])
-}
-
-function isReceipt(value: unknown): value is PublishReceipt {
-  return isRecord(value)
-    && typeof value['eventId'] === 'string'
-    && isFiniteNumber(value['delivered'])
-    && isFiniteNumber(value['suppressed'])
-    && isFiniteNumber(value['failed'])
 }
 
 /**
@@ -249,11 +187,6 @@ export function createVillvHelixApi(
       if (!isSnapshot(value)) throw new Error('villv-helix/invalid-list-response')
       return value
     },
-    async status(signal) {
-      const value = await invoke(ENDPOINTS.status, { sessionId }, signal)
-      if (!isStatus(value)) throw new Error('villv-helix/invalid-status-response')
-      return value
-    },
     async setTool(toolId, enabled, signal) {
       await invoke(ENDPOINTS.setTool, { sessionId, toolId, enabled }, signal)
     },
@@ -263,14 +196,6 @@ export function createVillvHelixApi(
     },
     async setMode(enabled, signal) {
       await invoke(ENDPOINTS.setMode, { sessionId, enabled }, signal)
-    },
-    async setContext(eventKind, enabled, signal) {
-      await invoke(ENDPOINTS.setContext, { sessionId, eventKind, enabled }, signal)
-    },
-    async publish(event, signal) {
-      const value = await invoke(ENDPOINTS.publish, { event }, signal)
-      if (!isReceipt(value)) throw new Error('villv-helix/invalid-publish-response')
-      return value
     },
     async createToolPreset(name, tools, signal) {
       const value = await invoke(ENDPOINTS.createToolPreset, { name, tools }, signal)

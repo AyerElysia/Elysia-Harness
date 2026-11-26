@@ -1,8 +1,9 @@
 # Local web profile patch.
 # The archived v1 ElyH feature plugins under plugins/_archive-elysia-v1 stay
 # unmounted. The current ElyH plugins are mounted by their own bundles:
-# Elysia/VillV-Helix owns session orchestration, and Elysia/Mobius-Infinity owns
-# preset management. They have no shared capability core. The external
+# Elysia/VillV-Helix owns the session tool face, Elysia/Context-Gate owns
+# context events, and Elysia/Mobius-Infinity owns preset management. They have
+# no shared capability core. The external
 # plugins remain: modsearch, remote-web-ui, market, billion-context. Core
 # DSH/Web rows stay.
 #

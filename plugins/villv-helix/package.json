@@ -1,6 +1,6 @@
 {
   "name": "@elysia/villv-helix",
-  "description": "Elysia/VillV-Helix (维尔薇·螺旋): the session-scoped capability panel, ported from the original @elysia/capability-panel UI",
+  "description": "Elysia/VillV-Helix (维尔薇·螺旋): the session tool face and orchestration-mode panel",
   "version": "0.1.0",
   "private": true,
   "type": "module",

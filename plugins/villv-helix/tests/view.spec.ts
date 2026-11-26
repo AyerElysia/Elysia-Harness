@@ -1,12 +1,12 @@
 /**
- * Presentation of the ported panel: one render of the loaded view, with the
- * real Chinese dictionary, proves the original tabs, session card, tool
- * categories, counts, and static card are what the page actually draws.
+ * Presentation of the tool panel: one render of the loaded view, with the real
+ * Chinese dictionary, proves the tool and preset tabs, tool categories, counts,
+ * and static card are what the page actually draws.
  */
 import { describe, expect, it } from 'vitest'
 import { createElement } from 'react'
 import { renderToStaticMarkup } from 'react-dom/server'
-import type { CapabilitySnapshot, HostStatus } from '../src/types.ts'
+import type { CapabilitySnapshot, PresetPrompt } from '../src/types.ts'
 import { ControlPanelView, type ControlPanelViewProps } from '../src/client/ControlPanelView.tsx'
 import { zh, type ControlPanelLocaleKey } from '../src/client/locales.ts'
 import type { ControlPanelTranslate } from '../src/client/labels.ts'
@@ -36,23 +36,8 @@ function snapshot(): CapabilitySnapshot {
       },
     ],
     groups: [],
-    contexts: [{ kind: 'demo.ping', nameZh: '示例事件', active: false, ttlMs: 60_000, backlog: 0, enabledBy: { 'session:s1': true } }],
-    sessions: [{ id: 's1', title: '测试会话', live: true, presetId: 'standard', workspace: 'E:\\work\\demo' }],
+    sessions: [{ id: 's1', title: '测试会话', live: true, presetId: 'standard', workspace: 'E:\\work\\demo', orchestrated: true }],
     toolPresets: [{ id: 'p1', name: '常用组', tools: ['alpha_tool'], createdAt: 1 }],
-    events: [{ id: 'e1', kind: 'demo.ping', outcome: 'delivered', at: 1, detail: 'ok' }],
-  }
-}
-
-function status(): HostStatus {
-  return {
-    writable: true,
-    mode: 'live',
-    health: {
-      tools: { static: 1, registered: 2, enabled: 2, failed: 0, global: 2, agent: 1 },
-      contexts: { queueDepth: 0, oldestAgeMs: 0, consumed: 0, failed: 0, merged: 0 },
-      gate: { failClosed: 0, failLoud: 0 },
-      capturedAt: 1,
-    },
   }
 }
 
@@ -60,31 +45,34 @@ function render(overrides: Partial<ControlPanelViewProps> = {}): string {
   const props: ControlPanelViewProps = {
     t,
     snapshot: snapshot(),
-    status: status(),
     selected: { kind: 'session', id: 's1' },
     busy: false,
     draft: {},
     dirty: false,
     saving: false,
-    contextDraft: {},
-    contextDirty: false,
-    contextSaving: false,
     toolPresets: [{ id: 'p1', name: '常用组', tools: ['alpha_tool'], createdAt: 1 }],
     onToggleTool: () => {},
     onToggleTools: () => {},
     onSaveTools: () => {},
-    onSaveContexts: () => {},
     onSelectToolPreset: () => {},
     onApplyToolPreset: () => {},
     onCreateToolPreset: async () => false,
     onDeleteToolPreset: () => {},
-    onToggleContext: () => {},
     ...overrides,
   }
   return renderToStaticMarkup(createElement(ControlPanelView, props))
 }
 
-describe('ported panel view', () => {
+const prompt: PresetPrompt = {
+  id: 'standard',
+  name: '标准预设',
+  root: 'E:\\work\\presets\\standard',
+  files: ['system.md'],
+  text: '你是助手。',
+  missing: [],
+}
+
+describe('tool panel view', () => {
   it('locks only the harness-provided preset ids', () => {
     expect(isOfficialPreset('standard')).toBe(true)
     expect(isOfficialPreset('minimal')).toBe(true)
@@ -94,10 +82,13 @@ describe('ported panel view', () => {
     expect(isOfficialPreset(undefined)).toBe(false)
   })
 
-  it('renders the five session tabs and no scope sidebar', () => {
+  it('renders the tool and preset tabs only', () => {
     const markup = render()
-    for (const label of ['工具', '事件', '日志', '健康', '预设']) {
+    for (const label of ['工具', '预设']) {
       expect(markup).toContain(`>${label}<`)
+    }
+    for (const removed of ['事件', '日志', '健康']) {
+      expect(markup).not.toContain(`>${removed}<`)
     }
     expect(markup).not.toContain('当前会话')
     expect(markup).not.toContain('data-scope-key=')
@@ -175,5 +166,25 @@ describe('ported panel view', () => {
     const markup = render({ draft: { alpha_tool: false }, dirty: true })
     expect(markup).toContain('工具修改尚未保存')
     expect(markup).toContain('保存')
+  })
+
+  it('renders the preset prompt read-only on the preset tab', () => {
+    const markup = render({ forcedTab: 'static', presetPrompt: prompt })
+    expect(markup).toContain('data-preset-prompt="true"')
+    expect(markup).toContain('标准预设')
+    expect(markup).toContain('你是助手。')
+    expect(markup).not.toContain('当前预设不是由预设管理器创建的')
+  })
+
+  it('explains an unreadable preset prompt', () => {
+    const markup = render({ forcedTab: 'static' })
+    expect(markup).toContain('当前预设不是由预设管理器创建的')
+  })
+
+  it('asks for orchestration mode before showing tools', () => {
+    const base = snapshot()
+    const markup = render({ snapshot: { ...base, sessions: [{ ...base.sessions[0]!, orchestrated: false }] } })
+    expect(markup).toContain('请先开启会话编排模式')
+    expect(markup).not.toContain('DSH 基础工具')
   })
 })

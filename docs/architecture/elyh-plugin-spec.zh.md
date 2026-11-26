@@ -32,7 +32,7 @@
 | Service / Transport | 为 Tool/Event 提供发送、TTS、ASR、存储、索引等底层能力 |
 | Policy / Gate | 控制工具可见性、执行、确认、压缩策略 |
 | UI | 面板、页面、侧栏、检查器 |
-| Orchestration | 工具面、Context Bus、预设组合 |
+| Orchestration | 工具面、Context Gate、预设组合 |
 
 一个包可以同时提供多项，但 README 和测试必须按扩展点写清边界。不要用“某个主体”的插件名掩盖它实际提供的工具或事件。
 
@@ -66,7 +66,8 @@
 
 | 显示名 | 包名 / 插件 id | 目录 | 职责 |
 |---|---|---|---|
-| **Elysia/VillV-Helix** | `@elysia/villv-helix` / `villv-helix` | `plugins/villv-helix/` | 会话编排 |
+| **Elysia/VillV-Helix** | `@elysia/villv-helix` / `villv-helix` | `plugins/villv-helix/` | 工具面 / 门禁 |
+| **Elysia/Context-Gate** | `@elysia/context-gate` / `context-gate` | `plugins/context-gate/` | 上下文事件订阅 / 注入队列 / 日志 |
 | **Elysia/Mobius-Infinity** | `@elysia/mobius-infinity` / `mobius-infinity` | `plugins/mobius-infinity/` | 预设管理 |
 
 规则的边界：
@@ -307,16 +308,16 @@ ctx.inject(['villvHelix'], scope => {
 
 ## 7. 上下文事件规范
 
-上下文事件与工具不同：编排插件无法从工具注册表推断事件 kind，因此 provider 必须声明并发布。
+上下文事件与工具不同：Context Gate 无法从工具注册表推断事件 kind，因此 provider 必须声明并发布。
 
 ### 7.1 注册 kind
 
 ```ts
-ctx.inject(['villvHelix'], scope => {
-  const helix = scope.get('villvHelix')
-  if (helix === undefined) return
+ctx.inject(['contextGate'], scope => {
+  const gate = scope.get('contextGate')
+  if (gate === undefined) return
 
-  scope.effect(() => helix.registerContextKind({
+  scope.effect(() => gate.registerContextKind({
     kind: '<plugin>.<event>',
     nameZh: '中文事件名',
     description: 'One line describing what the event carries.',
@@ -335,20 +336,20 @@ ctx.inject(['villvHelix'], scope => {
 - `description` 是面板和模型都能读的一行说明。
 - `activeByDefault: false` 表示默认不唤醒轮次；主动事件才显式 `true`。
 - 注册必须放在 `ctx.effect` 中，卸载时 kind 一起消失。
-- 重复 kind 是 provider bug，编排插件应抛错，不要静默覆盖。
-- 没有编排插件时，上下文功能没有 Host 总线；provider 应明确降级，不要注册私有总线伪装成面板事件。
+- 重复 kind 是 provider bug，Context Gate 应抛错，不要静默覆盖。
+- 没有 Context Gate 时，provider 应明确降级，不要注册私有总线伪装成面板事件。
 
 ### 7.2 发布事件
 
 ```ts
-await ctx.villvHelix.publish({
+await ctx.contextGate.publish({
   kind: '<plugin>.<event>',
   source: '<plugin>',
   summary: 'Short, model-readable sentence; no secrets.',
   payload: { /* JSON-serializable */ },
   active: false,
   dedupeKey: '<stable-key>',
-  visibility: { presetIds: ['...'] },
+  visibility: { sessionIds: ['...'] },
 })
 ```
 
@@ -371,7 +372,7 @@ Event Adapter 只做适配，不拥有 Agent 生命周期：
 - 生命周期消费者在 `ctx.effect` 中注册，监听器、队列、定时器随插件卸载清理。
 - 请求归档类 hook 失败时应阻断该次模型调用，不静默吞掉。
 - 发送器、TTS、ASR、SQLite、索引是 Service，不直接注册模型工具；Tool Provider 调用它们。
-- 一个 Event Adapter 没有编排插件时也要能明确降级：不注册私有总线伪装成 Helix 上下文。
+- 一个 Event Adapter 没有 Context Gate 时也要能明确降级：不注册私有总线伪装成可订阅上下文。
 - 事件 payload 必须可 JSON 序列化；外部附件只保存引用，不把字节复制进上下文。
 
 ## 8. 编排插件规范：Elysia/VillV-Helix
@@ -394,8 +395,8 @@ Plugin id：villv-helix
 `@elysia/villv-helix` 是**一个插件包**：
 
 ```text
-src/index.ts        Host：会话模式、工具限制、事件总线、预设预览数据
-src/client/*        会话页、顶部标签、模式胶囊
+src/index.ts        Host：会话模式、工具限制、预设预览数据
+src/client/*        工具/预设视图、模式胶囊
 ```
 
 没有外部 `capability-core`，没有第二个“panel”包。
@@ -409,28 +410,33 @@ src/client/*        会话页、顶部标签、模式胶囊
 - 现有会话和新会话都可以切换。
 - 关闭编排模式时移除限制；开启时安装限制。
 
-### 8.4 顶部标签
+### 8.4 顶部视图
 
-不换排、不加第二排：
+不换排、不加第二排。Helix 只注册两个原生 Conversation view：
 
 ```text
-对话 | 轨迹 | 上下文 | 工具 | 事件 | 日志 | 健康 | 预设
+工具 | 预设
 ```
 
-- 普通会话只显示前三个。
-- 编排会话显示全部。
+Context Gate 独立注册：
+
+```text
+事件 | 日志
+```
+
+- Context Gate 的视图无条件注册，不受会话编排模式管理。
+- 普通模式下 Helix 视图仍显示，并提示“需要开启编排模式”。
 - 窄屏时横向滚动，不折行。
-- 当前停在编排标签时关闭模式，自动回到“对话”。
+- 不在 Helix 中插入 Context Gate 的标签、健康页或上下文状态。
 
-### 8.5 各标签职责
+### 8.5 各视图职责
 
-| 标签 | 职责 |
-|---|---|
-| 工具 | 当前会话全局工具的实际状态；只写 session 限制 |
-| 事件 | 当前会话的上下文事件订阅 |
-| 日志 | 当前会话的事件日志 |
-| 健康 | 当前会话队列、消费、失败；Host 全局健康只做摘要 |
-| 预设 | 当前预设的工具面、系统提示词、注入的提示词文件预览；只读 |
+| 视图 | 归属 | 职责 |
+|---|---|---|
+| 工具 | Helix | 当前会话全局工具的实际状态；只写 session 限制 |
+| 预设 | Helix | 当前预设的工具面、系统提示词、注入的提示词文件预览；只读 |
+| 事件 | Context Gate | 当前会话的上下文事件订阅 |
+| 日志 | Context Gate | 当前会话的上下文注入日志 |
 
 ### 8.6 会话工具限制
 
@@ -462,6 +468,18 @@ src/client/*        会话页、顶部标签、模式胶囊
 - 编排插件暴露 `registerToolName(toolId, nameZh)` 作为可选显示元数据；它不控制工具开关。
 - 事件 kind、工具 id、包名、插件 id 不翻译。
 - 缺少中文名时显示 id 并记录诊断，不在 UI 里伪造名称。
+
+### 8.9 Context-Gate 独立包
+
+`@elysia/context-gate` 是上下文事件的独立基础设施，不属于 Helix：
+
+- Remote：`contextGate/list`、`contextGate/setContext`；
+- 没有 `status`、健康页或健康计数；
+- 不读取 Helix 的 `orchestrated`；
+- 订阅、队列、TTL、dedupe、背压、日志独立持久化到 `context-gate-state.json`；
+- 默认 `batchMs = 1200`、`maxWaitMs = 5000`；忙时只排队，空闲时合并唤醒；
+- 事件注入在 `agent/pre-step`，不创建 session；
+- UI 只在事件/日志两个原生 view 中展示，不注册工具或预设页。
 
 ## 9. Client 规范
 
@@ -499,8 +517,9 @@ Event Adapter 至少覆盖：
 - `tools/change` 后新工具进入控制；
 - 编排会话初始只保留预设静态工具；
 - session 放行/关闭正确；
-- 顶部标签在普通/编排模式下正确出现/消失；
-- 事件日志、健康、预设预览按 session 取数；
+- Helix 只注册工具/预设视图；
+- Context Gate 的事件/日志视图在普通/编排模式下都可用；
+- 预设预览按 session 取数；
 - 切换模式不新开会话；
 - 卸载时清理所有 restriction、监听器、slot。
 

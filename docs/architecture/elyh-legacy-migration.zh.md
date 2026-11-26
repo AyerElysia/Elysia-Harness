@@ -13,7 +13,7 @@ Event Adapter       入站事件 / 生命周期事件 / 上下文
 Service             发送器、TTS、ASR、SQLite、索引
 Policy              工具面、权限、确认、压缩策略
 UI                  面板、页面、侧栏
-Orchestration       工具面、Context Bus、预设组合
+Orchestration       工具面、Context Gate、预设组合
 ```
 
 同一个旧包可以被拆到多个新包，一个旧模块也可以只保留为 Service。

@@ -1,0 +1,232 @@
+/* Context gate panel. Tokens only: no literal colors. Same visual language as
+   the VillV-Helix tool panel, so the two conversation views read as one row. */
+.shell {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+  width: 100%;
+  height: 100%;
+  min-height: 0;
+  margin: 0;
+  padding: 20px 24px;
+  overflow: hidden;
+  box-sizing: border-box;
+  scrollbar-gutter: stable;
+  color: var(--dsw-alias-label-primary);
+}
+
+.hint,
+.notice,
+.contextDescription {
+  margin: 0;
+  font-size: 13px;
+  line-height: 20px;
+  color: var(--dsw-alias-label-tertiary);
+}
+
+.notice {
+  color: var(--dsw-alias-state-business-primary);
+}
+
+.failure {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin: 0;
+  font-size: 13px;
+  line-height: 20px;
+  color: var(--dsw-alias-state-error-primary);
+}
+
+.page {
+  display: flex;
+  flex: 1 1 auto;
+  flex-direction: column;
+  gap: 12px;
+  width: 100%;
+  min-height: 0;
+}
+
+.panel {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  min-width: 0;
+  min-height: 0;
+  height: 100%;
+  overflow: hidden;
+}
+
+.tabPanel:not([hidden]) {
+  display: flex;
+  flex: 1 1 auto;
+  flex-direction: column;
+  gap: 10px;
+  min-height: 0;
+  overflow-y: auto;
+  scrollbar-gutter: stable;
+  padding-bottom: 64px;
+}
+
+.tabBar {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 4px;
+  border-bottom: 0.5px solid var(--dsw-alias-border-l3);
+  padding-bottom: 6px;
+}
+
+.tab {
+  border: 0.5px solid transparent;
+  border-radius: var(--dsw-radius-sm);
+  padding: 4px 10px;
+  background: transparent;
+  color: var(--dsw-alias-label-tertiary);
+  font: inherit;
+  font-size: 12px;
+  line-height: 18px;
+  cursor: pointer;
+}
+
+.tab:hover {
+  background: var(--dsw-alias-interactive-bg-hover);
+  color: var(--dsw-alias-label-primary);
+}
+
+.tabActive {
+  border-color: var(--dsw-alias-border-l3);
+  background: var(--dsw-alias-bg-module-platform);
+  color: var(--dsw-alias-label-primary);
+  font-weight: 600;
+}
+
+.contextList,
+.eventList {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+.badgeRow {
+  display: inline-flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 6px;
+}
+
+.badgeMuted,
+.badgeOk,
+.badgeError {
+  border-radius: var(--dsw-radius-sm);
+  padding: 1px 8px;
+  font-size: 11px;
+  line-height: 18px;
+  white-space: nowrap;
+  background: var(--dsw-alias-bg-module-platform);
+  color: var(--dsw-alias-label-tertiary);
+}
+
+.badgeOk {
+  color: var(--dsw-alias-state-success-primary);
+}
+
+.badgeError {
+  color: var(--dsw-alias-state-error-primary);
+}
+
+.contextRow {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  border-top: 0.5px solid var(--dsw-alias-border-l3);
+  padding: 6px 0;
+}
+
+.contextRow:first-child {
+  border-top: none;
+}
+
+.switchRow {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  min-width: 0;
+  cursor: pointer;
+}
+
+.checkbox {
+  flex: none;
+  margin: 0;
+  accent-color: var(--dsw-alias-state-business-primary);
+}
+
+.contextName {
+  font-size: 13px;
+  line-height: 20px;
+  color: var(--dsw-alias-label-primary);
+}
+
+.contextId {
+  font-size: 11px;
+  color: var(--dsw-alias-label-tertiary);
+  overflow-wrap: anywhere;
+}
+
+.eventRow {
+  display: flex;
+  align-items: baseline;
+  flex-wrap: wrap;
+  gap: 8px;
+  border-top: 0.5px solid var(--dsw-alias-border-l3);
+  padding: 4px 0;
+  font-size: 12px;
+}
+
+.eventRow:first-child {
+  border-top: none;
+}
+
+.eventTime {
+  font-variant-numeric: tabular-nums;
+  color: var(--dsw-alias-label-tertiary);
+}
+
+.eventKind {
+  color: var(--dsw-alias-label-secondary);
+}
+
+.eventDetail {
+  color: var(--dsw-alias-label-tertiary);
+  overflow-wrap: anywhere;
+}
+
+.secondary {
+  border: 0.5px solid var(--dsw-alias-border-l4);
+  border-radius: var(--dsw-radius-sm);
+  padding: 4px 12px;
+  background: transparent;
+  color: var(--dsw-alias-label-primary);
+  font: inherit;
+  cursor: pointer;
+}
+
+.secondary:disabled {
+  opacity: 0.5;
+  cursor: default;
+}
+
+/* A context view owns the whole content band while it is mounted, exactly like
+   the tool panel: hide the conversation composer and its spacer. */
+:global(body:has([data-context-gate-panel])) :global([data-composer-seat]) {
+  display: none !important;
+}
+
+/* Keep the native tab rhythm: 32px between view labels. */
+:global([data-slot="conversation.session.header"]) :global([role="tablist"]) {
+  gap: 32px !important;
+  flex-wrap: wrap !important;
+}

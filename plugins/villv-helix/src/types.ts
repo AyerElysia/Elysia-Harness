@@ -1,5 +1,5 @@
 /**
- * Wire and persistence types of the session-scoped capability panel.
+ * Wire and persistence types of the session-scoped tool panel.
  *
  * Types only: no runtime code, so the browser half can import this module
  * without pulling Host dependencies, and every value here is JSON-serializable
@@ -95,24 +95,6 @@ export interface ToolPresetEntry {
   readonly createdAt: number
 }
 
-/** One context event kind the Host can subscribe the session to. */
-export interface ContextEntry {
-  /** Event kind, such as `app.message`. */
-  readonly kind: string
-  /** Chinese display name supplied by the provider. */
-  readonly nameZh?: string
-  /** Whether publishing wakes a turn (`true`) or waits for the next step. */
-  readonly active: boolean
-  /** Time to live of a queued event; absent keeps it until consumed. */
-  readonly ttlMs?: number
-  /** Events already queued for this session. */
-  readonly backlog?: number
-  /** Why this kind cannot be subscribed, when it cannot. */
-  readonly failure?: string
-  /** Effective subscription for the session scope; a missing key means off. */
-  readonly enabledBy: Readonly<Record<ScopeKey, boolean>>
-}
-
 /** The current session as the panel's left column renders it. */
 export interface SessionRowEntry {
   /** Session identity. */
@@ -143,208 +125,16 @@ export interface PresetPrompt {
   readonly missing: readonly string[]
 }
 
-/** How one context event ended up. */
-export type EventOutcome = 'published' | 'delivered' | 'consumed' | 'failed' | 'dropped'
-
-/** One row of the session's recent context-event log. */
-export interface EventLogEntry {
-  /** Event id minted by the publisher. */
-  readonly id: string
-  /** Event kind the entry was published as. */
-  readonly kind: string
-  /** What happened to it. */
-  readonly outcome: EventOutcome
-  /** Epoch milliseconds of the outcome. */
-  readonly at: number
-  /** Host explanation: a failure reason, a dedupe or TTL drop, or the target count. */
-  readonly detail?: string
-}
-
-/** Tool counters the health surface reports. */
-export interface ToolHealth {
-  /** Static tools the preset composition currently mounts in this session. */
-  readonly static: number
-  /** Globally registered tools the Host can switch for this session. */
-  readonly registered: number
-  /** Global tools currently enabled for this session. */
-  readonly enabled: number
-  /** Tools whose registration failed. */
-  readonly failed: number
-  /** Global-scope tool count. */
-  readonly global: number
-  /** Agent-scoped static tool count. */
-  readonly agent: number
-}
-
-/** Context-bus counters the health surface reports. */
-export interface ContextHealth {
-  /** Events waiting for this session. */
-  readonly queueDepth: number
-  /** Age of the oldest queued event in milliseconds. */
-  readonly oldestAgeMs: number
-  /** Events consumed since the Host started. */
-  readonly consumed: number
-  /** Events that failed to deliver or inject. */
-  readonly failed: number
-  /** Active events merged into one wake-up batch. */
-  readonly merged: number
-}
-
-/** Restriction counters the health surface reports. */
-export interface GateHealth {
-  /** Restrictions that could not be installed. */
-  readonly failClosed: number
-  /** Restriction installations that failed loud. */
-  readonly failLoud: number
-  /** The most recent restriction error, when one was recorded. */
-  readonly lastError?: string
-}
-
-/** Health counters served by the Host's `status()` endpoint. */
-export interface HealthStatus {
-  /** Tool registration and enablement counters. */
-  readonly tools: ToolHealth
-  /** Context-bus queue and consumption counters. */
-  readonly contexts: ContextHealth
-  /** Restriction failure counters. */
-  readonly gate: GateHealth
-  /** Epoch milliseconds of the sample. */
-  readonly capturedAt: number
-}
-
 /** What `villvHelix/list` answers for one session. */
 export interface CapabilitySnapshot {
   /** Every tool the Host reports, static and dynamic. */
   readonly tools: readonly ToolEntry[]
   /** Display groups of dynamic tools. */
   readonly groups: readonly ToolGroupEntry[]
-  /** Context event kinds the Host can subscribe. */
-  readonly contexts: readonly ContextEntry[]
   /** The current session, as the panel's left column renders it. */
   readonly sessions: readonly SessionRowEntry[]
   /** Saved tool selections, in creation order. */
   readonly toolPresets: readonly ToolPresetEntry[]
-  /** Recent context-event log, newest first. */
-  readonly events: readonly EventLogEntry[]
-}
-
-/** What `villvHelix/status` answers. */
-export interface HostStatus {
-  /** Whether the calling connection may write; false renders the panel read-only. */
-  readonly writable: boolean
-  /** Host lifecycle the panel explains when it is not `live`. */
-  readonly mode: 'live' | 'starting' | 'degraded'
-  /** Health counters for this session. */
-  readonly health: HealthStatus
-}
-
-/** Publisher-side restriction on the sessions one event may reach. */
-export interface ContextVisibility {
-  /** Allowed session ids; omission allows every subscribed session. */
-  readonly sessionIds?: readonly string[]
-}
-
-/** One stored context event. */
-export interface ContextEvent {
-  /** Stable event identity. */
-  readonly id: string
-  /** Registered kind. */
-  readonly kind: string
-  /** Producer identity, for the event log. */
-  readonly source: string
-  /** One line shown to the model and in the panel. */
-  readonly summary: string
-  /** Structured body. JSON-serializable and bounded by `maxBytes`. */
-  readonly payload: unknown
-  /** Hard upper bound the publisher places on the target set. */
-  readonly visibility: ContextVisibility
-  /** True wakes a turn; false waits for the session's next step. */
-  readonly active: boolean
-  /** Suppresses a repeat of the same key within the event's TTL. */
-  readonly dedupeKey: string
-  /** Age after which an undelivered event is dropped. */
-  readonly ttlMs?: number
-  /** Per-event size ceiling; an oversized event is refused, not truncated. */
-  readonly maxBytes?: number
-  /** Publication time in milliseconds since the epoch. */
-  readonly createdAt: number
-}
-
-/** What a provider submits to `publish()`. */
-export interface ContextEventInput {
-  /** Caller-chosen identity, for idempotent republishing. */
-  readonly id?: string
-  /** Registered kind; an unregistered kind is refused. */
-  readonly kind: string
-  /** Producer identity. */
-  readonly source: string
-  /** One line shown to the model and in the panel. */
-  readonly summary: string
-  /** Structured, JSON-serializable body. */
-  readonly payload?: unknown
-  /** Publisher-side restriction; defaults to no restriction. */
-  readonly visibility?: ContextVisibility
-  /** Defaults to the kind's `activeByDefault`. */
-  readonly active?: boolean
-  /** Dedupe key; defaults to the event id. */
-  readonly dedupeKey?: string
-  /** Age after which an undelivered event is dropped. */
-  readonly ttlMs?: number
-  /** Per-event size ceiling. */
-  readonly maxBytes?: number
-  /** Publication time; defaults to now. */
-  readonly createdAt?: number
-}
-
-/** Delivery accounting for one publication. */
-export interface PublishReceipt {
-  /** Identity of the published event. */
-  readonly eventId: string
-  /** Sessions whose queue accepted the event. */
-  readonly delivered: number
-  /** Sessions excluded by subscription, visibility, or dedupe. */
-  readonly suppressed: number
-  /** Sessions whose enqueue failed. */
-  readonly failed: number
-}
-
-/** One provider's declaration of a publishable kind. */
-export interface ContextKindRegistration {
-  /** Kind name, `<plugin>.<event>`. */
-  readonly kind: string
-  /** Required Chinese display name. */
-  readonly nameZh: string
-  /** One line describing what the event carries. */
-  readonly description: string
-  /** Whether publications default to waking a turn; false is the safe default. */
-  readonly activeByDefault?: boolean
-  /** Default age ceiling for undelivered events. */
-  readonly ttlMs?: number
-  /** Default per-event size ceiling. */
-  readonly maxBytes?: number
-  /** Default undelivered events retained per session. */
-  readonly maxQueueDepth?: number
-}
-
-/** One kind resolved against the Host's traffic defaults. */
-export interface ResolvedContextKind {
-  readonly kind: string
-  readonly nameZh: string
-  readonly description: string
-  readonly activeByDefault: boolean
-  readonly ttlMs: number
-  readonly maxBytes: number
-  readonly maxQueueDepth: number
-}
-
-/** Undelivered events and delivery cursors of one session. */
-export interface QueueRecord {
-  /** Undelivered events, oldest first. */
-  readonly events: readonly ContextEvent[]
-  /** Recently consumed event ids, bounded. */
-  readonly consumed: readonly string[]
-  /** Dedupe key to the publication time that set it. */
-  readonly dedupe: Readonly<Record<string, number>>
 }
 
 /** One session's panel state. */
@@ -355,10 +145,6 @@ export interface SessionStateRecord {
   readonly enabledTools: readonly string[]
   /** Global tool ids this session disabled (legacy migration field). */
   readonly disabledTools: readonly string[]
-  /** Context kind to explicit subscription on/off. */
-  readonly contexts: Readonly<Record<string, boolean>>
-  /** Recent context-event log, newest first. */
-  readonly events: readonly EventLogEntry[]
 }
 
 /** The whole state document. */
@@ -367,20 +153,8 @@ export interface HelixDocument {
   readonly version: 1
   /** Per-session panel state. */
   readonly sessions: Readonly<Record<string, SessionStateRecord>>
-  /** Per-session context queues. */
-  readonly queues: Readonly<Record<string, QueueRecord>>
   /** Saved tool selections, shared across sessions. */
   readonly toolPresets: readonly ToolPresetEntry[]
   /** ISO timestamp of the last committed write. */
   readonly updatedAt: string
-}
-
-/** What a provider may publish through the orchestrator service. */
-export interface OrchestratorPublish {
-  /**
-   * Publish one context event to every subscribed session.
-   * @param input - the publication.
-   * @returns delivery accounting.
-   */
-  publish(input: ContextEventInput): Promise<PublishReceipt>
 }
