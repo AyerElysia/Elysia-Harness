@@ -34,6 +34,12 @@ export interface ManagedSuite {
   readonly tools: readonly ManagedTool[]
   /** Services the suite needs before it can be mounted. */
   readonly requires: readonly string[]
+  /**
+   * Whether the package can register a subset through its config. When false
+   * (the default), any already-present id means the whole suite is skipped:
+   * otherwise its unconditional registration would collide with a preset row.
+   */
+  readonly partial?: boolean
   /** Config passed when the suite is mounted. */
   readonly config: (wanted: readonly string[], present: ReadonlySet<string>) => Record<string, unknown> | undefined
 }
@@ -44,6 +50,7 @@ export const MANAGED_SUITES: readonly ManagedSuite[] = [
     id: 'tool-fs',
     module: '@deepseek-ai/dsh-tool-fs',
     requires: ['tools', 'fs', 'systemPrompt', 'workingDirectory'],
+    partial: true,
     tools: [
       { id: 'read', nameZh: '读取文件' },
       { id: 'write', nameZh: '写入文件' },
@@ -362,6 +369,11 @@ export class SessionToolMounts {
 
     for (const suite of MANAGED_SUITES) {
       if (session.suites.has(suite.id)) continue
+      // fs-search, jobs, shell and plugin suites register all of their tools
+      // unconditionally. A custom preset may already own one of those ids;
+      // mounting the package would throw "already registered", so skip the
+      // whole suite and let the preset implementation + pre-execute gate run.
+      if (suite.partial !== true && suite.tools.some(tool => present.has(tool.id))) continue
       // Mount every suite whose services exist, even when all its tools are
       // initially off. The stable declaration is what gives a disabled name
       // something to call and fail as UNKNOWN_TOOL; it cannot be created at
