@@ -1,6 +1,12 @@
-# ElyH 目标架构：会话能力与权限
+# ElyH 目标架构：会话能力与权限（历史稿）
 
-> 目标设计，不描述现状。一个主体、两类意识、三种 worker，按「能读什么、能写什么、能执行什么、不能做什么」定义。
+> **状态：历史目标稿，2026-11-26 已不再描述当前插件边界。**
+> 七个用例仍然可以作为产品用例参考，但“主意识 / 潜意识 / worker”不再是插件类型；
+> 当前实现是 Tool Provider、Event Adapter、Service、Policy 和 UI 的组合。
+> 当前架构见 [ElyH 扩展能力架构](../architecture.md)，旧实现拆分见
+> [旧实现迁移映射](elyh-legacy-migration.zh.md)。
+>
+> 原目标设计：一个主体、两类意识、三种 worker，按「能读什么、能写什么、能执行什么、不能做什么」定义。
 >
 > 配图：
 > - [elyh-usecase.png](elyh-usecase.png)：**能力视图**（每个用例读什么、写什么），源 `elyh-usecase.html`；

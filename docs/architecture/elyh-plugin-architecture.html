@@ -26,57 +26,57 @@
 
   <rect x="0" y="0" width="1700" height="1120" fill="#ffffff"/>
 
-  <text x="40" y="52" font-size="30" font-weight="700" fill="#0b1220">ElyH 插件架构 v2 · 预设 + 能力宿主 + 控制面板</text>
-  <text x="40" y="82" font-size="15" fill="#475569">不新开会话 · 工具全局注册一次 + when 门 · 上下文按订阅分发 · 能力默认关闭</text>
+  <text x="40" y="52" font-size="30" font-weight="700" fill="#0b1220">ElyH 扩展能力架构 · Tool / Event / Service / Gate</text>
+  <text x="40" y="82" font-size="15" fill="#475569">DSH 提供 Agent / Session / Tool；ElyH 只补扩展能力 · 现状：2026-11-26</text>
 
   <g font-size="13">
     <rect x="40" y="100" width="14" height="14" rx="3" fill="#f5f3ff" stroke="#a78bfa"/>
-    <text x="60" y="112" fill="#4c1d95">Host 能力宿主</text>
+    <text x="60" y="112" fill="#4c1d95">扩展层</text>
     <rect x="170" y="100" width="14" height="14" rx="3" fill="#eff6ff" stroke="#60a5fa"/>
     <text x="190" y="112" fill="#1e3a8a">DSH Session</text>
     <rect x="300" y="100" width="14" height="14" rx="3" fill="#fff7ed" stroke="#fb923c"/>
     <text x="320" y="112" fill="#7c2d12">Provider</text>
     <rect x="410" y="100" width="14" height="14" rx="3" fill="#ecfdf5" stroke="#34d399"/>
-    <text x="430" y="112" fill="#064e3b">Panel</text>
+    <text x="430" y="112" fill="#064e3b">UI</text>
     <rect x="510" y="100" width="14" height="14" rx="3" fill="#f8fafc" stroke="#94a3b8"/>
-    <text x="530" y="112" fill="#334155">Infra</text>
-    <text x="620" y="112" fill="#64748b">箭头 = 注册 / 订阅 / 注入 / 调用；所有插件名均为 @elysia/*</text>
-    <text x="40" y="128" font-size="12.5" fill="#64748b">箭头语义：Provider → Host 注册/发布 · Panel → Host 开关 · Host → Session schema/注入 · Session → Host 工具调用</text>
+    <text x="530" y="112" fill="#334155">Service</text>
+    <text x="620" y="112" fill="#64748b">箭头 = 事件 / 工具 / 上下文 / 控制；当前运行：Helix + Mobius</text>
+    <text x="40" y="128" font-size="12.5" fill="#64748b">箭头语义：Event Adapter → DSH Session · DSH Session ↔ Tool Provider · Tool Provider → Service · UI → Tool Face</text>
   </g>
 
   <!-- Host -->
   <rect x="560" y="140" width="580" height="620" rx="20" fill="#f5f3ff" stroke="#a78bfa" stroke-width="2.2"/>
-  <text x="590" y="172" font-size="18" font-weight="700" fill="#4c1d95">@elysia/capability-panel · 一次挂载</text>
+  <text x="590" y="172" font-size="18" font-weight="700" fill="#4c1d95">ElyH 扩展层 · VillV-Helix + Mobius</text>
 
   <rect x="585" y="195" width="530" height="135" rx="12" fill="#ffffff" stroke="#c4b5fd" stroke-width="1.6"/>
-  <text x="605" y="220" font-size="16" font-weight="700" fill="#5b21b6">Tool Catalog + Gate</text>
-  <text x="605" y="246" font-size="13.5" fill="#334155">每个工具全局注册一次</text>
-  <text x="605" y="270" font-size="13.5" fill="#334155">when: ({ agent }) =&gt; enabled(tool, agent)</text>
-  <text x="605" y="294" font-size="13.5" fill="#7c2d12">false：不进 schema / 不进 PTC / 不可执行</text>
-  <text x="605" y="318" font-size="13.5" fill="#7c2d12">硬调 → UNKNOWN_TOOL；guard 可立即拒绝</text>
+  <text x="605" y="220" font-size="16" font-weight="700" fill="#5b21b6">Tool Face + Gate</text>
+  <text x="605" y="246" font-size="13.5" fill="#334155">工具声明在会话内保持稳定</text>
+  <text x="605" y="270" font-size="13.5" fill="#334155">官方静态：locked / TOOL_STATIC_LOCKED</text>
+  <text x="605" y="294" font-size="13.5" fill="#7c2d12">自定义静态：pre-execute 门禁</text>
+  <text x="605" y="318" font-size="13.5" fill="#7c2d12">未启用 → schema 保留，执行 UNKNOWN_TOOL</text>
 
   <rect x="585" y="345" width="530" height="135" rx="12" fill="#ffffff" stroke="#c4b5fd" stroke-width="1.6"/>
   <text x="605" y="370" font-size="16" font-weight="700" fill="#5b21b6">Context Bus</text>
-  <text x="605" y="396" font-size="13.5" fill="#334155">事件 / 订阅 / 每会话队列 / 游标</text>
+  <text x="605" y="396" font-size="13.5" fill="#334155">事件 / 订阅 / 每会话队列 / TTL</text>
   <text x="605" y="420" font-size="13.5" fill="#334155">dedupe / TTL / active | passive</text>
-  <text x="605" y="444" font-size="13.5" fill="#0f766e">订阅集合 = 开启该事件的预设的所有会话</text>
-  <text x="605" y="468" font-size="13.5" fill="#0f766e">active → followup；passive → 下一轮 pre-step</text>
+  <text x="605" y="444" font-size="13.5" fill="#0f766e">Provider 注册 kind；Session 订阅</text>
+  <text x="605" y="468" font-size="13.5" fill="#0f766e">合并快照 → 下一 step 注入</text>
 
   <rect x="585" y="495" width="530" height="100" rx="12" fill="#ffffff" stroke="#c4b5fd" stroke-width="1.6"/>
-  <text x="605" y="520" font-size="16" font-weight="700" fill="#5b21b6">State Store</text>
-  <text x="605" y="546" font-size="13.5" fill="#334155">preset / session → 开启的 tools / contexts</text>
-  <text x="605" y="570" font-size="13.5" fill="#334155">持久化；Panel 唯一写入目标；默认全关</text>
+  <text x="605" y="520" font-size="16" font-weight="700" fill="#5b21b6">Session Tool State</text>
+  <text x="605" y="546" font-size="13.5" fill="#334155">session → enabled tools / contexts</text>
+  <text x="605" y="570" font-size="13.5" fill="#334155">静态锁定 + 扩展开关；默认关闭扩展</text>
 
   <rect x="585" y="610" width="530" height="125" rx="12" fill="#ffffff" stroke="#c4b5fd" stroke-width="1.6"/>
-  <text x="605" y="635" font-size="16" font-weight="700" fill="#5b21b6">Session Registry + Runtime</text>
-  <text x="605" y="661" font-size="13.5" fill="#334155">session → preset；create / resume / followup</text>
-  <text x="605" y="685" font-size="13.5" fill="#334155">RouterRuntime：观察主意识 / 心跳 / 派工桥</text>
-  <text x="605" y="709" font-size="13.5" fill="#334155">不组合 persona / tools；只做驱动与注册表</text>
+  <text x="605" y="635" font-size="16" font-weight="700" fill="#5b21b6">Mobius · 预设组合</text>
+  <text x="605" y="661" font-size="13.5" fill="#334155">preset → prompt files / tool group</text>
+  <text x="605" y="685" font-size="13.5" fill="#334155">preset_list / preset_create</text>
+  <text x="605" y="709" font-size="13.5" fill="#334155">不创建 / 切换 Session</text>
 
   <!-- Left: channels -->
   <rect x="40" y="140" width="460" height="260" rx="18" fill="#fff7ed" stroke="#fb923c" stroke-width="2"/>
-  <text x="60" y="170" font-size="17" font-weight="700" fill="#7c2d12">渠道 Providers</text>
-  <text x="60" y="190" font-size="12.5" fill="#9a3412">transport + context event + reply tool</text>
+  <text x="60" y="170" font-size="17" font-weight="700" fill="#7c2d12">渠道 Event Adapter</text>
+  <text x="60" y="190" font-size="12.5" fill="#9a3412">入站事件 + sender 服务（目标）</text>
 
   <rect x="60" y="202" width="200" height="78" rx="10" fill="#ffffff" stroke="#fdba74" stroke-width="1.5"/>
   <text x="76" y="230" font-size="15" font-weight="700" fill="#7c2d12">ayla-app</text>
@@ -100,8 +100,8 @@
 
   <!-- Left: preset/tools -->
   <rect x="40" y="420" width="460" height="320" rx="18" fill="#fefce8" stroke="#f0b429" stroke-width="2"/>
-  <text x="60" y="446" font-size="17" font-weight="700" fill="#713f12">Preset 内容 / 能力 Provider</text>
-  <text x="60" y="466" font-size="12.5" fill="#854d0e">预设只放 persona/prompt；工具由 Catalog 的 when 门决定</text>
+  <text x="60" y="446" font-size="17" font-weight="700" fill="#713f12">Tool Provider / Service（目标 / 归档）</text>
+  <text x="60" y="466" font-size="12.5" fill="#854d0e">工具由插件注册；Helix 管理当前会话工具面</text>
 
   <rect x="60" y="480" width="420" height="45" rx="8" fill="#ffffff" stroke="#fde68a" stroke-width="1.3"/>
   <text x="74" y="501" font-size="13.5" font-weight="700" fill="#713f12">conscious-mind</text>
@@ -125,8 +125,8 @@
 
   <!-- Right: media -->
   <rect x="1200" y="140" width="460" height="260" rx="18" fill="#fff7ed" stroke="#fb923c" stroke-width="2"/>
-  <text x="1220" y="170" font-size="17" font-weight="700" fill="#7c2d12">媒体 Providers</text>
-  <text x="1220" y="190" font-size="12.5" fill="#9a3412">event context + control / reply tools</text>
+  <text x="1220" y="170" font-size="17" font-weight="700" fill="#7c2d12">语音 / 直播（目标）</text>
+  <text x="1220" y="190" font-size="12.5" fill="#9a3412">音频 / 直播事件 + TTS / ASR 服务</text>
 
   <rect x="1220" y="202" width="420" height="60" rx="10" fill="#ffffff" stroke="#fdba74" stroke-width="1.5"/>
   <text x="1236" y="228" font-size="15" font-weight="700" fill="#7c2d12">dsh-livestream</text>
@@ -142,26 +142,26 @@
 
   <!-- Right: sessions -->
   <rect x="1200" y="420" width="460" height="300" rx="18" fill="#eff6ff" stroke="#60a5fa" stroke-width="2"/>
-  <text x="1220" y="446" font-size="17" font-weight="700" fill="#1e3a8a">DSH Sessions</text>
-  <text x="1220" y="466" font-size="12.5" fill="#1d4ed8">同一套 runtime；每个会话只决定 context + tools</text>
+  <text x="1220" y="446" font-size="17" font-weight="700" fill="#1e3a8a">DSH Session（当前）</text>
+  <text x="1220" y="466" font-size="12.5" fill="#1d4ed8">同一套 runtime；扩展只决定工具与上下文</text>
 
   <rect x="1220" y="480" width="420" height="70" rx="10" fill="#ffffff" stroke="#93c5fd" stroke-width="1.5"/>
-  <text x="1236" y="506" font-size="15" font-weight="700" fill="#1e3a8a">conscious session</text>
-  <text x="1236" y="526" font-size="12.5" fill="#1d4ed8">preset-elysia-conscious · tools 走 when 门</text>
-  <text x="1236" y="542" font-size="12.5" fill="#1d4ed8">context 走 pre-step 注入</text>
+  <text x="1236" y="506" font-size="15" font-weight="700" fill="#1e3a8a">Agent Session</text>
+  <text x="1236" y="526" font-size="12.5" fill="#1d4ed8">当前预设 · 工具面 / 静态工具</text>
+  <text x="1236" y="542" font-size="12.5" fill="#1d4ed8">上下文走 context bus / pre-step</text>
 
   <rect x="1220" y="565" width="420" height="70" rx="10" fill="#ffffff" stroke="#93c5fd" stroke-width="1.5"/>
-  <text x="1236" y="591" font-size="15" font-weight="700" fill="#1e3a8a">router session</text>
-  <text x="1236" y="611" font-size="12.5" fill="#1d4ed8">preset-elysia-subconscious · conscious.surface</text>
-  <text x="1236" y="627" font-size="12.5" fill="#1d4ed8">dispatch / report tools</text>
+  <text x="1236" y="591" font-size="15" font-weight="700" fill="#1e3a8a">扩展 Agent Session</text>
+  <text x="1236" y="611" font-size="12.5" fill="#1d4ed8">可选的 Router / 记忆会话</text>
+  <text x="1236" y="627" font-size="12.5" fill="#1d4ed8">由独立 Event Consumer 驱动</text>
 
   <rect x="1236" y="650" width="420" height="56" rx="10" fill="#ffffff" stroke="#93c5fd" stroke-width="1.5" stroke-dasharray="5 4"/>
-  <text x="1252" y="675" font-size="15" font-weight="700" fill="#1e3a8a">other sessions</text>
-  <text x="1252" y="695" font-size="12.5" fill="#1d4ed8">preset P / 旧会话；同一 gate，不需要新会话</text>
+  <text x="1252" y="675" font-size="15" font-weight="700" fill="#1e3a8a">Web / TUI Session</text>
+  <text x="1252" y="695" font-size="12.5" fill="#1d4ed8">同一工具面 / 预设机制</text>
 
   <!-- Infra -->
   <rect x="40" y="760" width="460" height="220" rx="18" fill="#f8fafc" stroke="#94a3b8" stroke-width="2"/>
-  <text x="60" y="786" font-size="17" font-weight="700" fill="#334155">Infra（不拥有会话；虚线 = 遗留/待删）</text>
+  <text x="60" y="786" font-size="17" font-weight="700" fill="#334155">归档能力（不挂载；虚线 = 历史）</text>
   <rect x="60" y="800" width="420" height="36" rx="8" fill="#ffffff" stroke="#cbd5e1" stroke-width="1.2" stroke-dasharray="5 4"/>
   <text x="74" y="823" font-size="14" fill="#64748b"><tspan font-weight="700">session-compaction</tspan> · legacy 兜底；P3 删除</text>
   <rect x="60" y="844" width="420" height="36" rx="8" fill="#ffffff" stroke="#cbd5e1" stroke-width="1.2"/>
@@ -173,33 +173,33 @@
 
   <!-- Panel -->
   <rect x="560" y="800" width="580" height="180" rx="18" fill="#ecfdf5" stroke="#34d399" stroke-width="2"/>
-  <text x="590" y="830" font-size="17" font-weight="700" fill="#064e3b">@elysia/capability-panel · Client</text>
-  <text x="590" y="858" font-size="13.5" fill="#065f46">多会话 / 多预设列表；自动识别预设（presetForSession）</text>
-  <text x="590" y="884" font-size="13.5" fill="#065f46">内置模板：主意识 / Router / 渠道 / 媒体；能力默认关闭</text>
-  <text x="590" y="910" font-size="13.5" fill="#065f46">工具开关 + 上下文事件开关 → State Store（RPC）</text>
-  <text x="590" y="936" font-size="13.5" fill="#065f46">事件流 / 最近错误 / 工具可见性 / 健康面</text>
-  <text x="590" y="962" font-size="12.5" fill="#047857">不直接改文件，不直接 mount 会话；Host 是唯一执行者</text>
+  <text x="590" y="830" font-size="17" font-weight="700" fill="#064e3b">VillV-Helix / Mobius · UI（当前）</text>
+  <text x="590" y="858" font-size="13.5" fill="#065f46">工具面 / 预设页 / 事件 / 健康</text>
+  <text x="590" y="884" font-size="13.5" fill="#065f46">当前会话工具面；静态工具分组</text>
+  <text x="590" y="910" font-size="13.5" fill="#065f46">工具开关 + 上下文事件开关 → Session Tool State（RPC）</text>
+  <text x="590" y="936" font-size="13.5" fill="#065f46">Context Bus 订阅 / 日志 / 健康</text>
+  <text x="590" y="962" font-size="12.5" fill="#047857">不注册业务工具；工具面是唯一控制点</text>
 
   <!-- App bridge -->
   <rect x="1200" y="740" width="460" height="220" rx="18" fill="#fff7ed" stroke="#fb923c" stroke-width="2"/>
-  <text x="1220" y="770" font-size="17" font-weight="700" fill="#7c2d12">App Bridge</text>
+  <text x="1220" y="770" font-size="17" font-weight="700" fill="#7c2d12">UI / Transport（第三方）</text>
   <text x="1220" y="796" font-size="13" fill="#9a3412"><tspan font-weight="700">standalone</tspan>：选一个会话，自己 followup</text>
   <text x="1220" y="822" font-size="13" fill="#9a3412"><tspan font-weight="700">managed</tspan>：注册 app.message + app.reply</text>
-  <text x="1220" y="848" font-size="13" fill="#9a3412">reply 绑定当前入站消息的会话身份</text>
-  <text x="1220" y="874" font-size="13" fill="#9a3412">不拥有主意识会话；只做 transport + 能力</text>
-  <text x="1220" y="900" font-size="12.5" fill="#b45309">面板开启后：下一 step 出现工具 → "工具已更新"</text>
-  <text x="1220" y="926" font-size="12.5" fill="#b45309">app 消息 → contextBus → 订阅会话 pre-step 注入</text>
+  <text x="1220" y="848" font-size="13" fill="#9a3412">不拥有 Agent / Session</text>
+  <text x="1220" y="874" font-size="13" fill="#9a3412">只消费工具面与事件</text>
+  <text x="1220" y="900" font-size="12.5" fill="#b45309">工具面变化 → 下一步 schema / gate</text>
+  <text x="1220" y="926" font-size="12.5" fill="#b45309">事件 → Context Bus → 下一 step</text>
 
   <!-- Callouts -->
   <rect x="560" y="1000" width="580" height="92" rx="12" fill="#fffbeb" stroke="#f59e0b" stroke-width="1.8"/>
-  <text x="578" y="1026" font-size="14" font-weight="700" fill="#92400e">工具门的三段语义</text>
-  <text x="578" y="1048" font-size="12.5" fill="#78350f">when=false：schema / PTC / execution 一起消失；硬调 → UNKNOWN_TOOL</text>
-  <text x="578" y="1070" font-size="12.5" fill="#78350f">step 冻结：中途关闭当前 step 仍可用；guard 读 live 状态可立即拒绝</text>
+  <text x="578" y="1026" font-size="14" font-weight="700" fill="#92400e">工具面语义</text>
+  <text x="578" y="1048" font-size="12.5" fill="#78350f">官方静态：locked；自定义静态：pre-execute 门禁</text>
+  <text x="578" y="1070" font-size="12.5" fill="#78350f">扩展工具：schema 稳定；未启用执行 UNKNOWN_TOOL</text>
 
   <rect x="1200" y="1000" width="460" height="92" rx="12" fill="#eff6ff" stroke="#60a5fa" stroke-width="1.8"/>
-  <text x="1218" y="1026" font-size="14" font-weight="700" fill="#1e3a8a">上下文中继的边界</text>
-  <text x="1218" y="1048" font-size="12.5" fill="#1d4ed8">只到订阅集合；active 唤醒，passive 排队</text>
-  <text x="1218" y="1070" font-size="12.5" fill="#1d4ed8">form=snapshot；dedupe/TTL；重启不逐会话重灌</text>
+  <text x="1218" y="1026" font-size="14" font-weight="700" fill="#1e3a8a">Context 边界</text>
+  <text x="1218" y="1048" font-size="12.5" fill="#1d4ed8">只注入订阅 session；合并快照</text>
+  <text x="1218" y="1070" font-size="12.5" fill="#1d4ed8">TTL / dedupe / 背压 / 日志</text>
 
   <!-- Arrows -->
   <!-- channels -> host -->

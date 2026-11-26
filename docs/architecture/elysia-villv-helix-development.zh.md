@@ -1,6 +1,8 @@
 # Elysia/VillV-Helix 开发步骤与迁移边界
 
-> 状态：2026-11-25。本文是开发步骤文档，不是规范。
+> 状态：2026-11-26。主体开发已完成；本文保留为迁移边界和后续扩展顺序。
+> 当前架构见 [ElyH 扩展能力架构](../architecture.md)，当前工具面语义见
+> [工具面与控制面板](elyh-control-panel.zh.md)。
 > 规范见 [ElyH 插件开发规范](elyh-plugin-spec.zh.md)。
 > 插件身份：**Elysia/VillV-Helix** / `@elysia/villv-helix` / `villv-helix`（Vill-V of Helix）。
 
@@ -91,8 +93,10 @@ plugins/villv-helix/
 - 监听 `agent/created`、`agent/disposed`、`tools/change`；
 - 状态变化后只刷新受影响的 session；
 - 编排会话默认只保留预设静态工具；
-- 普通会话不安装限制；
-- scoped 工具标记为不可控，不做假开关。
+- 官方预设 static 工具锁定，`setTool` 返回 `TOOL_STATIC_LOCKED`；
+- 自定义预设 static 工具不重复注册，使用 `tools/pre-execute` 门禁；关闭时 schema 保留、执行 `UNKNOWN_TOOL`；
+- Helix 挂载的扩展工具保留稳定声明，未启用执行 `UNKNOWN_TOOL`；
+- 普通会话不安装编排限制。
 
 ### 第 4 步：事件总线与日志
 

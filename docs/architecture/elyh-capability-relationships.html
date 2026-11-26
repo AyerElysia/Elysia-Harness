@@ -32,136 +32,136 @@
 
   <rect x="0" y="0" width="1800" height="1120" fill="#ffffff"/>
 
-  <text x="40" y="52" font-size="30" font-weight="700" fill="#0b1220">ElyH 能力关系 v3 · 插件 / core / 工具 / 上下文</text>
-  <text x="40" y="82" font-size="15" fill="#475569">插件独立运行 · core 是共享 Host 库，不是第二个插件 · 工具与上下文是两条独立路径</text>
+  <text x="40" y="52" font-size="30" font-weight="700" fill="#0b1220">ElyH 扩展能力关系 · 插件 / 事件 / 工具 / 上下文</text>
+  <text x="40" y="82" font-size="15" fill="#475569">插件独立运行 · 当前：Helix + Mobius；渠道 / 语音 / 感知 / 观测为目标或归档</text>
 
   <g font-size="13">
     <rect x="40" y="100" width="14" height="14" rx="3" fill="#fff7ed" stroke="#fb923c"/>
-    <text x="60" y="112" fill="#7c2d12">Host 插件</text>
+    <text x="60" y="112" fill="#7c2d12">编排插件</text>
     <rect x="180" y="100" width="14" height="14" rx="3" fill="#f5f3ff" stroke="#a78bfa"/>
-    <text x="200" y="112" fill="#4c1d95">core 共享库</text>
+    <text x="200" y="112" fill="#4c1d95">DSH Session</text>
     <rect x="330" y="100" width="14" height="14" rx="3" fill="#eff6ff" stroke="#60a5fa"/>
-    <text x="350" y="112" fill="#1e3a8a">模型 / 会话</text>
+    <text x="350" y="112" fill="#1e3a8a">模型</text>
     <rect x="470" y="100" width="14" height="14" rx="3" fill="#f0fdfa" stroke="#2dd4bf"/>
-    <text x="490" y="112" fill="#134e4a">上下文事件</text>
+    <text x="490" y="112" fill="#134e4a">Event Adapter</text>
     <rect x="620" y="100" width="14" height="14" rx="3" fill="#ecfdf5" stroke="#34d399"/>
-    <text x="640" y="112" fill="#064e3b">面板 UI</text>
+    <text x="640" y="112" fill="#064e3b">UI</text>
     <rect x="740" y="100" width="14" height="14" rx="3" fill="#f8fafc" stroke="#94a3b8"/>
-    <text x="760" y="112" fill="#334155">说明 / 普通路径</text>
-    <text x="930" y="112" fill="#64748b">实线 = 注册 / 控制 / 调用；虚线 = 通知 / 可选</text>
+    <text x="760" y="112" fill="#334155">Service / 归档</text>
+    <text x="930" y="112" fill="#64748b">实线 = 注册 / 调用；虚线 = 上下文 / 可选</text>
   </g>
-  <text x="40" y="132" font-size="12.5" fill="#64748b">core 没有 dsh.bundle / dsh.client / cordis.patch.yml；由消费者通过 ensureCapabilityCore 挂载一次，不是可安装插件。</text>
+  <text x="40" y="132" font-size="12.5" fill="#64748b">当前没有共享 Host core；Helix / Mobius 是独立包；旧 capability-core 已归档。</text>
 
   <!-- Left: plugins -->
   <rect x="40" y="170" width="500" height="190" rx="18" fill="#fff7ed" stroke="#fb923c" stroke-width="2"/>
-  <text x="60" y="200" font-size="17" font-weight="700" fill="#7c2d12">@elysia/preset-manager · 一个插件包</text>
-  <text x="60" y="228" font-size="13.5" fill="#9a3412">Host：预设文档 + preset_create / preset_list</text>
-  <text x="60" y="252" font-size="13.5" fill="#9a3412">Client：预设页面 + “为模型全局注入预设管理工具”</text>
-  <text x="60" y="276" font-size="13.5" fill="#9a3412">开关写入 core 的 global tool state</text>
-  <text x="60" y="306" font-size="12.5" fill="#b45309">独立运行：没有面板时 ensureCapabilityCore 自行挂载</text>
+  <text x="60" y="200" font-size="17" font-weight="700" fill="#7c2d12">@elysia/mobius-infinity · 当前插件包</text>
+  <text x="60" y="228" font-size="13.5" fill="#9a3412">Host：预设 / 工具组 / preset_list / preset_create</text>
+  <text x="60" y="252" font-size="13.5" fill="#9a3412">Client：预设页 / 工具组配置</text>
+  <text x="60" y="276" font-size="13.5" fill="#9a3412">不创建 / 不切换 Session</text>
+  <text x="60" y="306" font-size="12.5" fill="#b45309">当前启用；无共享 core</text>
   <rect x="60" y="322" width="440" height="22" rx="6" fill="#ffffff" stroke="#fdba74" stroke-width="1.2"/>
-  <text x="72" y="338" font-size="12" fill="#7c2d12">Host 与 Client 同包；不是 Host/Client 两个插件</text>
+  <text x="72" y="338" font-size="12" fill="#7c2d12">Host 与 Client 同包</text>
 
   <rect x="40" y="390" width="500" height="190" rx="18" fill="#fff7ed" stroke="#fb923c" stroke-width="2"/>
-  <text x="60" y="420" font-size="17" font-weight="700" fill="#7c2d12">其他插件 · 每个都是独立包</text>
-  <text x="60" y="448" font-size="13.5" fill="#9a3412">Host：工具 / 上下文 Provider</text>
+  <text x="60" y="420" font-size="17" font-weight="700" fill="#7c2d12">Tool / Event Provider · 目标 / 归档</text>
+  <text x="60" y="448" font-size="13.5" fill="#9a3412">工具提供者 / 上下文提供者</text>
   <text x="60" y="472" font-size="13.5" fill="#9a3412">普通工具：ctx.tools.register()</text>
-  <text x="60" y="496" font-size="13.5" fill="#9a3412">要面板开关：core.registerTool() + nameZh</text>
-  <text x="60" y="520" font-size="13.5" fill="#9a3412">上下文：core.registerContextKind() + publish()</text>
-  <text x="60" y="550" font-size="12.5" fill="#b45309">不依赖面板插件；需要共享状态时才依赖 core 库</text>
-  <text x="60" y="570" font-size="12" fill="#64748b">普通工具可以不经过 core，但面板无法保证可操作状态。</text>
+  <text x="60" y="496" font-size="13.5" fill="#9a3412">扩展工具：Helix 会话挂载</text>
+  <text x="60" y="520" font-size="13.5" fill="#9a3412">事件：Context Bus register / publish</text>
+  <text x="60" y="550" font-size="12.5" fill="#b45309">不依赖 Helix 也能运行</text>
+  <text x="60" y="570" font-size="12" fill="#64748b">没有 Helix 时仍可作为普通工具运行。</text>
 
   <rect x="40" y="610" width="500" height="190" rx="18" fill="#f8fafc" stroke="#94a3b8" stroke-width="2"/>
   <text x="60" y="640" font-size="17" font-weight="700" fill="#334155">按需求选路径</text>
   <rect x="60" y="654" width="14" height="14" rx="3" fill="#fff7ed" stroke="#fb923c"/>
-  <text x="80" y="666" font-size="13" fill="#7c2d12">① 普通工具：ctx.tools.register() → 模型</text>
+  <text x="80" y="666" font-size="13" fill="#7c2d12">① 普通工具：ctx.tools.register() → DSH</text>
   <rect x="60" y="678" width="14" height="14" rx="3" fill="#f5f3ff" stroke="#a78bfa"/>
-  <text x="80" y="690" font-size="13" fill="#4c1d95">② 需要全局/逐预设开关：core.registerTool() → 模型</text>
+  <text x="80" y="690" font-size="13" fill="#4c1d95">② 扩展工具：Helix 工具面 → DSH</text>
   <rect x="60" y="702" width="14" height="14" rx="3" fill="#f0fdfa" stroke="#2dd4bf"/>
-  <text x="80" y="714" font-size="13" fill="#134e4a">③ 上下文事件：core.registerContextKind() → 会话</text>
-  <text x="60" y="744" font-size="12.5" fill="#64748b">只有 ②③ 需要 core；① 不依赖 core。</text>
-  <text x="60" y="766" font-size="12.5" fill="#64748b">core 只接管需要共享 / 可切换 / 可审计的能力状态。</text>
+  <text x="80" y="714" font-size="13" fill="#134e4a">③ Event Adapter：core.registerContextKind() → 会话</text>
+  <text x="60" y="744" font-size="12.5" fill="#64748b">① 不依赖编排；②③ 使用编排能力。</text>
+  <text x="60" y="766" font-size="12.5" fill="#64748b">编排只管理当前会话工具面与上下文。</text>
   <rect x="60" y="776" width="440" height="22" rx="6" fill="#ffffff" stroke="#cbd5e1" stroke-width="1.2"/>
-  <text x="72" y="792" font-size="12" fill="#334155">面板显示实际状态；不要用插件私有布尔值伪造全局开关</text>
+  <text x="72" y="792" font-size="12" fill="#334155">面板显示实际状态；不伪造插件私有开关</text>
 
   <!-- Center: core -->
   <rect x="600" y="170" width="560" height="640" rx="20" fill="#f5f3ff" stroke="#a78bfa" stroke-width="2.2"/>
-  <text x="630" y="202" font-size="18" font-weight="700" fill="#4c1d95">@elysia/capability-core</text>
-  <text x="630" y="224" font-size="13.5" fill="#5b21b6">共享 Host 库 · 不是插件 · 消费者挂载一次后复用</text>
-  <text x="630" y="244" font-size="11.5" fill="#6d28d9">无 dsh.bundle / dsh.client / cordis.patch.yml · 服务名 capabilityHost</text>
+  <text x="630" y="202" font-size="18" font-weight="700" fill="#4c1d95">ElyH 扩展层</text>
+  <text x="630" y="224" font-size="13.5" fill="#5b21b6">VillV-Helix 工具面 + Mobius 预设组合</text>
+  <text x="630" y="244" font-size="11.5" fill="#6d28d9">独立 Host + Client 包 · 无共享 core</text>
 
   <rect x="625" y="258" width="510" height="102" rx="12" fill="#ffffff" stroke="#c4b5fd" stroke-width="1.6"/>
-  <text x="645" y="282" font-size="16" font-weight="700" fill="#5b21b6">Tool Catalog</text>
-  <text x="645" y="306" font-size="13" fill="#334155">registerTool({ scope: 'global' | 'agent', nameZh })</text>
-  <text x="645" y="328" font-size="13" fill="#334155">global 条目默认 gate 关闭；面板再按预设/会话开启</text>
-  <text x="645" y="348" font-size="12" fill="#64748b">普通直接工具可绕过 core，但没有共享开关状态。</text>
+  <text x="645" y="282" font-size="16" font-weight="700" fill="#5b21b6">Tool Face + Gate</text>
+  <text x="645" y="306" font-size="13" fill="#334155">官方静态：locked / TOOL_STATIC_LOCKED</text>
+  <text x="645" y="328" font-size="13" fill="#334155">自定义静态：pre-execute 门禁</text>
+  <text x="645" y="348" font-size="12" fill="#64748b">扩展工具：schema 稳定；关闭 → UNKNOWN_TOOL</text>
 
   <rect x="625" y="372" width="510" height="110" rx="12" fill="#ffffff" stroke="#c4b5fd" stroke-width="1.6"/>
-  <text x="645" y="396" font-size="16" font-weight="700" fill="#5b21b6">State Store</text>
-  <text x="645" y="420" font-size="13" fill="#334155">global / preset / session 三层开关</text>
-  <text x="645" y="442" font-size="13" fill="#0f766e">优先级：session 显式 &gt; preset 显式 &gt; global 默认</text>
-  <text x="645" y="464" font-size="13" fill="#334155">持久化在 capability-core/capability-state.json</text>
+  <text x="645" y="396" font-size="16" font-weight="700" fill="#5b21b6">Session Tool State</text>
+  <text x="645" y="420" font-size="13" fill="#334155">session → enabled tools / contexts</text>
+  <text x="645" y="442" font-size="13" fill="#0f766e">静态锁定 + 扩展开关</text>
+  <text x="645" y="464" font-size="13" fill="#334155">持久化在 villv-helix-state.json</text>
 
   <rect x="625" y="494" width="510" height="108" rx="12" fill="#ffffff" stroke="#c4b5fd" stroke-width="1.6"/>
-  <text x="645" y="518" font-size="16" font-weight="700" fill="#5b21b6">Gate + Guard</text>
-  <text x="645" y="542" font-size="13" fill="#334155">when：下一步 tool schema 是否包含该工具</text>
-  <text x="645" y="564" font-size="13" fill="#334155">guard：关闭后拒绝已准入但未执行的调用</text>
-  <text x="645" y="586" font-size="12" fill="#64748b">工具本身不重注册；开关只改 core state。</text>
+  <text x="645" y="518" font-size="16" font-weight="700" fill="#5b21b6">Gate / pre-execute</text>
+  <text x="645" y="542" font-size="13" fill="#334155">官方静态：不安装关闭门禁</text>
+  <text x="645" y="564" font-size="13" fill="#334155">自定义静态 / 扩展：拒绝未启用调用</text>
+  <text x="645" y="586" font-size="12" fill="#64748b">工具声明稳定；关闭不注销定义。</text>
 
   <rect x="625" y="614" width="510" height="108" rx="12" fill="#ffffff" stroke="#c4b5fd" stroke-width="1.6"/>
   <text x="645" y="638" font-size="16" font-weight="700" fill="#5b21b6">Context Bus</text>
   <text x="645" y="662" font-size="13" fill="#334155">registerContextKind() / publish()</text>
-  <text x="645" y="684" font-size="13" fill="#334155">每会话队列、TTL、dedupe、active / passive</text>
-  <text x="645" y="704" font-size="12" fill="#64748b">按预设/会话订阅分发，不进入 tool schema。</text>
+  <text x="645" y="684" font-size="13" fill="#334155">每会话队列、TTL、dedupe</text>
+  <text x="645" y="704" font-size="12" fill="#64748b">按 session 订阅；合并快照注入。</text>
 
   <rect x="625" y="734" width="510" height="56" rx="12" fill="#ffffff" stroke="#c4b5fd" stroke-width="1.6"/>
-  <text x="645" y="758" font-size="15" font-weight="700" fill="#5b21b6">Change events</text>
-  <text x="645" y="778" font-size="12.5" fill="#334155">capability-core/change → 面板 / 消费者；浏览器同文档用事件同步</text>
+  <text x="645" y="758" font-size="15" font-weight="700" fill="#5b21b6">UI sync</text>
+  <text x="645" y="778" font-size="12.5" fill="#334155">跨面板事件 / BroadcastChannel；不轮询</text>
 
   <!-- Right: model side -->
   <rect x="1220" y="170" width="540" height="210" rx="18" fill="#eff6ff" stroke="#60a5fa" stroke-width="2"/>
   <text x="1240" y="200" font-size="17" font-weight="700" fill="#1e3a8a">模型侧 · 工具</text>
   <text x="1240" y="228" font-size="13.5" fill="#1d4ed8">tool schema / tool calls</text>
   <text x="1240" y="252" font-size="13.5" fill="#1d4ed8">下一步重新组装；不新开会话</text>
-  <text x="1240" y="276" font-size="13.5" fill="#1d4ed8">关闭：schema 消失；在途调用被 guard 拒绝</text>
-  <text x="1240" y="300" font-size="13.5" fill="#1d4ed8">开启：下一步出现工具及其中文名/描述</text>
-  <text x="1240" y="330" font-size="12.5" fill="#64748b">global 开关只改默认；面板可对预设/会话覆盖</text>
+  <text x="1240" y="276" font-size="13.5" fill="#1d4ed8">官方静态不可关；扩展/自定义静态关闭后 schema 保留。</text>
+  <text x="1240" y="300" font-size="13.5" fill="#1d4ed8">执行门禁：未启用 → UNKNOWN_TOOL</text>
+  <text x="1240" y="330" font-size="12.5" fill="#64748b">工具面只作用于当前 Session</text>
   <rect x="1240" y="344" width="480" height="22" rx="6" fill="#ffffff" stroke="#93c5fd" stroke-width="1.2"/>
-  <text x="1252" y="360" font-size="12" fill="#1e3a8a">普通工具直接注册时，不经过 core gate</text>
+  <text x="1252" y="360" font-size="12" fill="#1e3a8a">没有 Helix 时工具仍可运行</text>
 
   <rect x="1220" y="410" width="540" height="230" rx="18" fill="#f0fdfa" stroke="#2dd4bf" stroke-width="2"/>
-  <text x="1240" y="440" font-size="17" font-weight="700" fill="#134e4a">模型侧 · 上下文事件</text>
-  <text x="1240" y="468" font-size="13.5" fill="#0f766e">已注册的 kind 才会出现在面板</text>
-  <text x="1240" y="492" font-size="13.5" fill="#0f766e">publish → 每会话队列 / 游标 / TTL</text>
-  <text x="1240" y="516" font-size="13.5" fill="#0f766e">active：唤醒一轮；passive：下一次输入</text>
-  <text x="1240" y="540" font-size="13.5" fill="#0f766e">订阅集合 = 开启该 kind 的预设对应会话</text>
-  <text x="1240" y="564" font-size="13.5" fill="#0f766e">上下文不占用 tool schema，也不是工具</text>
+  <text x="1240" y="440" font-size="17" font-weight="700" fill="#134e4a">模型侧 · Event Adapter</text>
+  <text x="1240" y="468" font-size="13.5" fill="#0f766e">Provider 注册 kind 后可见</text>
+  <text x="1240" y="492" font-size="13.5" fill="#0f766e">publish → 队列 / TTL / 背压</text>
+  <text x="1240" y="516" font-size="13.5" fill="#0f766e">active 唤醒；passive 下一 step</text>
+  <text x="1240" y="540" font-size="13.5" fill="#0f766e">只投递给订阅 session</text>
+  <text x="1240" y="564" font-size="13.5" fill="#0f766e">上下文不是工具，不占 schema</text>
   <rect x="1240" y="582" width="480" height="22" rx="6" fill="#ffffff" stroke="#5eead4" stroke-width="1.2"/>
-  <text x="1252" y="598" font-size="12" fill="#134e4a">事件不经过 gate；按订阅和 visibility 分发</text>
+  <text x="1252" y="598" font-size="12" fill="#134e4a">Context Bus 只分发模型可见上下文</text>
 
   <rect x="1220" y="670" width="540" height="140" rx="18" fill="#eff6ff" stroke="#60a5fa" stroke-width="2"/>
-  <text x="1240" y="700" font-size="17" font-weight="700" fill="#1e3a8a">会话 / Agent</text>
+  <text x="1240" y="700" font-size="17" font-weight="700" fill="#1e3a8a">DSH Session</text>
   <text x="1240" y="726" font-size="13.5" fill="#1d4ed8">模型请求同时组装 tools + context</text>
-  <text x="1240" y="750" font-size="13.5" fill="#1d4ed8">工具可见性走 Gate；事件走 Context Bus</text>
+  <text x="1240" y="750" font-size="13.5" fill="#1d4ed8">工具面走 Gate；上下文走 Context Bus</text>
   <text x="1240" y="774" font-size="13.5" fill="#1d4ed8">切换不创建新会话；只影响下一步和 guard</text>
 
   <!-- Bottom: panel -->
   <rect x="600" y="850" width="560" height="190" rx="18" fill="#ecfdf5" stroke="#34d399" stroke-width="2"/>
-  <text x="620" y="880" font-size="17" font-weight="700" fill="#064e3b">@elysia/capability-panel · 一个插件包</text>
-  <text x="620" y="908" font-size="13.5" fill="#065f46">Host 入口：ensureCapabilityCore（复用已有 core）</text>
-  <text x="620" y="932" font-size="13.5" fill="#065f46">Client：能力面板；没有面板时预设插件仍独立运行</text>
-  <text x="620" y="956" font-size="13.5" fill="#065f46">list() / status() / setTool() ↔ core</text>
-  <text x="620" y="980" font-size="13.5" fill="#065f46">按预设/会话开关；面板开关覆盖 global 默认</text>
-  <text x="620" y="1004" font-size="13.5" fill="#065f46">初始：工具在列表中显示，默认未勾选（global=false）</text>
-  <text x="620" y="1025" font-size="12" fill="#047857">切换后广播事件；其他打开的 UI 立即刷新，不靠轮询。</text>
+  <text x="620" y="880" font-size="17" font-weight="700" fill="#064e3b">VillV-Helix / Mobius · UI</text>
+  <text x="620" y="908" font-size="13.5" fill="#065f46">Helix：工具面 / 门禁 / 事件</text>
+  <text x="620" y="932" font-size="13.5" fill="#065f46">Mobius：预设 / 工具组</text>
+  <text x="620" y="956" font-size="13.5" fill="#065f46">工具开关 / 预设页 / 健康</text>
+  <text x="620" y="980" font-size="13.5" fill="#065f46">当前会话工具面；预设组合</text>
+  <text x="620" y="1004" font-size="13.5" fill="#065f46">静态工具分组；扩展默认关闭</text>
+  <text x="620" y="1025" font-size="12" fill="#047857">跨面板事件同步；不轮询</text>
 
   <rect x="40" y="850" width="500" height="190" rx="18" fill="#f8fafc" stroke="#94a3b8" stroke-width="2"/>
-  <text x="60" y="880" font-size="17" font-weight="700" fill="#334155">一句话记忆</text>
-  <text x="60" y="910" font-size="13.5" fill="#334155">插件 = 提供能力；core = 共享状态 / 门 / guard；</text>
-  <text x="60" y="934" font-size="13.5" fill="#334155">面板 = 读写的 UI；模型 = tools + context。</text>
-  <text x="60" y="966" font-size="13" fill="#7c2d12">普通工具可以不走 core；</text>
-  <text x="60" y="990" font-size="13" fill="#7c2d12">要面板正确显示并控制，才走 core。</text>
-  <text x="60" y="1020" font-size="12" fill="#64748b">core 不是第三个可安装插件，也不依赖面板包。</text>
+  <text x="60" y="880" font-size="17" font-weight="700" fill="#334155">边界</text>
+  <text x="60" y="910" font-size="13.5" fill="#334155">Tool Provider = 提供工具；Event Adapter = 接事件；</text>
+  <text x="60" y="934" font-size="13.5" fill="#334155">Service = 发送 / 存储 / 媒体；UI = 操作者。</text>
+  <text x="60" y="966" font-size="13" fill="#7c2d12">“主意识 / 潜意识”只作为产品叙事，</text>
+  <text x="60" y="990" font-size="13" fill="#7c2d12">不是插件类型。</text>
+  <text x="60" y="1020" font-size="12" fill="#64748b">旧 capability-core / panel 已归档。</text>
 
   <!-- Arrows -->
   <!-- preset manager -> core -->
@@ -172,26 +172,26 @@
 
   <!-- core -> tools -->
   <line x1="1160" y1="300" x2="1216" y2="300" stroke="#2563eb" stroke-width="2" marker-end="url(#arrowBlue)"/>
-  <text x="1168" y="288" font-size="11.5" fill="#1d4ed8">gate / guard</text>
+  <text x="1168" y="288" font-size="11.5" fill="#1d4ed8">tool face / gate</text>
 
   <!-- core -> context -->
   <path d="M1160,650 L1196,650 L1196,520 L1216,520" fill="none" stroke="#0d9488" stroke-width="2" marker-end="url(#arrowTeal)"/>
-  <text x="1168" y="634" font-size="11.5" fill="#0f766e">publish / 订阅</text>
+  <text x="1168" y="634" font-size="11.5" fill="#0f766e">context / subscription</text>
 
   <!-- context -> sessions -->
   <line x1="1490" y1="640" x2="1490" y2="666" stroke="#0d9488" stroke-width="2" marker-end="url(#arrowTeal)"/>
-  <text x="1500" y="658" font-size="11" fill="#0f766e">注入 / 唤醒</text>
+  <text x="1500" y="658" font-size="11" fill="#0f766e">inject / wake</text>
 
   <!-- panel -> core writes -->
   <line x1="840" y1="850" x2="840" y2="814" stroke="#059669" stroke-width="2" marker-end="url(#arrowGreen)"/>
-  <text x="806" y="832" font-size="11" fill="#047857">list / setTool</text>
+  <text x="806" y="832" font-size="11" fill="#047857">tool state</text>
 
-  <!-- core -> panel change event -->
+  <!-- core -> panel sync event -->
   <line x1="930" y1="810" x2="930" y2="846" stroke="#059669" stroke-width="1.8" stroke-dasharray="6 4" marker-end="url(#arrowGreen)"/>
-  <text x="942" y="832" font-size="11" fill="#047857">change</text>
+  <text x="942" y="832" font-size="11" fill="#047857">sync</text>
 
   <!-- footer -->
-  <text x="40" y="1080" font-size="12.5" fill="#64748b">“全局开关”属于 core 的 global 层；“面板开关”属于 preset/session 层，优先级更高但只作用于对应预设/会话。</text>
+  <text x="40" y="1080" font-size="12.5" fill="#64748b">工具面属于当前 session；预设属于 Mobius；旧 core 不再存在。</text>
 </svg>
 </body>
 </html>

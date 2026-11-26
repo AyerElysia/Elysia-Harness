@@ -1,432 +1,143 @@
-# ElyH 预设管理器方案（v2）
+# ElyH 预设管理
 
-> **旧方案参考。** 预设管理插件的正式身份改为 **Elysia/Mobius-Infinity**（`@elysia/mobius-infinity` / `mobius-infinity`）。其中“模型全局注入预设管理工具”开关和 `capability-core` 依赖已废弃；新架构下工具插件不再提供全局开关。规范见 [ElyH 插件开发规范](elyh-plugin-spec.zh.md)，迁移步骤见 [开发步骤](elysia-villv-helix-development.zh.md)。
->
-> 状态：已实现（v2.1，2026-11-24）。范围：本地 Web 的预设创建、列表、删除、工具面配置，以及可选的模型预设工具。
-> 不在范围：提示词内容编辑、会话创建、模型选择、cwd/workspace、渠道桥接、记忆检索。
-> 关键约束：预设只做“这个预设是谁、看哪些提示词文件、给哪些工具”；工具面由代码维护的封闭目录生成，每个可选项在宿主启动后都经过一次真实激活探测。
+> 状态：2026-11-26。当前实现是 `@elysia/mobius-infinity`，旧 `preset-manager` 与
+> `capability-core` 组合已归档。
+> 架构总览见 [ElyH 扩展能力架构](../architecture.md)。
 
-## 1. 目标
+## 1. 职责
 
-让操作者可以：
+`@elysia/mobius-infinity` 管理：
 
-1. 在左侧栏进入预设管理页，查看全部预设并删除管理器创建的预设。
-2. 点“新建预设”进入独立创建页；页面上有可见的“返回”，返回列表不丢已读取的列表。
-3. 创建时配置工具面：每个可用工具一个开关；默认工具面只有网络搜索；可选默认/常见/现有预设/自定义工具面；选面即改写全部开关。
-4. 自定义工具面可命名保存、可删除；默认、常见、现有预设工具面只读。
-5. 创建后不编辑内容；要改就删除后重建。
-6. 可选：模型通过 `preset_list` / `preset_create` 自行发现可用资源并创建预设；默认关闭，由预设面板的“为模型全局注入预设管理工具”开关控制（Host global tool state），首次值可由 `global` 配置播种。
+- Agent preset 元数据；
+- 提示词文件（SOUL / USER / MEMORY 等）；
+- 预设工具组；
+- 固定 compaction 组；
+- 预设创建页面与侧栏入口；
+- 模型工具 `preset_list`、`preset_create`。
 
-预设管理器不创建会话。创建预设只是把一份 composition 注册进 DSH roster；会话仍然由用户或会话运行时创建。
+它不创建、不切换 Session，也不管理当前会话的工具开关。
 
-## 2. 决策摘要
+## 2. 预设结构
 
-| 决策 | 结论 |
-|---|---|
-| 入口 | 左侧栏 `sidebar.panellist`（id `presets`，order 30）+ keyed `main` 页面 `presets`；不再使用 `settings.section` |
-| 创建表单位置 | 独立创建视图，带“返回”；列表页只保留入口按钮 |
-| 内容编辑 | 不做。提示词 md 由外部编辑器维护，管理器只引用 |
-| 工具目录 | 代码维护的封闭目录（`src/tool-catalog.ts`），只列本部署能真正组装的工具 |
-| 可用性 | `listToolFaces()` 对每个工具注册单行预设、读诊断后销毁；不可用的工具照常列出但标灰并给原因，不进工具面 |
-| 工具面 | 默认（仅 `tool-web`）、常见（`none`/`search`/`search-files`/`full`）、现有预设（`compositionInventory()`）、自定义（文档持久化） |
-| 选面行为 | 选面重建全部开关；`none` 会把所有开关关掉；之后手动改开关即脱离该面 |
-| 删除工具面 | 只删自定义；内置/常见/现有预设面拒绝并返回 `TOOL_FACE_READONLY` |
-| 最小工具面 | `web_search` + `web_fetch`（`tool-web`） |
-| AGENTS.md | 创建预设时可开关；默认关闭；开启才挂 `agent-instructions` |
-| 读图 | 粘贴图走原生视觉输入；`read_image` 不进 Base |
-| 文件选择 | 复用 DSH directory picker 选目录，再由 Host 扫描 `.md` 让用户勾选 |
-| 运行策略 | code-owned；所有预设自动压缩全开；面板不编辑 |
-| 预设持久化 | 管理器自己的文档（v2）+ 启动时 `agentPresets.register()` |
-| 删除 | 只删管理器自己的；有会话引用默认拒绝；自定义工具面不随预设删除 |
-| 活会话更新 | 预设定义变更不影响活会话；新会话才用新定义 |
-
-## 3. 预设结构
-
-一个预设仍是一份 `@deepseek-ai/dsh-agent-preset` 声明：
+一个托管预设由以下行组成：
 
 ```yaml
-- id: preset-<id>
-  name: '@deepseek-ai/dsh-agent-preset'
-  config:
-    id: <id>
-    name: <display name>
-    description: <description>
-    order: <optional>
-    plugins:
-      # 可选：仅当创建时勾选 agentInstructions
-      - id: agent-instructions
-        name: '@deepseek-ai/dsh-agent-instructions'
-      - id: prompt-files
-        name: '@elysia/preset-manager/prompt-files'
-        config:
-          identity: <required preset identity>
-          root: <absolute prompt root>
-          files: [SOUL.md, USER.md, MEMORY.md]
-      - id: time-context
-        name: '@deepseek-ai/dsh-time-context'
-      # 纯对话面（无工具）时整组省略
-      - id: tools
-        name: cordis:group
-        group: true
-        config:
-          - id: tool-web
-            name: '@deepseek-ai/dsh-tool-web'
-            config:
-              fetch: true
-              searchTimeoutMs: 60000
-      - id: compaction
-        name: cordis:group
-        group: true
-        isolate:
-          compaction: true
-          toolResultPruner: true
-        config:
-          - id: compaction-basic
-            name: '@deepseek-ai/dsh-compaction-basic'
-            config:
-              auto: true
-          - id: command-compact
-            name: '@deepseek-ai/dsh-command-compact'
-          - id: tool-result-pruner
-            name: '@deepseek-ai/dsh-compaction-tool-result-pruner'
+# 可选
+- agent-instructions
+
+- prompt-files
+
+- time-context
+
+# 聊天面才省略；否则包含所选工具组
+- tools
+
+- compaction
 ```
 
-注意：
+- `identity` 必填；预设自身渲染身份，不再挂 `persona`。
+- `tools` 组只包含记录中保存的工具 id。
+- 空工具集直接省略 `tools` 组，不挂空 group。
+- compaction 固定为：
+  - `compaction-basic`
+  - `command-compact`
+  - `tool-result-pruner`
 
-- `tools` 组只包含记录里保存的工具 id；每个 id 由目录解析成固定的模块与配置。
-- `prompt-files` 是预设子插件，不是管理器本身；它负责读取文件、注册系统提示词、监听变化。
-- `identity` 必填，渲染在文件内容之前；不要同时再挂 `dsh-persona`，避免两个身份源。
-- `time-context` 正常注入；压缩组固定由管理器模板生成，用户不可编辑。
-- `tool-bash` / `tool-pwsh` 带 Loader `!!js` 平台门；平台不符时该行不启动，预设仍可组装。
+## 3. 工具目录
 
-## 4. 工具目录与可用性
+`src/tool-catalog.ts` 是预设可组合工具的封闭清单，不通过运行时探测扩展：
 
-### 4.1 目录
-
-`src/tool-catalog.ts` 是唯一来源，当前包含：
-
-`tool-web`、`tool-fs`、`tool-fs-search`、`tool-bash`、`tool-pwsh`、`tool-todo`、`tool-ask-user`、`tool-skill`、`tool-jobs`、`tool-goal`、`tool-subagent`、`tool-agent-team`、`tool-present`、`tool-office`。
-
-目录项自带该行固定配置（例如 `tool-web` 的 `fetch: true, searchTimeoutMs: 60000`），所以同一个 id 永远意味着同一份行配置。
-
-### 4.2 排除项（README 同步说明）
-
-- `tool-working-directory`：宿主层已为每个 Agent 挂载 `working_directory`，预设再挂一行只会重复一个始终存在的工具；预设也无法把它关掉。
-- `tool-workflow`：依赖 `workflowEngine`，标准预设是在 preset 内的 isolate 组里用 `workflow-ptc` 提供；裸行会等不到服务。
-- `tool-schedule`：宿主 provider 取决于 profile（本 Web profile 自己关掉了 `schedule` 行），可能出现等待或调用失败。
-- `tool-lsp`：shipped bundle 没有 `lsp` 宿主行。
-- `dsh-plugin-manager/tools`：profile 级插件安装工具，不是预设该选的能力。
-- `tool-terminal` / `tool-bash-persistent` / `tool-pwsh-persistent`：属于 `minimal` 预设的终端 isolate 组，需要该组同时挂 `terminal` / `terminals`。
-- 实验性工具（`tool-worktree`、`tool-session-query`、`tool-ralph` 等）：其包不在 shipped bundle 中。
-
-### 4.3 可用性探测
-
-`listToolFaces()` 对目录里每个工具：
-
-1. 注册一个只含该工具行的临时预设（id 带随机后缀）；
-2. 用 `agentPresets.resolve(id)` 读诊断；
-3. 立即 dispose。
-
-诊断为空说明该行真的挂载成功、依赖服务也都满足。不可用的工具仍出现在 `tools` 列表里（`available: false` + `reason`），但不会进入任何工具面。探测结果按进程缓存：宿主服务集合在重启前不会变；如果注册表对所有探测都直接拒绝（说明不是单个工具的问题），则回退到静态目录并打警告日志。
-
-### 4.4 工具面
-
-| family | id | 可编辑 |
+| 工具组行 | 模块 | 说明 |
 |---|---|---|
-| default | `default`：仅 `tool-web` | 否 |
-| common | `none`（无工具）、`search`、`search-files`、`full` | 否 |
-| existing | 每个已注册预设一个，来自 `ctx.agentPresets.compositionInventory()` | 否 |
-| custom | 操作者创建，存管理器文档 | 只可删除 |
+| `tool-web` | `@deepseek-ai/dsh-tool-web` | 搜索 + 抓取；聊天面默认 |
+| `tool-fs` | `@deepseek-ai/dsh-tool-fs` | 文件读写 |
+| `tool-fs-search` | `@deepseek-ai/dsh-tool-fs-search` | glob / grep |
+| `tool-bash` | `@deepseek-ai/dsh-tool-bash` | 非 Windows |
+| `tool-pwsh` | `@deepseek-ai/dsh-tool-pwsh` | Windows |
+| `tool-todo` | `@deepseek-ai/dsh-tool-todo` | |
+| `tool-ask-user` | `@deepseek-ai/dsh-tool-ask-user` | |
+| `tool-skill` | `@deepseek-ai/dsh-tool-skill` | |
+| `tool-jobs` | `@deepseek-ai/dsh-tool-jobs` | |
+| `tool-goal` | `@deepseek-ai/dsh-tool-goal` | |
+| `tool-subagent` | `@deepseek-ai/dsh-tool-subagent` | spawn |
+| `tool-agent-team` | `@deepseek-ai/dsh-tool-agent-team` | |
+| `tool-present` | `@deepseek-ai/dsh-tool-present` | |
+| `tool-office` | `@deepseek-ai/dsh-tool-office` | |
 
-- 选面即用该面重建全部开关；`none` 会关闭所有开关。
-- 之后单独改开关会清掉“当前面”标记，保存的是操作者自己的工具集。
-- 现有预设的工具面只保留目录里有的 id；被过滤掉的行写进 `missing`，面标 `partial`。
+不进入预设工具目录的内容包括：
 
-## 5. 创建流程
+- `working_directory`：Host 总是提供，预设不能再加一份；
+- `workflow`：需要预设 isolate group 中的 `workflowEngine`；
+- `schedule`：Host provider 依赖 profile；
+- `lsp`：shipped bundle 不提供；
+- `plugin-manager`：profile 级安装面；
+- `minimal` 的 persistent terminal 组：需要 terminal service；
+- 未由 shipped bundle 挂载的实验工具。
 
-### 5.1 字段
+## 4. 当前会话工具面
 
-| 字段 | 必填 | 说明 |
-|---|---|---|
-| `id` | 是 | 小写字母、数字、连字符；创建后不可改 |
-| `name` | 是 | 显示名 |
-| `description` | 否 | 列表里的说明 |
-| `identity` | 是 | “这个预设是什么”；会进入系统提示词 |
-| `agentInstructions` | 否 | 是否注入工作区 `AGENTS.md` / `AGENTS.local.md`；默认关闭 |
-| `promptRoot` | 是 | 绝对目录；DSH 目录选择器选择 |
-| `promptFiles` | 是 | 根目录下的文件列表，至少一个非空 |
-| `order` | 否 | roster 顺序 |
-| `tools` | 否 | 工具 id 列表；缺省为 `["tool-web"]`，空数组表示纯对话 |
-| `toolFace` | 否 | `{ kind, id }`，记录来源面；手动改开关后不写 |
+预设负责**组合**，Helix 负责**当前会话的工具面**。
 
-### 5.2 步骤
-
-1. 列表页点“新建预设”进入创建视图。
-2. 填写元数据。
-3. 选目录；Host 扫描候选文件，用户勾选并排序。
-4. 选工具面（默认面已选中，开关为仅 `tool-web`），或逐项开关工具。
-5. 如需保存当前开关：填名字 → “保存当前开关为工具面”。
-6. 创建：生成 definition（`prompt-files` + `time-context` + `tools` + 固定压缩组；只有勾选时才加 `agent-instructions`），校验后 `agentPresets.register()`，成功再写文档。
-7. 回到列表并提示已创建。
-8. 任何时候点“返回”直接回列表，不创建。
-
-校验：id 唯一、identity 非空、目录存在、文件在根目录下、至少一个非空文件、工具 id 在目录内、自定义面必须存在。
-
-## 6. 文件选择
-
-DSH 暴露的是 **directory picker**，不是通用文件选择器：
-
-- Windows 桌面：原生资源管理器目录选择器；
-- Linux：原生目录选择器；
-- Web/browse 后端：应用内目录浏览。
-
-流程：
-
-1. Client 调 `remote.directoryPicker.pick()`，拿到绝对目录。
-2. Host 校验目录存在、可读、不是文件。
-3. Host 扫描候选文件：默认 `*.md`，按名称排序；返回相对路径与字节数。
-4. UI 多选 + 排序。
-5. 保存 `root + relative files`。
-
-不要用 `ui-conversation.pickFiles` 的浏览器上传；那是附件上传，不是主机路径选择。若以后要真正的多文件选择器，需要新增 Host `filePicker` seam，不复用 directory picker。
-
-## 7. 列表与删除
-
-### 7.1 列表
-
-合并两个来源：
-
-- `agentPresets.list()`：所有 roster 预设，包括 bundle/profile 声明的。
-- 管理器文档：哪些是管理器创建的。
-
-每条显示：
-
-- `id`、`name`、`description`
-- `managed: true/false`
-- `inUse`: 使用该预设的会话 id
-- `diagnostic`: 激活失败原因
-- `promptRoot`、文件数、工具数
-- `unknownTools`: 文档里本版本目录不认识的工具 id
-- `createdAt`
-
-### 7.2 删除
-
-- 非 `managed`：拒绝，提示“bundle/profile 声明，管理器不能删”。
-- `managed` 但有会话引用：默认拒绝，返回 `PRESET_IN_USE` + 会话列表。
-- `managed` 且无引用：dispose registration，删除管理器文档条目。
-- 可选 `force`：仅用于注册已丢失的文档条目；有活会话时仍然拒绝。
-- 删除预设不删提示词文件，也不删自定义工具面。
-
-## 8. 持久化与生命周期
-
-管理器文档（`presets.json`，`$DSH_HOME/preset-manager/`）：
-
-```json
-{
-  "version": 2,
-  "presets": [
-    {
-      "id": "elysia-conscious",
-      "name": "爱莉 · 主意识",
-      "description": "...",
-      "identity": "...",
-      "promptRoot": "E:/.../data/elysia",
-      "promptFiles": ["SOUL.md", "USER.md", "MEMORY.md"],
-      "tools": ["tool-web"],
-      "toolFace": { "kind": "default", "id": "default" },
-      "order": 10,
-      "createdAt": "..."
-    }
-  ],
-  "toolFaces": [
-    { "id": "custom-1a2b3c4d", "name": "写作", "tools": ["tool-web", "tool-fs"] }
-  ]
-}
+```text
+preset
+  → 静态工具注册在该 preset/agent scope
+  → Helix 识别 official preset 时锁定
+  → 自定义预设的同名特殊工具由 Helix 加执行门禁
+  → 扩展工具由 Helix 在会话内挂载
 ```
 
-- 读取 v1 文档不重写：没有 `tools` 的记录按 `["tool-web"]` 组装，文档保持 v1，直到下一次写入才升到 v2。
-- 显式空数组就是纯对话面，不会被改写成默认面。
-- `toolFaces` 只存自定义面；默认/常见/现有预设面每次从代码与注册表重新计算。
+- 官方预设静态工具不能由 Helix 关闭。
+- 自定义预设的静态特殊工具可开关，关闭后 schema 保留、执行 `UNKNOWN_TOOL`。
+- 预设本身不维护“全局注入开关”。
 
-生命周期：
+## 5. 模型工具
 
-1. Host 启动时读取文档。
-2. 逐个构造 definition，调 `agentPresets.register()`。
-3. 保存每个返回的 disposer；失败保留 diagnostic，不阻塞其他预设。
-4. 创建：先 register，成功再写文档。
-5. 删除：先 dispose，再删文档；dispose 失败则保留。
-6. 进程退出：dispose 所有 manager-owned registrations。
+### `preset_list`
 
-重要：`agentPresets.register()` 是**运行时定义**，不写入 `cordis.patch.yml`，也不写 DSH 的 preset 声明。管理器文档才是事实源。要变成 bundle 内置预设，需要另外生成并安装 bundle，v2 不做。
+列出可管理的预设：
 
-## 9. 提示词文件监控
+- id / name / description；
+- prompt files；
+- tool face；
+- 是否可删除；
+- 注册表诊断。
 
-`@elysia/preset-manager/prompt-files` 是预设子插件，负责：
+### `preset_create`
 
-1. 每轮组装时重新读取 `root/files`，拼成系统提示词 section（`complete: true`）。
-2. 按文件 hash 维护快照，检测 `add / modify / remove`。
-3. 在 `agent/pre-step` 注入一条上下文通知：
-   - `source.kind = 'elysia-prompt-change'`
-   - `form = 'snapshot'`
-   - `changes: [{ action, path }]`
-   - 只报文件名/动作/摘要，不重复注入全文（全文已经在系统提示词里）。
-4. 用 `surfaceOp: 'replace'` 清掉上一轮旧快照，避免越积越多。
-5. 每个会话各自维护已通知的 hash，避免重复。
+创建 / 更新托管预设：
 
-按当前口径：**目录里的所有文件都是可变输入，不做“SOUL 不变”假设**。任何文件变动都通知该预设对应的会话。
+- 校验 id、prompt root、文件列表；
+- 校验工具组是否在封闭目录中；
+- 合并为 Cordis preset definition；
+- 持久化到 manager 文档；
+- 不创建 Session。
 
-当前部署路径：
+中文显示名是可选编排元数据，不参与预设行为。
 
-- 本地开发：`E:\Elysium-AyerElysia\Elysium\Elysia-Harness\data\elysia`
-- 服务器：`/home/ayerelysia/Elysia/Data/standing-prompts`
+## 6. 提示词文件
 
-2026-11-22 已从服务器只读复制 7 个文件到本地：`SOUL.md`、`USER.md`、`MEMORY.md`、`CONSCIOUS-MIND.md`、`SUBCONSCIOUS-ROUTER.md`、`SUBCONSCIOUS-MEMORY.md`、`LIVE.md`。服务器配置未改；复制后 SHA-256 全部一致。
+- `prompt-files` 子插件只读取配置的文件列表；
+- 每次都重新读正文；
+- 文件缺失、为空或不可读时按配置报错；
+- 不写主体 prompt 文件；
+- 不改变已存在 Session 的 header 或历史。
 
-## 10. 与工具面板的边界
+## 7. 持久化与边界
 
-- 预设管理器：`id/name/description/identity/promptRoot/promptFiles/order/tools/toolFace`。
-- 预设管理器负责“这个预设天生带哪些工具”，即预设自身的工具面。
-- 工具面板：运行期扩展工具、State Store、`when` 门、`guard`；不替换预设的工具面。
-- `modsearch` 是 `web_search` 的 provider，不属于预设。
-- 面板扩展默认关闭，按 session/preset 开启；不新开会话。
+- 状态目录使用 `dshHomePath('mobius-infinity')`；
+- 预设文档与注册表分开；
+- 删除只删除 manager 自己的记录，不删除外部注册的预设；
+- 预设创建不改变当前 Session 的 preset；
+- 不依赖 `capability-core`、`capability-panel` 或私有工具开关。
 
-“一键应用已有预设的工具面”属于预设管理器，入口在创建页的工具面选择器。
+## 8. 验收
 
-## 11. API
+- 创建、列出、删除预设；
+- `preset_create` 拒绝空工具组、未知工具、非法 prompt 路径；
+- 工具组能真实挂载并出现在该预设的 agent 工具面；
+- 官方预设静态工具锁定；
+- 自定义预设静态特殊工具开关语义正确；
+- 预设删除后无残留文件、监听器或 row；
+- 不影响当前已存在 Session 的 preset/header。
 
-```ts
-interface PresetDraft {
-  id: string
-  name: string
-  description?: string
-  identity: string
-  agentInstructions?: boolean
-  promptRoot: string
-  promptFiles: string[]
-  order?: number
-  tools?: string[]
-  toolFace?: { kind: 'default' | 'common' | 'existing' | 'custom'; id: string }
-}
-
-interface PresetSummary {
-  id: string
-  name?: string
-  description?: string
-  managed: boolean
-  inUse: string[]
-  diagnostic?: string
-  promptRoot?: string
-  promptFileCount?: number
-  createdAt?: string
-  tools?: string[]
-  unknownTools?: string[]
-}
-
-interface ToolFaceCatalog {
-  tools: { id: string; module: string; available: boolean; reason?: string; platform?: 'win32' | 'posix' }[]
-  faces: {
-    kind: 'default' | 'common' | 'existing' | 'custom'
-    id: string
-    name: string
-    tools: string[]
-    missing?: string[]
-    partial?: boolean
-  }[]
-}
-
-interface PresetManager {
-  list(): Promise<PresetSummary[]>
-  listToolFaces(): Promise<ToolFaceCatalog>
-  createToolFace(input: { name: string; tools: string[] }): Promise<ToolFace>
-  deleteToolFace(id: string): Promise<void>
-  create(draft: PresetDraft): Promise<PresetSummary>
-  delete(id: string, options?: { force?: boolean }): Promise<void>
-  listPromptCandidates(root: string): Promise<{ path: string; bytes: number }[]>
-}
-```
-
-Client 通过 RPC 调这些方法；不直接写文件、不直接调 `agentPresets.register()`。
-
-Host 行另有一个 `global` 布尔配置（默认 `false`），不属于面板 API：它只作为**预设面板全局开关的首次默认值**。开关状态由 `@elysia/capability-core` 的 global tool state 持久化在 canonical `homes/<surface>/capability-core/capability-state.json`，之后的运行时状态以它为准。`coreStateDir` 必须与面板的 `stateDir` 使用同一个 `dshHomePath('capability-core')`，不能由首个挂载者决定。
-
-## 12. 模型工具（v2.1）
-
-预设面板有 **“为模型全局注入预设管理工具”** 开关，默认关闭；它位于页头标题栏右侧，与“新建预设/刷新”同一行，是一行紧凑控件，不单独占“模型工具”卡片。插件只把两个工具发布为 `scope: 'global'` 的 catalog 条目；开关通过 `@elysia/capability-core` 的 `setTool({ kind: 'global' }, ...)` 读写同一份 global tool state，由同一个 catalog/gate/guard 生效。关闭时 catalog 条目仍在，能力面板可按预设/会话启用；打开时 global gate 打开，下一步模型请求即包含两个工具，不需要重新注册工具、重启或新会话。插件只依赖 `@elysia/capability-core`；没有面板时 `ensureCapabilityCore` 自行挂载核心，模型工具仍可用。开关成功后浏览器广播 `elysia:capability-changed`，已打开的能力面板立即重读快照（无 5 秒轮询）。
-
-核心的挂载是异步的：`apply()` 先 `ensureCapabilityCore`（已有核心则复用，没有则在 application root 挂一次），再用 `ctx.inject(['capabilityHost'], ...)` 等待服务出现，先 `await host.ready` 再注册，并用注入作用域的 effect 管理两条 catalog 注册。预设管理器可单独挂载，面板可单独挂载；两者任意顺序共用一个核心，面板都能看到条目。核心消失或插件卸载时条目会被清理。顺序/独立测试在 `tests/tools.spec.ts`。
-
-| 工具 | 行为 |
-|---|---|
-| `preset_list` | 只读，不写管理器文档。返回合并后的预设列表、工具目录（含 `available` / `reason`）与全部工具面；传 `promptRoot` 时额外返回该目录下非空的 `.md` 文件及大小。 |
-| `preset_create` | 校验草稿、解析 prompt root 与文件、申请本次调用的权限，再调用 `presetManager.create()`；返回创建结果（id、名称、文件、工具、顺序、工具面来源）。 |
-
-catalog 条目带 `nameZh`：`preset_create` → 创建预设，`preset_list` → 列出预设；条目由能力面板按预设/会话启用，默认全部关闭。开关只写核心的 global 工具状态（`capability-state.json`），不注册/注销工具；核心在下一步 `when` 和调用 guard 中读取同一状态，因此关闭后已准入但未执行的调用会被拒绝。开关需要核心；核心缺失/挂载失败时以 `TOOLS_UNAVAILABLE` 拒绝。有效优先级是 `session > preset > global`：显式预设开/关覆盖全局，显式 session 覆盖两者。
-
-`preset_create` 参数与创建页同源：
-
-- `id` / `name` / `identity` / `promptRoot` 必填。
-- `promptFiles` 可选；省略时取 root 下所有**非空** `.md`，按文件名排序。显式列表在权限询问前先规范化并逐个校验，路径或内容有误不会弹审批。
-- `tools` 可选；省略时取默认面（`tool-web`），若同时给了 `toolFace` 则取该面的工具集；空数组为纯对话面。参数 `enum` 直接来自代码目录；请求的 id 在探测结果里 `available: false` 时，工具在权限询问前以 `TOOL_UNAVAILABLE` 拒绝。
-- `description` / `toolFace` / `agentInstructions` / `order` 可选，语义与创建页一致。`toolFace` 必须对应当前目录里的一个面；过期的来源引用在权限询问前以 `TOOL_FACE_NOT_FOUND` 拒绝。同时给 `toolFace` 与 `tools` 时两者必须是同一个工具集，记录按面的顺序保存；不一致以 `TOOL_FACE_INVALID` 拒绝。
-
-权限：`preset_create` 要求 `danger-full-access`。会话已经是该模式时直接执行；更窄的会话通过 DSH approval seam 为本次调用申请一次性放宽。这里的审批是“允许 Host 直接写管理器文档”的授权，不是把某个子进程切到 full access；文档写入不走沙箱命令。缺少 `sandboxPolicy` 时以 `SANDBOX_POLICY_UNAVAILABLE` fail closed；需要放宽但没有 approval 通道时以 `SANDBOX_ESCALATION_UNAVAILABLE` fail closed。两种情况都不会静默写入。
-
-错误：Host service 的稳定 code 在工具边界转成 `HarnessError` code（如 `PRESET_ID_EXISTS`、`PROMPT_FILE_INVALID`），会话日志记录同一个判别值。工具侧还会给出 `TOOL_UNAVAILABLE`、`TOOL_FACE_NOT_FOUND` 和 `SANDBOX_*`；参数结构错误仍是 `INVALID_ARGS`。
-
-创建预设不创建、不切换会话。已有会话保留其记录的预设；新预设只对之后新开的会话可选。
-
-配置：`global` 只写首次默认值，包自带 patch 写 `false`；本仓库 web profile 不再覆盖为 `true`，所以首次安装后面板开关是关闭的。需要改首次默认值时可用 profile patch 覆盖该行（patch 的 config 整块替换，必须同时重写 `stateDir`）；之后以 `@elysia/capability-core` 的 global state 为准，开关写入 `capability-state.json`，重启后保留，显式关闭优先。
-
-## 13. 错误与安全
-
-| 错误 | 行为 |
-|---|---|
-| `PRESET_ID_EXISTS` | 拒绝创建 |
-| `PRESET_ID_INVALID` | 拒绝创建 |
-| `PRESET_IDENTITY_INVALID` | 拒绝创建 |
-| `PROMPT_ROOT_MISSING` | 拒绝创建 |
-| `PROMPT_FILE_OUTSIDE_ROOT` | 拒绝创建 |
-| `PROMPT_FILE_EMPTY` | 拒绝创建 |
-| `TOOL_UNKNOWN` | 拒绝创建/保存工具面 |
-| `TOOL_FACE_INVALID` | 拒绝创建/保存工具面（空名、空工具集、未知家族） |
-| `TOOL_FACE_EXISTS` | 拒绝保存同名自定义面 |
-| `TOOL_FACE_NOT_FOUND` | 拒绝创建/删除：引用的工具面不存在 |
-| `TOOL_FACE_READONLY` | 拒绝删除默认/常见/现有预设面 |
-| `PRESET_IN_USE` | 拒绝删除，返回会话列表 |
-| `PRESET_NOT_MANAGED` | 拒绝删除 |
-| `PRESET_REGISTER_FAILED` | 创建回滚，保留 diagnostic |
-
-`preset_create` 在模型边界还会给出 `TOOL_UNAVAILABLE`（请求的工具探测不可用）和 `TOOL_FACE_INVALID`（`toolFace` 与 `tools` 不一致）。
-
-安全要求：
-
-- 只有 owner 可以创建/删除；所有操作审计。
-- `promptRoot` 必须是绝对路径、已存在目录、可读。
-- 文件必须位于 root 下；拒绝 `..` 和符号链接逃逸。
-- 管理器不读取/写入文件内容，只传路径给 `prompt-files`。
-- 工具 id 只在代码目录里解析；文档里的未知 id 不会变成任意模块行。
-- 创建预设不等于创建会话；不要顺手起会话。
-
-## 14. 验收
-
-1. 入口：左侧栏出现“预设”，点开进入列表页；资料页/设置页不再是唯一入口。
-2. 创建页：列表页点“新建预设”进入；点“返回”回到列表，列表仍可读。
-3. 默认面：新进创建页时只有“网络搜索”一个开关打开。
-4. 选面：选 `none` 全部关闭；选 `full` 打开所有可用工具；选现有预设面得到该预设的工具集。
-5. 逐项开关：任一开关可单独切换；切换后不再显示为某个面。
-6. 自定义面：能命名保存当前开关；能删除；默认/常见/现有预设面没有删除入口，保存/删除都会被 Host 拒绝。
-7. 创建：写入所选 `tools` 与 `toolFace`，definition 只组装这些工具。
-8. 现有预设：`elysia-conscious`、`elysia-subconscious-router` 仍能列出/恢复；提示词文件不变。
-9. 旧文档：v1 文档读取后按 `["tool-web"]` 组装，且不被读取动作重写。
-10. 可用性：不可用工具在列表里标灰给原因，不进任何面。
-11. 删除预设不删自定义工具面。
-12. 模型工具：预设面板有默认关闭的 **“为模型全局注入预设管理工具”** 开关；插件发布“创建预设”“列出预设”两个 `scope: 'global'` catalog 条目，能力面板可按预设/会话启用；开关通过 `@elysia/capability-core` 的 global state/gate/guard 生效，开/关在下一步工具清单生效、已准入但未执行的调用被 guard 拒绝；只装 preset-manager 不装面板时核心自行挂载、工具可用；状态持久化在 `capability-state.json`，卸载后条目/工具/中文名一起消失；优先级 `session > preset > global`；`preset_create` 能按参数创建，权限不足时拒绝且不写入。
-13. `pnpm test`、`pnpm run typecheck`、`pnpm run bundle` 全绿。
-
-## 15. 未决
-
-- `identity` 已定为必填的“预设说明”，由 `prompt-files` 注入；不挂 `dsh-persona`。
-- 候选文件是否只允许 `.md`；当前只列 `.md`，避免误注入二进制。
-- 删除有历史会话的预设是否提供 `force`；当前只用于“注册已丢失”的条目。
-- 是否要把管理器文档导出成 bundle；当前不做，运行期注册 + 自持久化足够。
-- 目录外的工具包（例如实验性工具）是否进入目录；需要先补齐它们依赖的宿主行。
+当前实现细节以 `plugins/mobius-infinity/README.md` 和源码为准。

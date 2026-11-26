@@ -1,11 +1,16 @@
-# ElyH 插件开发规范（v2.0）
+# ElyH 插件开发规范（v3.0）
 
-> 状态：2026-11-25。旧版 `capability-core` / `capability-host` / 全局工具开关方案已废弃；旧文档和旧代码只保留为前端参考与迁移材料。
+> 状态：2026-11-26。旧版 `capability-core` / `capability-host` / 全局工具开关方案已废弃；旧代码已归档到
+> `plugins/_archive-elysia-v1/`，只作为迁移参考。
 >
 > 本文是今后 `plugins/*` 的模板与验收基线。与本文冲突时，以本文为准。
-> 迁移范围与开发顺序见 [Elysia/VillV-Helix 开发步骤](elysia-villv-helix-development.zh.md)。
+> 架构总览见 [ElyH 扩展能力架构](../architecture.md)，组件展开见
+> [ElyH 扩展组件架构](elyh-plugin-architecture.zh.md)，旧实现拆分见
+> [旧实现迁移映射](elyh-legacy-migration.zh.md)。
 >
-> 原则：**插件独立运行；一个插件一个包；Host 与强相关 Client 不拆包；工具插件就是正常工具插件；编排插件单独负责会话编排；不引入插件级全局开关。**
+> 原则：**插件独立运行；一个插件一个包；Host 与强相关 Client 不拆包；扩展插件只提供 Tool 或 Event 扩展点；编排插件负责工具面与门禁；不引入插件级全局开关。**
+>
+> 不存在“主意识插件”“潜意识插件”“记忆插件”这种按主体命名的插件类型。旧包中的这些概念必须拆成 Tool Provider、Event Adapter、Service 或 UI。
 
 ## 1. 适用范围
 
@@ -17,6 +22,19 @@
 - 移除后不留下工具、事件 kind、槽位、监听器、定时器或写文件句柄；
 - 有自己的测试，覆盖挂载与卸载；
 - 文档写清它提供什么、挂到哪里、权限、失败行为和状态位置。
+
+插件只按扩展点分类：
+
+| 扩展点 | 说明 |
+|---|---|
+| Tool Provider | 注册模型可调用的工具 |
+| Event Adapter | 接外部事件或监听宿主事件；可以发布上下文或触发 turn |
+| Service / Transport | 为 Tool/Event 提供发送、TTS、ASR、存储、索引等底层能力 |
+| Policy / Gate | 控制工具可见性、执行、确认、压缩策略 |
+| UI | 面板、页面、侧栏、检查器 |
+| Orchestration | 工具面、Context Bus、预设组合 |
+
+一个包可以同时提供多项，但 README 和测试必须按扩展点写清边界。不要用“某个主体”的插件名掩盖它实际提供的工具或事件。
 
 ## 2. 包的形状
 
@@ -217,17 +235,35 @@ export function apply(ctx: Context): void {
 
 ### 6.2 作用域
 
-| 方式 | 适用 |
-|---|---|
-| 全局 `ctx.tools.register()` | 普通工具；所有普通会话可见，编排会话由编排插件按 session 限制 |
-| 预设 / Agent 行内注册 | 只有该预设或 Agent 需要的工具；不进入编排插件控制范围 |
-| 编排插件按 session 限制 | 只作用于全局工具；不能凭空创建或恢复未注册的工具 |
+| 方式 | 适用 | Helix 行为 |
+|---|---|---|
+| 全局 `ctx.tools.register()` | 普通工具；所有普通会话可见 | 可由会话 enabled set / `tools.restrict()` 控制 |
+| 官方预设静态工具 | 预设行注册的工具 | `origin: static`、`locked: true`，不可关闭 |
+| 自定义预设静态工具 | 自定义预设行注册的同名工具 | 不重复注册；执行前按 session enabled set 门禁 |
+| Helix 挂载的扩展工具 | 会话需要时才挂载的工具套件 | 声明保持稳定；未启用执行返回 `UNKNOWN_TOOL` |
+| 预设 / Agent 行内注册的非特殊工具 | 只属于该预设或 Agent 的工具 | Helix 默认只展示；没有执行门禁时不承诺可关闭 |
 
 如果需要“只在某个预设出现”，就在该预设行挂载工具，不要做插件级开关。
 
-### 6.3 中文显示名
+### 6.3 稳定声明与禁用语义
 
-工具和上下文事件仍然必须有中文显示名，但不再通过 `capabilityHost.registerToolName` 或 catalog 提供。
+工具从 schema 中消失会让模型改用别的工具，因此扩展工具在会话内必须保留稳定声明：
+
+```text
+已启用 → 正常执行
+未启用 → schema 仍在，执行 UNKNOWN_TOOL
+```
+
+实现边界：
+
+- 全局工具由 `tools.restrict()` 隐藏还是保留 schema，取决于当前实现；Helix 的扩展工具不得靠注销定义来关闭。
+- 官方预设静态工具由预设拥有，Helix 不能也不应该关闭。
+- 自定义预设静态工具由预设实现执行，Helix 只加 `tools/pre-execute` 门禁。
+- 静态工具与动态工具同名时，必须选择一条注册路径，不能重复注册同名工具。
+
+### 6.4 中文显示名
+
+工具和上下文事件仍然必须有中文显示名，但不再通过旧 `capabilityHost.registerToolName` 或私有 catalog 提供。
 
 推荐方式：
 
@@ -258,7 +294,7 @@ ctx.inject(['villvHelix'], scope => {
 - 中文名只影响展示，不参与模型 schema，不影响工具可见性。
 - 新增工具没有中文名时，编排插件显示 id 并记录诊断，不得伪造翻译。
 
-### 6.4 工具命名、schema 与执行
+### 6.5 工具命名、schema 与执行
 
 - 工具名：`snake_case`，带领域前缀，如 `team_task_create`、`schedule_create`。
 - 描述：第一句写动作和对象，第二句写边界/副作用。
@@ -327,6 +363,17 @@ await ctx.villvHelix.publish({
 - 事件是上下文注解，不是用户命令；不要把“请执行 X”写进 payload。
 - 发布前先注册 kind；未注册 kind 应被拒绝。
 
+### 7.3 Event Adapter 与 Service
+
+Event Adapter 只做适配，不拥有 Agent 生命周期：
+
+- 入站渠道把外部消息转成 DSH 输入或 pending 事件；不得调用 `agents.create()` 来替代宿主创建 session。
+- 生命周期消费者在 `ctx.effect` 中注册，监听器、队列、定时器随插件卸载清理。
+- 请求归档类 hook 失败时应阻断该次模型调用，不静默吞掉。
+- 发送器、TTS、ASR、SQLite、索引是 Service，不直接注册模型工具；Tool Provider 调用它们。
+- 一个 Event Adapter 没有编排插件时也要能明确降级：不注册私有总线伪装成 Helix 上下文。
+- 事件 payload 必须可 JSON 序列化；外部附件只保存引用，不把字节复制进上下文。
+
 ## 8. 编排插件规范：Elysia/VillV-Helix
 
 ### 8.1 身份
@@ -387,12 +434,15 @@ src/client/*        会话页、顶部标签、模式胶囊
 
 ### 8.6 会话工具限制
 
-- 工具插件只负责全局注册。
-- 编排插件从 `ctx.tools.definitions()` 拉取全局工具。
-- 每个 live Agent 安装 `tools.restrict`；新 Agent 在 `agent/created` 安装；现有 Agent 在启动时枚举安装。
-- 工具注册/注销时监听 `tools/change` 并重算。
-- 只有 global 工具可被限制；预设/Agent scoped 工具只展示，不承诺控制。
-- 默认普通会话不限制；编排会话 deny 全部 global，只保留静态工具；用户按 session 放行。
+- 工具插件注册自己的工具；编排插件从实际 definitions 读取，不维护第二份工具目录。
+- 每个 live Agent 安装会话限制；新 Agent 在 `agent/created` 安装；现有 Agent 在启动时枚举安装。
+- 工具注册/注销时监听 `tools/change` 并重算；录制失败不能阻断模型调用。
+- **官方预设静态工具**：`origin: static`、`locked: true`；`setTool` 返回 `TOOL_STATIC_LOCKED`，不安装可关闭门禁。
+- **自定义预设静态工具**：不重复注册同名工具；登记为预设 static，并用 `tools/pre-execute` 按 session enabled set 放行/拒绝。关闭时 schema 仍在，执行返回 `UNKNOWN_TOOL`。
+- **Helix 挂载的扩展工具**：在会话 context 中挂载，声明保持稳定；未启用执行返回 `UNKNOWN_TOOL`。
+- `tools.restrict()` 只处理 global 工具；不能撤销预设/Agent scope 的注册。对自定义静态工具，门禁是唯一正确的执行边界。
+- 默认编排会话关闭所有扩展工具，只保留预设静态工具；用户按 session 放行。
+- 同名工具只能有一条注册路径；静态/动态重叠时必须由客户端去重并记录诊断。
 
 ### 8.7 预设标签
 
@@ -432,12 +482,22 @@ src/client/*        会话页、顶部标签、模式胶囊
 - 没有编排插件时仍可用；
 - 中文显示名元数据存在时显示中文，不存在时退回 id。
 
+Event Adapter 至少覆盖：
+
+- 入站事件被适配成正确的输入或上下文；
+- 没有 Helix 时明确降级，不伪造私有总线；
+- 监听器、队列、定时器、索引在卸载后清理；
+- 外部附件只保留引用，不复制字节。
+
 编排插件至少覆盖：
 
-- 普通/编排模式切换，持久化，下一步 schema 变化；
+- 官方预设静态工具 `TOOL_STATIC_LOCKED`；
+- 自定义预设静态工具关闭后仍在 schema，执行 `UNKNOWN_TOOL`；
+- 扩展工具未启用仍在 schema，执行 `UNKNOWN_TOOL`；
+- 启用后执行正常；
 - 现有 live Agent 和新 `agent/created` 都会安装限制；
 - `tools/change` 后新工具进入控制；
-- 编排会话初始只有静态工具；
+- 编排会话初始只保留预设静态工具；
 - session 放行/关闭正确；
 - 顶部标签在普通/编排模式下正确出现/消失；
 - 事件日志、健康、预设预览按 session 取数；

@@ -20,7 +20,7 @@ machine's install, or the desktop profile under the user's `.dsh` directory.
 | `plugins/*` | Our packages. Each is a Cordis plugin with a `dsh.bundle.patch`, so it mounts and unmounts independently. |
 | `homes/web`, `homes/tui` | One harness home per surface. Profile definitions are tracked; sessions, logs, credentials, and installed plugin deps are not. |
 | `homes/shared` | Configuration both surfaces read, such as model providers. |
-| `docs/` | Architecture notes. `docs/architecture.md` states the target shape (one session, four channel ingresses) and marks what is done versus still missing; read it before changing how a channel reaches the conscious mind. |
+| `docs/` | Architecture notes. `docs/architecture.md` is the current ElyH extension architecture: Tool Provider, Event Adapter, Service, Policy, and UI over the DSH base. It is not a session-level "conscious mind" design. Read it before adding a tool, channel ingress, context provider, or orchestration behavior. |
 
 ## Rules
 
@@ -57,11 +57,16 @@ Non-negotiable invariants from that spec:
   a `global` switch, do not maintain a private enabled state, and do not need
   the orchestrator to function.
 - **The orchestrator is one plugin.** **Elysia/VillV-Helix** (`@elysia/villv-helix`)
-  owns session orchestration in one Host + Client package. It pulls global tool
-  definitions, applies per-session `tools.restrict()` masks, owns the context
-  bus, and renders the session tabs. It has no external core dependency.
+  owns the session tool face in one Host + Client package. It pulls actual tool
+  definitions, applies per-session `tools.restrict()` masks to global tools,
+  locks official preset static tools, gates custom preset static tools through
+  `tools/pre-execute`, owns the context bus, and renders the session tabs. It
+  has no external core dependency.
 - **Preset management is Elysia/Mobius-Infinity.** `@elysia/mobius-infinity`
   keeps preset management, but no longer exposes a “模型全局注入” switch.
+- **No "conscious mind" or "subconscious" plugin types.** Those are product
+  narratives. Split old implementations into Tool Provider, Event Adapter,
+  Service, Policy, and UI contributions.
 - **Every tool and context event carries a Chinese name.** Tool display names
   come from plugin metadata and fall back to the tool id when absent. Context
   kinds declare `nameZh` at registration. A new plugin without a Chinese name
@@ -71,8 +76,8 @@ Non-negotiable invariants from that spec:
   orchestrator service; registration is disposed with `ctx.effect`. A provider
   without the orchestrator must degrade explicitly, not invent a private bus
   that the UI cannot see.
-- **No plugin-level global injection switches.** The session mode capsule in the
-  orchestrator is the only place that changes tool visibility. Do not reintroduce
+- **No plugin-level global injection switches.** The session tool face in
+  VillV-Helix is the only place that changes tool visibility. Do not reintroduce
   “为模型全局注入……” switches or a core/catalog state machine.
 - **No polling between capability UIs.** Session limits, tool changes, and open
   views are event-driven. A timer that re-reads a snapshot every few seconds is
