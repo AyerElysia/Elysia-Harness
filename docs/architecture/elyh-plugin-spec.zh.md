@@ -1,12 +1,13 @@
-# ElyH 插件开发规范（v3.0）
+# ElyH 插件开发规范（v3.1）
 
-> 状态：2026-11-26。旧版 `capability-core` / `capability-host` / 全局工具开关方案已废弃；旧代码已归档到
+> 状态：2026-11-27。旧版 `capability-core` / `capability-host` / 全局工具开关方案已废弃；旧代码已归档到
 > `plugins/_archive-elysia-v1/`，只作为迁移参考。
 >
 > 本文是今后 `plugins/*` 的模板与验收基线。与本文冲突时，以本文为准。
 > 架构总览见 [ElyH 扩展能力架构](../architecture.md)，组件展开见
 > [ElyH 扩展组件架构](elyh-plugin-architecture.zh.md)，旧实现拆分见
-> [旧实现迁移映射](elyh-legacy-migration.zh.md)。
+> [旧实现迁移映射](elyh-legacy-migration.zh.md)，每插件文档见
+> [插件文档索引](../plugins/README.md)。
 >
 > 原则：**插件独立运行；一个插件一个包；Host 与强相关 Client 不拆包；扩展插件只提供 Tool 或 Event 扩展点；编排插件负责工具面与门禁；不引入插件级全局开关。**
 >
@@ -21,7 +22,8 @@
 - 能在 profile 中单独添加、单独移除；
 - 移除后不留下工具、事件 kind、槽位、监听器、定时器或写文件句柄；
 - 有自己的测试，覆盖挂载与卸载；
-- 文档写清它提供什么、挂到哪里、权限、失败行为和状态位置。
+- 在 [`docs/plugins/`](../plugins/README.md) 有独立文档，写清它提供什么、挂到哪里、权限、失败行为和状态位置；
+- 如果支持 standalone，还必须写清 manager、manage 开关和切换失败行为。
 
 插件只按扩展点分类：
 
@@ -88,6 +90,81 @@
 ```
 
 它保留预设管理职责，但**不再提供“为模型全局注入预设管理工具”开关**。
+
+### 2.2 管理插件与 standalone 模式
+
+支持 standalone 的源插件必须声明一个可选的 manager 服务：
+
+```text
+managedBy: 'contextGate'        // 示例
+```
+
+#### manager 不存在
+
+```text
+强制 standalone
+不显示 manage 开关
+插件自己保存订阅、队列、注入
+```
+
+#### manager 已挂载
+
+```text
+显示 manage 开关
+默认关 = standalone
+打开 = managed
+```
+
+#### manager 消失
+
+```text
+managed 不自动切 standalone
+源插件进入 unavailable / paused
+保留事件定义和状态
+明确报错，等 manager 回来或用户手动切 standalone
+```
+
+禁止自动 fallback，也禁止 manager 回来时自动把 standalone 改成 managed。
+
+#### 开关显示条件
+
+- 只有声明了 manager 的源插件才有 manage 开关；
+- 只有 manager 服务实际可用时才显示；
+- Client 通过 Host 快照的 `managerAvailable` / `mode` 渲染，不能靠包是否安装猜测；
+- manager 插件自身不显示 manage 开关。
+
+#### managed 与 standalone 的职责
+
+```text
+standalone:
+  源插件保存订阅、队列、注入和本地状态
+
+managed:
+  源插件只负责触发和发布
+  manager 保存订阅、队列、注入和日志
+```
+
+两种模式必须互斥。不要出现同一事件被源插件和 manager 各投递一次。
+
+### 2.3 每插件文档
+
+每个插件在 [`docs/plugins/`](../plugins/README.md) 有一份独立文档，至少覆盖：
+
+```text
+身份与状态
+职责与非职责
+包内结构
+事件 / 触发器
+工具与 RPC
+standalone / managed
+状态与持久化
+权限、隐私、安全
+生命周期、失败与恢复
+测试与验收
+边界与迁移
+```
+
+“规划”“当前启用”“归档”必须与实际代码状态一致。不能把未实现的能力写成已经可用。
 
 ## 3. 目录模板
 

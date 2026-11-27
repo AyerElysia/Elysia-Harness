@@ -43,6 +43,9 @@ All plugin work follows the project template and acceptance baseline:
 A new plugin needs: a `package.json` whose name is `@elysia/<name>`, the
 `dsh.bundle.patch` field pointing at its `cordis.patch.yml`, a `tsconfig.json`
 extending the vendored harness base, and rows in the profile that mount it.
+It also needs its own document under [`docs/plugins/`](docs/plugins/README.md),
+covering identity, responsibilities, events, tools, state, failure behavior,
+and standalone/managed mode when applicable.
 
 Non-negotiable invariants from that spec:
 
@@ -80,6 +83,12 @@ Non-negotiable invariants from that spec:
 - **No plugin-level global injection switches.** The session tool face in
   VillV-Helix is the only place that changes tool visibility. Do not reintroduce
   “为模型全局注入……” switches or a core/catalog state machine.
+- **Standalone switches require a mounted manager.** A standalone-capable
+  source plugin shows its manage switch only while its declared manager is
+  available. Without that manager it is forced standalone and shows no switch.
+  Managed mode never auto-falls back to standalone, and the manager appearing
+  never auto-promotes an existing standalone plugin. Modes are explicit and
+  mutually exclusive; do not deliver the same event twice.
 - **No polling between capability UIs.** Session limits, tool changes, and open
   views are event-driven. A timer that re-reads a snapshot every few seconds is
   a regression.

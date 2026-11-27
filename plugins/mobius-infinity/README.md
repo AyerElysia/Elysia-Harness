@@ -3,7 +3,9 @@
 **Display identity:** Elysia/Mobius-Infinity · 梅比乌斯 · 无限
 
 Create, list, and delete Agent presets that reference prompt files on disk, and
-choose the tools each preset composes. A managed preset is the prompt files it
+choose the tools each preset composes.
+
+Per-plugin contract: [`docs/plugins/mobius-infinity.zh.md`](../../docs/plugins/mobius-infinity.zh.md). A managed preset is the prompt files it
 names, the normal time context, the tool group the operator configured, and the
 fixed compaction group. The manager never creates or switches a session.
 

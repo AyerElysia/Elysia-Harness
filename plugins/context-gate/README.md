@@ -4,8 +4,10 @@
 
 Provider-registered context kinds, per-session subscriptions, per-session
 queues, and one merged snapshot injected before each step. The gate is the
-context-event owner of the ElyH extension layer; it is independent of
-VillV-Helix and independent of its tool editing mode.
+context-event owner and manager of the ElyH extension layer; it is independent
+of VillV-Helix and independent of its tool editing mode.
+
+Per-plugin contract: [`docs/plugins/context-gate.zh.md`](../../docs/plugins/context-gate.zh.md).
 
 ## What it owns
 
@@ -137,6 +139,11 @@ ctx.inject(['contextGate'], scope => {
 No VillV-Helix row is required. Without the orchestrator the gate still
 registers kinds, queues events, injects at pre-step, and serves the Remote
 panel.
+
+Context Gate is also the manager for Channel-IM, Ayla-Channel,
+Session-Communication, and Event-Scripts. Those source plugins show their
+manage switch only while this service is mounted; without it they are forced
+standalone and show no switch.
 
 ## Develop
 

@@ -4,6 +4,8 @@
 
 VillV-Helix owns the **session tool face**: official preset lock, custom-preset static gating, managed extension tools, the tool panel, and the tool-editing-mode capsule.
 
+Per-plugin contract: [`docs/plugins/villv-helix.zh.md`](../../docs/plugins/villv-helix.zh.md).
+
 It does **not** own context events. Those live in [`@elysia/context-gate`](../context-gate/README.md): subscriptions, durable queues, batched injection, and the injection log.
 
 ## What it owns

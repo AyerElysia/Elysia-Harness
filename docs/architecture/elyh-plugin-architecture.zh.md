@@ -80,6 +80,33 @@ DSH 原生工具位于 Tool Registry 内，但在本架构中只作为**依赖**
 
 插件市场、ModSearch、技能中心、远程 UI、文件/浏览器/电脑操作等由 profile 独立挂载。它们可以提供工具、上下文、UI 或 MCP 连接，但不属于 ElyH 核心扩展架构。
 
+### 管理插件与 standalone
+
+ElyH 的事件源插件可以有两种运行方式：
+
+```text
+standalone：自己保存订阅、队列和注入
+managed：只触发/发布，订阅和注入交给管理插件
+```
+
+对应关系：
+
+| 源插件 | 管理插件 | manage 开关 |
+|---|---|---|
+| Channel-IM | Context-Gate | 有 Context-Gate 才出现 |
+| Ayla-Channel | Context-Gate | 有 Context-Gate 才出现 |
+| Session-Communication | Context-Gate | 有 Context-Gate 才出现；`session_send` 定向语义不变 |
+| Event-Scripts | Context-Gate | 有 Context-Gate 才出现 |
+
+规则：
+
+- 没有管理插件时强制 standalone，不显示 manage 开关；
+- 有管理插件时，默认仍是 standalone，显式打开才 managed；
+- 管理插件消失时，managed 进入 unavailable，不自动 fallback；
+- `VillV-Helix` 和 `Mobius-Infinity` 是管理者，不是 standalone 源，没有 manage 开关。
+
+完整的每插件契约见 [插件文档索引](../plugins/README.md)。
+
 ## 3. 扩展包的形状
 
 | 形状 | 作用 | 典型内容 |
@@ -225,6 +252,7 @@ Provider publish
 
 ## 8. 相关图
 
+- [插件文档索引](../plugins/README.md)
 - [插件架构图](elyh-plugin-architecture.html)
 - [能力关系图](elyh-capability-relationships.html)
 - [用例图](elyh-usecase.html)

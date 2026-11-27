@@ -11,6 +11,7 @@
 > [工具面与控制面板](architecture/elyh-control-panel.zh.md) ·
 > [上下文事件门](architecture/elyh-context-gate.zh.md) ·
 > [预设管理](architecture/elyh-preset-manager.zh.md) ·
+> [插件文档索引](plugins/README.md) ·
 > [旧实现迁移映射](architecture/elyh-legacy-migration.zh.md)
 
 ![ElyH 扩展能力架构](architecture/elyh-plugin-architecture.png)
@@ -128,7 +129,7 @@ Context-Gate     上下文事件订阅 / 注入队列 / 注入日志
 Mobius-Infinity  预设组合 / 预设 UI
 ```
 
-Context Gate 独立于 Helix 的工具编辑模式，也不拥有健康统计。没有“主意识插件”。
+Context Gate 是上下文事件的管理插件，独立于 Helix 的工具编辑模式，也不拥有健康统计。渠道、会话通信和 Event-Scripts 在它挂载时可以选择 managed，否则独立运行；manage 开关不会在没有管理插件时出现。没有“主意识插件”。
 
 ## 4. 当前运行态
 
@@ -252,6 +253,7 @@ office
 
 - [扩展组件架构](architecture/elyh-plugin-architecture.zh.md) / [PNG](architecture/elyh-plugin-architecture.png)
 - [上下文事件门](architecture/elyh-context-gate.zh.md)
+- [插件文档索引](plugins/README.md)
 - [能力关系](architecture/elyh-capability-relationships.html) / [PNG](architecture/elyh-capability-relationships.png)
 - [用例图](architecture/elyh-usecase.html) / [PNG](architecture/elyh-usecase.png)
 - [数据流](architecture/elyh-dataflow.html) / [PNG](architecture/elyh-dataflow.png)

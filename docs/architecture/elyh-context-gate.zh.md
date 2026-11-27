@@ -5,6 +5,7 @@
 >
 > 架构总览见 [ElyH 扩展能力架构](../architecture.md)。
 > 包内实现见 [`plugins/context-gate/README.md`](../../plugins/context-gate/README.md)。
+> 每插件契约见 [插件文档索引](../plugins/README.md)。
 
 ## 1. 职责边界
 
@@ -98,7 +99,21 @@ maxWaitMs = 5000 ms
 
 这是上下文事件的门；未来渠道消息/内部消息的入口缓冲可以复用同样的语义，但当前没有接入这些 source。
 
-## 5. 与工具编辑模式无关
+## 5. 作为管理插件
+
+Context Gate 是以下源插件的 manager：
+
+```text
+Channel-IM
+Ayla-Channel
+Session-Communication（turn 订阅）
+Event-Scripts
+```
+
+这些源插件在 Context Gate 挂载时才会出现 manage 开关；默认仍是 standalone。
+Context Gate 自身不显示 manage 开关。
+
+## 6. 与工具编辑模式无关
 
 Context Gate 不读取 Helix 的 `orchestrated` 状态。
 
@@ -109,7 +124,7 @@ Context Gate 不读取 Helix 的 `orchestrated` 状态。
   - 只有 Helix；
   - 两者都有。
 
-## 6. UI
+## 7. UI
 
 Context Gate 注册两个原生 Conversation view：
 
@@ -120,7 +135,7 @@ Context Gate 注册两个原生 Conversation view：
 
 没有健康页、没有工具页、没有预设页。
 
-## 7. 状态
+## 8. 状态
 
 ```text
 stateDir = dshHomePath('context-gate')
@@ -137,7 +152,7 @@ updatedAt
 
 与 `villv-helix-state.json` 分离；不读取 Helix 文档，不做跨包迁移。
 
-## 8. 当前未做
+## 9. 当前未做
 
 - 渠道消息 / 内部消息的通用入站缓冲；
 - 统一的 ContextGate 入口 API（当前只有 kind publish）；
