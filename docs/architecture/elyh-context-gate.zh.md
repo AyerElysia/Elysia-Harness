@@ -1,41 +1,38 @@
 # ElyH Context Gate
 
-> 状态：2026-11-28。`@elysia/context-gate` 是 ElyH 的通用上下文事件 manager：
-> kind 注册、会话订阅、持久队列、TTL/dedupe/背压、批处理与注入。
-> 它独立于 Helix 的工具编辑模式，也不再拥有健康统计。
+> 状态：2026-11-28。`@elysia/context-gate` 是 ElyH 的上下文事件平台：
+> 事件注册、会话订阅、持久队列、TTL/dedupe/背压、批处理与注入，以及
+> 每会话时间事件和自定义事件规则。
 >
+> `Event-Scripts` 已合并进本插件，不再是独立包。
 > 架构总览见 [ElyH 扩展能力架构](../architecture.md)。
 > 包内实现见 [`plugins/context-gate/README.md`](../../plugins/context-gate/README.md)。
-> 每插件契约见 [插件文档索引](../plugins/README.md)。
+> 每插件契约见 [`docs/plugins/context-gate.zh.md`](../plugins/context-gate.zh.md)。
 
-## 1. 职责边界
-
-Context Gate 只处理模型可见上下文事件：
+## 1. 三层事件模型
 
 ```text
-Provider → kind 注册 → publish(ContextEventInput)
-Session → 订阅 (session, kind)
-Gate → per-session 队列 → TTL / dedupe / 背压
-Agent 下一 step → 合并快照注入
+第一层：独立源插件
+  Channel-IM / Ayla-Channel / Session-Communication
+  → registerKind + publish
+  → 多会话订阅
+
+第二层：ContextGate 自定义事件
+  模板 / 脚本 / 内部和外部触发器
+  → 生成可订阅事件
+
+第三层：ContextGate 时间事件
+  timer / timer preset / absence
+  → 注入 owner 会话
+  → 不订阅
 ```
 
-它不处理：
+第一、二层是触发式事件；第三层是时间式事件。
+ContextGate 同时承载第二、三层，源插件仍是独立包。
 
-- 工具注册与工具面；
-- 会话创建与工具限制；
-- 渠道消息本身；
-- 外发发送；
-- 原生 Schedule 拦截；
-- 健康统计。
+## 2. 事件模型
 
-工具面由 `@elysia/villv-helix` 管理；预设由 `@elysia/mobius-infinity` 管理。
-
-## 2. 模型
-
-### 通用事件 envelope
-
-源插件负责触发事件、决定哪些事件可以发布，并提供 `params` 和已准入的
-`content`。Context Gate 负责把事件标准化、路由到订阅会话、排队和注入。
+### Envelope
 
 ```ts
 interface ContextEventInput {
@@ -51,8 +48,8 @@ interface ContextEventInput {
   }
   summary: string
   params?: unknown
-  content?: ContentBlock[]
-  visibility?: ContextVisibility
+  content?: readonly ContentBlock[]
+  visibility?: { sessionIds?: readonly string[] }
   active?: boolean
   dedupeKey?: string
   ttlMs?: number
@@ -62,77 +59,79 @@ interface ContextEventInput {
 }
 ```
 
-- `source` 是兼容现有调用方的 producer id；
-- `origin` 是可选的来源元数据（插件、实例、来源会话、渠道、会话 id）；
-- `params` 是结构化 JSON 体，旧 `payload` 继续作为兼容别名接受；
-- `content` 是源插件已经准入的 `ContentBlock[]`，Gate 只做 JSON/大小校验，
-  不重新过滤或改写；
-- `causationId` 记录因果链；
-- `source` / `origin` / `causationId` 只参与日志、去重和因果，不参与路由过滤。
+- `source` / `origin` 只做显示、去重和因果元数据；
+- 普通事件不做通用 source 过滤；
+- `visibility` 只能收窄目标；
+- `content` 必须由源插件准入；
+- 旧 `payload` 仍作为 `params` 的兼容别名。
 
-### Context Kind
+### Kind
 
-Provider 注册：
-
-```text
-kind       <plugin>.<event>
-nameZh     必填中文名
-description 一行说明
-ttlMs      默认过期时间
-maxBytes   单条上限
-maxQueueDepth 队列上限
+```ts
+interface ContextKindRegistration {
+  kind: string
+  nameZh: string
+  description: string
+  activeByDefault?: boolean
+  ttlMs?: number
+  maxBytes?: number
+  maxQueueDepth?: number
+  parameters?: readonly EventParameterSchema[]
+}
 ```
 
-### 订阅
+`parameters` 允许源插件声明自定义订阅参数：
 
 ```text
-Session × kind → subscribed / not subscribed
+session[] | source[] | enum | boolean | number | string
+multiple
+allowAll
+allowFuture
+optionsProvider
 ```
 
-每个 session 有自己的订阅和队列，不按预设叠加。所有 kind 都允许多个
-session 同时订阅；订阅只有 `(subscriberSession, kind)`，没有通用 source
-selector，也不按 source 过滤。
+面板渲染并保存参数，源插件负责解释。
+ContextGate 不重新实现源插件的消息准入。
 
-### 发布与可见性
-
-- Provider 发布事件时可收窄 `visibility.sessionIds`；
-- 可见性不能绕过订阅；
-- 发布事件进入所有已订阅、可见的 session 队列；
-- 重复 `dedupeKey` 按 kind + source 作用域在 TTL 内抑制；
-- 每个 kind 单独计数队列深度；超上限时淘汰该 kind 最旧事件并记录 dropped，
-  不影响同会话的其他 kind。
-
-## 3. 注入
-
-Agent 的 `agent/pre-step` 是唯一注入点：
+## 3. 订阅与路由
 
 ```text
-queue
-  → 取当前会话的事件
-  → 按 TTL 清理
-  → 合并为一条 user/message 快照
-  → 附加到本 step
+订阅 = (subscriberSession, kind, params)
 ```
 
-- passive 事件只等待下一 step，不唤醒 Agent；
-- active 事件可以唤醒空闲 Agent；
-- 同一 step 的多条事件合并为一条 `user/message`，不重复发送；
-- 每条事件的 `summary` 与 `params` 进入文本段，已准入的 `content` 块按发布
-  顺序附加在同一消息中；
-- 注入后队列消费并记录 consumed 日志；
-- 注入失败不消费，保留到下一次重试。
+- 所有第一、二层事件都支持多会话订阅；
+- 可以选多个来源会话；
+- 可以选来源客户端；
+- 可以选全部当前会话；
+- 可以选未来新会话自动订阅；
+- 时间事件不走订阅，直接注入 owner。
 
-## 4. 唤醒批处理
-
-当前实现：
+订阅策略需要持久化：
 
 ```text
-第一个 active 事件 → 开一个静默窗口
-窗口内后续 active 事件 → 合并
-batchMs 到期 → 最多打开一个 follow-up turn
-maxWaitMs → 强制上限，避免无限推迟
-Agent 忙 → 不开第二轮，排队等 pre-step / idle
-Agent 空闲 → 到期后唤醒
+SubscriptionRule
+  kind
+  params
+  target:
+    explicitSessionIds
+    allCurrent
+    allFuture
+    sourceFilter?
+  enabled
+```
+
+新会话创建时，匹配 `allFuture` 的规则自动注册订阅。
+
+## 4. 队列与注入
+
+```text
+publish
+  → 按订阅和 visibility 路由
+  → per-session 队列
+  → TTL / dedupe / 按 kind 背压
+  → active：静默窗口 batchMs
+  → passive：等下一 step
+  → agent/pre-step 合并快照注入
 ```
 
 默认：
@@ -142,72 +141,200 @@ batchMs   = 1200 ms
 maxWaitMs = 5000 ms
 ```
 
-这是上下文事件的门；未来渠道消息/内部消息的入口缓冲可以复用同样的语义，但当前没有接入这些 source。
+Agent 忙时不强行开第二轮；事件等待 pre-step 或 idle。
 
-## 5. 作为管理插件
+## 5. 时间引擎
 
-Context Gate 是以下源插件的 manager：
+ContextGate 自己实现时间引擎，不依赖 DSH 原生 Schedule。
+
+```text
+once       绝对时间
+after      相对时间
+rrule      任意重复
+absence    某类事件一段时间未发生
+```
+
+- RRULE / 时区使用通用库；
+- 支持到秒；
+- 每个 timer 有 owner session；
+- 同一会话可有多个 timer；
+- timer 到期只注入 owner；
+- timer 不注册为可订阅 kind；
+- 秒级 timer 有频率、数量、合并和过期保护；
+- 重启后重建 nextDue；
+- 错过多轮只补一次。
+
+### TimerPreset
+
+```text
+preset 是模板
+其他会话采用 → 创建自己的 TimerInstance
+每个实例独立 nextDue / 状态 / 暂停
+不 fan-out
+修改 preset 不自动改已采用实例
+```
+
+### Absence
+
+```text
+AbsenceTimer
+  ownerSessionId
+  kinds[]
+  quietMs
+  lastSeenAt
+  fired
+```
+
+- 全局记录每个 kind 的 `lastSeenAt`；
+- 不看 owner 是否订阅该 kind；
+- 只要事件发布到 ContextGate 就更新；
+- 超过 quietMs 触发一次，注入 owner；
+- 下一次该 kind 事件到来才重新武装；
+- timer 事件默认不计入 absence；
+- 重启后按 lastSeen 计算剩余时间。
+
+### 原生 Schedule
+
+```text
+不使用原生 DSH Schedule
+不导入它的 scheduler
+不把原生任务列进面板
+不拦截它的 delivery
+```
+
+ContextGate timer 是 ElyH 唯一时间事件来源。
+
+## 6. 自定义事件引擎
+
+合并 Event-Scripts 后，ContextGate 负责：
+
+```text
+EventRule
+  id
+  ownerSessionId
+  trigger
+  where[]
+  contentTemplate
+  wake
+  visibility
+  cooldownMs
+  maxFires
+  expiresAt
+```
+
+触发源：
+
+```text
+time        at / after / rrule / absence
+internal    session/event / tool/call / tool/result / turn / job / subagent
+external    http-poll / webhook
+composite   all / any / not / sequence
+```
+
+- 声明式模板优先；
+- 复杂条件使用隔离脚本；
+- 生成的 `agent.script.<ruleId>` 事件才进入订阅；
+- 原始内部事件不直接暴露给订阅者；
+- 纯时间规则推荐使用 timer 工具，而不是 event rule；
+- 第二层的时间条件复用同一个时间引擎。
+
+## 7. 管理插件与 standalone
+
+ContextGate 是 manager：
 
 ```text
 Channel-IM
 Ayla-Channel
 Session-Communication（turn 订阅）
-Event-Scripts
 ```
 
-这些源插件在 Context Gate 挂载时才会出现 manage 开关；默认仍是 standalone。
-Context Gate 自身不显示 manage 开关，也不实现 Channel-IM、Ayla-Channel、
-Session-Communication 或 Event-Scripts 的发送、工具和脚本逻辑。
+源插件在 ContextGate 挂载时才显示 manage 开关；默认仍 standalone。
+ContextGate 自身不显示 manage 开关。
+Event-Scripts 已合并，没有 standalone。
 
-## 6. 与工具编辑模式无关
-
-Context Gate 不读取 Helix 的 `orchestrated` 状态。
-
-- 工具编辑模式关闭：上下文事件订阅和注入照常工作；
-- 工具编辑模式开启：同样工作；
-- Context Gate 和 Helix 可以独立挂载：
-  - 只有 Context Gate；
-  - 只有 Helix；
-  - 两者都有。
-
-## 7. UI
-
-Context Gate 注册两个原生 Conversation view：
+## 8. 视图
 
 ```text
-事件 — kind 列表、订阅开关、TTL、积压
-日志 — 发布/投递/消费/失败/丢弃记录（含 kind/source/origin）
+事件 | 定时 | 日志
 ```
 
-没有健康页、没有工具页、没有预设页。
+完整标签顺序：
 
-## 8. 状态
+```text
+工具 | 预设 | 事件 | 定时 | 日志
+```
+
+工具编辑模式关闭：
+
+```text
+事件 | 定时 | 日志
+```
+
+| 视图 | 内容 |
+|---|---|
+| 事件 | 来源 kind、订阅、订阅参数、自定义事件规则 |
+| 定时 | 当前会话 timer、timer preset、absence |
+| 日志 | published / queued / delivered / consumed / failed / dropped |
+
+`定时` 是独立视图，不并入 `事件`。
+
+## 9. 状态
 
 ```text
 stateDir = dshHomePath('context-gate')
 file     = context-gate-state.json
 ```
 
-文档包含：
-
 ```text
-sessions: contexts + events（日志行带 eventId/source/origin/causationId）
-queues: events（含 origin/params/content/causationId） + consumed + dedupe
+version
+sessions:
+  contexts
+  subscriptions
+  events
+queues:
+  events
+  consumed
+  dedupe
+timers:
+  instances
+  presets
+  absence
+  lastSeenByKind
+  nextDue
+rules:
+  definitions
+  runtime
 updatedAt
 ```
 
-新字段全部可选，旧版 `payload` 文档无需版本升级即可读取；下一次写入会按当前
-字段重新序列化。
+旧文档的 `payload` 读取兼容；新字段可选。
+与 `villv-helix-state.json` 分离。
 
-与 `villv-helix-state.json` 分离；不读取 Helix 文档，不做跨包迁移。
+## 10. 当前未完成
 
-## 9. 当前未做
+当前 HEAD 的事件 envelope、订阅、队列、注入和日志已经存在。
+本轮继续实现：
 
-- Channel-IM / Ayla-Channel 的渠道接入与发送；
-- Session-Communication 的 turn 订阅与 `session_*` 工具；
-- Event-Scripts 的脚本宿主与触发器；
-- 原生 Schedule 拦截；
-- 健康统计（按本次要求已删除）。
+- timer engine；
+- timer preset；
+- absence；
+- 自定义事件规则与脚本宿主；
+- 订阅参数 schema 和未来会话订阅；
+- `定时` 视图；
+- manager 的 source 参数；
+- 工具和测试。
 
-这些是后续 Infrastructure 工作，不应再塞回 Helix 或 Context Gate 的工具面。
-Context Gate 只为这些源插件提供 manager 能力：kind 注册、订阅、队列和注入。
+## 11. 边界
+
+ContextGate 不处理：
+
+- 工具面与工具限制；
+- 预设创建；
+- Session 创建和切换；
+- 渠道协议、附件下载和发送；
+- turn delta 生成；
+- `session_send` 的目标选择；
+- 原生 Schedule。
+
+这些分别属于 Helix、Mobius、Channel-IM、Ayla-Channel 和
+Session-Communication。

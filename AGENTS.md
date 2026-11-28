@@ -77,12 +77,19 @@ Non-negotiable invariants from that spec:
   is incomplete.
 - **Context events belong to Context Gate, not the tool face.** Providers call
   `contextGate.registerContextKind()` and `contextGate.publish()`; registration
-  is disposed with `ctx.effect`. Context Gate is independent of the session
-  tool editing mode. A provider without Context Gate must degrade explicitly,
-  not invent a private bus the UI cannot see.
+  is disposed with `ctx.effect`. Context Gate also owns the merged custom-event
+  script engine and the per-session time engine (relative/absolute/RRULE,
+  timer presets, absence). Time events belong to their creating session and are
+  not kind subscriptions. Native DSH Schedule is not an ElyH time source.
+  Context Gate is independent of the session tool editing mode and exposes
+  `事件 | 定时 | 日志` views. A provider without Context Gate must degrade
+  explicitly, not invent a private bus the UI cannot see.
 - **No plugin-level global injection switches.** The session tool face in
   VillV-Helix is the only place that changes tool visibility. Do not reintroduce
   “为模型全局注入……” switches or a core/catalog state machine.
+- **Event-Scripts is not a package.** Its templates, sandbox scripts, internal
+  and external triggers are owned by `@elysia/context-gate`; do not add a
+  separate Event-Scripts bundle row, manager, or scheduler.
 - **Standalone switches require a mounted manager.** A standalone-capable
   source plugin shows its manage switch only while its declared manager is
   available. Without that manager it is forced standalone and shows no switch.

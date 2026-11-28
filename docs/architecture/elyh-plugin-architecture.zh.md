@@ -56,11 +56,13 @@ DSH 原生工具位于 Tool Registry 内，但在本架构中只作为**依赖**
 
 ### `@elysia/context-gate`
 
-- **职责**：上下文事件 kind、通用 envelope（origin/params/content/causation）、session 订阅、持久队列、TTL/dedupe/按 kind 背压、下一 step 注入、注入日志
-- **模型工具**：无
-- **Remote**：`contextGate/list`、`contextGate/setContext`
+- **职责**：上下文事件 kind、通用 envelope（origin/params/content/causation）、session 订阅、持久队列、TTL/dedupe/按 kind 背压、下一 step 注入、注入日志；内置时间引擎和自定义事件引擎
+- **模型工具**：`timer_*`、`absence_*`、`event_rule_*`（本轮落地）
+- **Remote**：`contextGate/list`、`contextGate/setContext`，以及时间/事件规则接口
 - **不是**：工具面、预设、Session 创建者、健康面板
-- **边界**：独立于 Helix 和工具编辑模式；作为 Channel-IM、Ayla-Channel、Session-Communication、Event-Scripts 的 manager，但不实现这些源插件。
+- **边界**：独立于 Helix 和工具编辑模式；作为 Channel-IM、Ayla-Channel、Session-Communication 的 manager，但不实现这些源插件；Event-Scripts 已合并进来。
+- **事件层**：第一层源插件事件，第二层自定义事件，第三层每会话时间事件；前两层订阅，第三层不订阅。
+- **视图**：`事件 | 定时 | 日志`；完整顺序是 `工具 | 预设 | 事件 | 定时 | 日志`。
 
 详见 [Context Gate](elyh-context-gate.zh.md)。
 
@@ -96,14 +98,14 @@ managed：只触发/发布，订阅和注入交给管理插件
 | Channel-IM | Context-Gate | 有 Context-Gate 才出现 |
 | Ayla-Channel | Context-Gate | 有 Context-Gate 才出现 |
 | Session-Communication | Context-Gate | 有 Context-Gate 才出现；`session_send` 定向语义不变 |
-| Event-Scripts | Context-Gate | 有 Context-Gate 才出现 |
 
 规则：
 
 - 没有管理插件时强制 standalone，不显示 manage 开关；
 - 有管理插件时，默认仍是 standalone，显式打开才 managed；
 - 管理插件消失时，managed 进入 unavailable，不自动 fallback；
-- `VillV-Helix` 和 `Mobius-Infinity` 是管理者，不是 standalone 源，没有 manage 开关。
+- `VillV-Helix` 和 `Mobius-Infinity` 是管理者，不是 standalone 源，没有 manage 开关；
+- Event-Scripts 已合并进 Context-Gate，不再有独立 standalone/manage。
 
 完整的每插件契约见 [插件文档索引](../plugins/README.md)。
 

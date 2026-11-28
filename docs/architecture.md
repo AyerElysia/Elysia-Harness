@@ -129,7 +129,7 @@ Context-Gate     上下文事件订阅 / 注入队列 / 注入日志
 Mobius-Infinity  预设组合 / 预设 UI
 ```
 
-Context Gate 是上下文事件的管理插件，独立于 Helix 的工具编辑模式，也不拥有健康统计。渠道、会话通信和 Event-Scripts 在它挂载时可以选择 managed，否则独立运行；manage 开关不会在没有管理插件时出现。没有“主意识插件”。
+Context Gate 是上下文事件平台，独立于 Helix 的工具编辑模式，也不拥有健康统计。渠道和会话通信源在它挂载时可以选择 managed，否则独立运行；manage 开关不会在没有管理插件时出现。Event-Scripts 已合并进 Context Gate，不再是独立插件。没有“主意识插件”。
 
 ## 4. 当前运行态
 
@@ -199,17 +199,21 @@ Context Gate 是上下文事件的管理插件，独立于 Helix 的工具编辑
 
 ### Context Gate
 
-`@elysia/context-gate` 提供上下文事件门：
+`@elysia/context-gate` 提供上下文事件平台：
 
-- Provider 注册 kind，并发布标准 envelope（`source`/可选 `origin`、`params`、已准入 `content`、`causationId`）；
-- Session 独立订阅；所有 kind 都允许多个会话同时订阅；
+- 第一层：Provider 注册 kind，并发布标准 envelope（`source`/可选 `origin`、`params`、已准入 `content`、`causationId`）；
+- Session 独立订阅；所有第一层、第二层 kind 都允许多个会话同时订阅；
 - `source` 只做元数据、日志、去重和因果，不做通用过滤；
+- 订阅参数可包含多选来源会话、来源客户端、全部、未来新会话自动订阅；
 - 每 session 持久队列，支持 TTL、按 kind 的 dedupe 与背压；
 - `agent/pre-step` 合并快照注入，保留 `params` 与 `content`；
 - active 事件有静默窗口 `batchMs` 与上限 `maxWaitMs`；
-- 注入日志由独立的“事件 / 日志”视图读取。
+- 第二层：内置自定义事件引擎，支持模板、脚本、内部/外部触发；
+- 第三层：内置时间引擎，支持相对/绝对/重复/秒级/absence 和 timer preset；
+- 时间事件属于创建它的会话，不订阅；
+- 视图为 `事件 | 定时 | 日志`；完整顺序是 `工具 | 预设 | 事件 | 定时 | 日志`。
 
-Context Gate 只负责模型可见上下文，不等同于 DSH 的全部生命周期事件；它不实现渠道消息、Session-Communication、Event-Scripts 或原生 Schedule 拦截，也不依赖 Helix 的工具编辑模式。
+Context Gate 不实现渠道消息、Session-Communication 的传输、turn delta 生成或原生 Schedule 拦截，也不依赖 Helix 的工具编辑模式。
 
 健康统计已删除：Helix 与 Context Gate 都不再提供健康页或 `status` 计数接口。
 
@@ -249,6 +253,7 @@ office
 ```
 
 只有当某个扩展依赖其中某工具时，文档才提到它。
+ElyH 的时间事件不使用原生 schedule；它由 Context Gate 自己的 timer engine 管理。
 
 ## 9. 图
 

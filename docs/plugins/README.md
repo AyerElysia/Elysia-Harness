@@ -1,6 +1,6 @@
 # ElyH 插件文档索引
 
-> 状态：2026-11-27。每个 ElyH 插件一份独立文档；开发约束见
+> 状态：2026-11-28。每个 ElyH 插件一份独立文档；开发约束见
 > [插件开发规范](../architecture/elyh-plugin-spec.zh.md)。
 >
 > 本文解决两个问题：
@@ -12,16 +12,51 @@
 | 插件 | 包名 | 当前状态 | 角色 | 管理插件 | 支持 standalone |
 |---|---|---|---|---|---|
 | [VillV-Helix](villv-helix.zh.md) | `@elysia/villv-helix` | 当前启用 | 工具面 / 门禁 / 工具面板 | 无 | 否 |
-| [Context-Gate](context-gate.zh.md) | `@elysia/context-gate` | 当前启用 | 上下文事件面板 / 订阅 / 队列 / 注入 | 自身是 manager | 作为 manager 独立可用 |
+| [Context-Gate](context-gate.zh.md) | `@elysia/context-gate` | 当前启用；定时/自定义事件本轮实现 | 事件面板 / 订阅 / 队列 / 时间引擎 / 自定义事件 | 自身是 manager | 作为 manager 独立可用 |
 | [Mobius-Infinity](mobius-infinity.zh.md) | `@elysia/mobius-infinity` | 当前启用 | 预设管理 | 无 | 否 |
 | [Channel-IM](channel-im.zh.md) | `@elysia/channel-im` | 规划 | QQ / KOOK / 飞书入站与出站 | Context-Gate | 是 |
 | [Ayla-Channel](ayla-channel.zh.md) | `@elysia/ayla-channel` | 规划 | Ayla 入站与出站 | Context-Gate | 是 |
 | [Session-Communication](session-communication.zh.md) | `@elysia/session-communication` | 规划 | session 工具 + turn 增量订阅 | Context-Gate | 是 |
-| [Event-Scripts](event-scripts.zh.md) | `@elysia/event-scripts` | 规划 | Agent 自定义事件脚本 / 触发条件 | Context-Gate | 是 |
+| [Event-Scripts](event-scripts.zh.md) | 已合并 | 已合并进 Context-Gate | Agent 自定义事件脚本 / 触发条件 | 不适用 | 否 |
 
 “规划”表示只定义了契约，代码尚未实现。不要把规划中的包当作当前运行组件描述。
+Event-Scripts 不再安装为独立包。
 
-## 2. manage 开关规则
+## 2. 三层事件模型
+
+```text
+第一层：独立源插件事件
+  Channel-IM / Ayla-Channel / Session-Communication
+  → 多会话订阅
+
+第二层：ContextGate 自定义事件
+  模板 / 脚本 / 内部和外部触发
+  → 多会话订阅
+
+第三层：ContextGate 时间事件
+  timer / timer preset / absence
+  → 注入 owner 会话
+  → 不订阅
+```
+
+ContextGate 自己同时承载第二层和第三层；Channel-IM、Ayla-Channel、
+Session-Communication 仍是独立源插件。
+
+## 3. 视图顺序
+
+```text
+工具 | 预设 | 事件 | 定时 | 日志
+```
+
+工具编辑模式关闭时：
+
+```text
+事件 | 定时 | 日志
+```
+
+`定时` 是独立视图，不并入 `事件`。
+
+## 4. manage 开关规则
 
 ### 2.1 基本规则
 
@@ -88,7 +123,7 @@ mode: 'standalone' | 'managed'
 Client 不能靠“包是否安装”猜测 manager 是否运行。
 只有管理服务实际可用时，开关才出现。
 
-## 3. 当前谁管理谁
+## 5. 当前谁管理谁
 
 ```text
 VillV-Helix
@@ -101,6 +136,7 @@ Mobius-Infinity
 
 Context-Gate
   管理上下文事件的订阅、队列和注入。
+  自己承载时间引擎和自定义事件引擎。
   是所有支持 standalone 的事件源的对应 manager。
   它自身不显示 manage 开关。
 
@@ -112,13 +148,9 @@ Session-Communication
   manager = Context-Gate（仅管理 turn 订阅）
   standalone = 自己的 turn 订阅条目
   session_send 始终是定向工具，不随 manage 改变
-
-Event-Scripts
-  manager = Context-Gate
-  standalone = 自己的脚本事件订阅与投递
 ```
 
-## 4. 每插件文档模板
+## 6. 每插件文档模板
 
 新增插件必须提供以下章节：
 
@@ -144,7 +176,7 @@ Event-Scripts
 
 不能把未实现的事件、工具或 UI 写成已经可用。
 
-## 5. 文档与代码的一致性
+## 7. 文档与代码的一致性
 
 - 插件 README 可以保留包级快速说明；架构文档和本目录以本索引为准。
 - 事件 kind、工具名、RPC 名、状态目录必须与代码一致。

@@ -1,6 +1,6 @@
-# ElyH 插件开发规范（v3.1）
+# ElyH 插件开发规范（v3.2）
 
-> 状态：2026-11-27。旧版 `capability-core` / `capability-host` / 全局工具开关方案已废弃；旧代码已归档到
+> 状态：2026-11-28。旧版 `capability-core` / `capability-host` / 全局工具开关方案已废弃；旧代码已归档到
 > `plugins/_archive-elysia-v1/`，只作为迁移参考。
 >
 > 本文是今后 `plugins/*` 的模板与验收基线。与本文冲突时，以本文为准。
@@ -402,6 +402,9 @@ ctx.inject(['contextGate'], scope => {
     ttlMs: 15 * 60_000,
     maxBytes: 65_536,
     maxQueueDepth: 64,
+    parameters: [
+      { key: 'sources', labelZh: '来源会话', type: 'session', multiple: true, allowAll: true, allowFuture: true },
+    ],
   }), 'elysia-<name>.context-kind')
 })
 ```
@@ -415,6 +418,8 @@ ctx.inject(['contextGate'], scope => {
 - 注册必须放在 `ctx.effect` 中，卸载时 kind 一起消失。
 - 重复 kind 是 provider bug，Context Gate 应抛错，不要静默覆盖。
 - 没有 Context Gate 时，provider 应明确降级，不要注册私有总线伪装成面板事件。
+- `parameters` 是订阅参数 schema；面板渲染，源插件解释。它可以包含来源会话、来源客户端、全部、未来新会话。
+- 时间事件是例外：它属于创建它的会话，不进入 kind 订阅。
 
 ### 7.2 发布事件
 
@@ -447,7 +452,28 @@ await ctx.contextGate.publish({
 - 事件是上下文注解，不是用户命令；不要把“请执行 X”写进 `params`。
 - 发布前先注册 kind；未注册 kind 应被拒绝。
 
-### 7.3 Event Adapter 与 Service
+### 7.3 三层事件模型
+
+```text
+第一层：独立源插件事件
+  → 注册 kind、发布、多会话订阅
+
+第二层：ContextGate 自定义事件
+  → 模板/脚本/内部与外部触发
+  → 多会话订阅
+
+第三层：ContextGate 时间事件
+  → timer / timer preset / absence
+  → owner 会话
+  → 不订阅
+```
+
+- Event-Scripts 已合并到 ContextGate，不再是独立包。
+- 纯时间事件使用 timer 工具，复杂条件使用 event rule 工具。
+- 原生 DSH Schedule 不作为 ElyH 时间源，也不在 ContextGate 中拦截。
+- 时间引擎使用通用 RRULE / 时区库，支持到秒。
+
+### 7.4 Event Adapter 与 Service
 
 Event Adapter 只做适配，不拥有 Agent 生命周期：
 
@@ -487,7 +513,7 @@ src/client/*        工具/预设视图、模式胶囊
 ### 8.3 工具编辑模式
 
 - 会话标题栏有一个胶囊：**工具编辑模式**。
-- 关闭：隐藏 `工具 | 预设` 标签；Context Gate 的 `事件 | 日志` 仍然显示。
+- 关闭：隐藏 `工具 | 预设` 标签；Context Gate 的 `事件 | 定时 | 日志` 仍然显示。
 - 开启：显示 `工具 | 预设`；所有全局工具初始 deny；预设静态工具保留。
 - 模式持久化到 session；切换不新开会话；下一次 step 生效。
 - 现有会话和新会话都可以切换。
@@ -504,13 +530,13 @@ src/client/*        工具/预设视图、模式胶囊
 Context Gate 独立注册：
 
 ```text
-事件 | 日志
+事件 | 定时 | 日志
 ```
 
 完整顺序：
 
 ```text
-工具 | 预设 | 事件 | 日志
+工具 | 预设 | 事件 | 定时 | 日志
 ```
 
 - Context Gate 的视图无条件注册，不受工具编辑模式管理。
@@ -524,7 +550,8 @@ Context Gate 独立注册：
 |---|---|---|
 | 工具 | Helix | 当前会话全局工具的实际状态；只写 session 限制 |
 | 预设 | Helix | 当前预设的工具面、系统提示词、注入的提示词文件预览；只读 |
-| 事件 | Context Gate | 当前会话的上下文事件订阅 |
+| 事件 | Context Gate | 当前会话的上下文事件订阅、订阅参数、自定义事件规则 |
+| 定时 | Context Gate | 当前会话 timer、timer preset、absence |
 | 日志 | Context Gate | 当前会话的上下文注入日志 |
 
 ### 8.6 会话工具限制
@@ -560,17 +587,22 @@ Context Gate 独立注册：
 
 ### 8.9 Context-Gate 独立包
 
-`@elysia/context-gate` 是上下文事件的独立基础设施，不属于 Helix：
+`@elysia/context-gate` 是上下文事件平台，不属于 Helix：
 
-- Remote：`contextGate/list`、`contextGate/setContext`；
+- Remote：`contextGate/list`、`contextGate/setContext`，以及 timer/rule 接口；
 - 管理通用 envelope：`source`/可选 `origin`、`params`、已准入 `content`、`causationId`；
-- 所有 kind 都允许多个会话订阅；`source` 只做元数据、日志、去重和因果，不做通用过滤；
+- 所有第一、二层 kind 都允许多个会话订阅；`source` 只做元数据、日志、去重和因果，不做通用过滤；
+- 订阅参数可包含来源会话、来源客户端、全部、未来新会话；
+- 内置时间引擎：相对/绝对/重复/秒级/absence；timer 属于 owner 会话，不订阅；
+- 内置 timer preset：采用后生成独立实例，不 fan-out；
+- 内置自定义事件引擎：模板、脚本、内部/外部触发器；Event-Scripts 已合并；
+- 不使用、不导入或不拦截原生 DSH Schedule；
 - 没有 `status`、健康页或健康计数；
 - 不读取 Helix 的 `orchestrated`；
 - 订阅、队列、TTL、dedupe、按 kind 背压、日志独立持久化到 `context-gate-state.json`；
 - 默认 `batchMs = 1200`、`maxWaitMs = 5000`；忙时只排队，空闲时合并唤醒；
 - 事件注入在 `agent/pre-step`，不创建 session；
-- UI 只在事件/日志两个原生 view 中展示，不注册工具或预设页。
+- UI 在事件/定时/日志三个原生 view 中展示，不注册工具或预设页。
 
 ## 9. Client 规范
 
@@ -609,7 +641,7 @@ Event Adapter 至少覆盖：
 - 编排会话初始只保留预设静态工具；
 - session 放行/关闭正确；
 - Helix 只注册工具/预设视图；
-- Context Gate 的事件/日志视图在工具编辑模式开启/关闭时都可用；
+- Context Gate 的事件/定时/日志视图在工具编辑模式开启/关闭时都可用；
 - 预设预览按 session 取数；
 - 切换模式不新开会话；
 - 卸载时清理所有 restriction、监听器、slot。
