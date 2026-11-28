@@ -1,6 +1,6 @@
 # @elysia/context-gate
 
-> 状态：当前启用；事件 envelope、订阅、队列、注入和日志已存在。定时引擎与自定义事件脚本属于本轮落地目标。
+> 状态：当前启用；事件 envelope、订阅、队列、注入、日志、时间引擎、自定义事件规则和三视图已落地。
 >
 > 本文是 ContextGate 的正式契约；包级快速说明见
 > [`plugins/context-gate/README.md`](../../plugins/context-gate/README.md)。
@@ -430,7 +430,15 @@ pnpm run bundle
 - 标签顺序与工具编辑模式下的隐藏；
 - 卸载清理。
 
-## 15. 相关文档
+## 15. 已知边界
+
+- webhook 当前是 `contextGate/webhook` 已认证 Remote 方法，不是公开 HTTP URL；外部推送使用 HTTP poll，或后续单独增加 HTTP route。
+- `not` 组合只接受一个内部事件子触发器；组合不能嵌套。
+- 脚本使用 worker thread + `vm` 作为容器，不是正式安全沙箱认证。
+- HTTP poll 的 host allowlist 默认为空，需要显式配置。
+- 组合规则的复杂编辑通过 `event_rule_update` 完成，面板只显示提示。
+
+## 16. 相关文档
 
 - [Context Gate 架构](../architecture/elyh-context-gate.zh.md)
 - [插件开发规范](../architecture/elyh-plugin-spec.zh.md)

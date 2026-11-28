@@ -16,6 +16,18 @@ export type ContextGateErrorCode =
   | 'EVENT_TOO_LARGE'
   | 'STATE_INVALID'
   | 'STATE_WRITE_FAILED'
+  | 'PARAM_UNKNOWN'
+  | 'PARAM_INVALID'
+  | 'TIMER_UNKNOWN'
+  | 'TIMER_INVALID'
+  | 'PRESET_UNKNOWN'
+  | 'ABSENCE_UNKNOWN'
+  | 'ABSENCE_INVALID'
+  | 'RULE_UNKNOWN'
+  | 'RULE_INVALID'
+  | 'RULE_FAILED'
+  | 'LIMIT_EXCEEDED'
+  | 'WEBHOOK_INVALID'
 
 /** One refusal with its code and optional JSON details. */
 export class ContextGateError extends Error {
@@ -59,5 +71,29 @@ declare module '@deepseek-ai/dsh-typert-protocol' {
     'contextGate/STATE_INVALID': Readonly<Record<string, unknown>> | undefined
     /** The state write failed. */
     'contextGate/STATE_WRITE_FAILED': Readonly<Record<string, unknown>> | undefined
+    /** A subscription parameter key is not declared by the kind. */
+    'contextGate/PARAM_UNKNOWN': Readonly<Record<string, unknown>> | undefined
+    /** A subscription parameter value does not match its schema. */
+    'contextGate/PARAM_INVALID': Readonly<Record<string, unknown>> | undefined
+    /** A timer id does not name a timer owned by the session. */
+    'contextGate/TIMER_UNKNOWN': Readonly<Record<string, unknown>> | undefined
+    /** A timer schedule or field is invalid. */
+    'contextGate/TIMER_INVALID': Readonly<Record<string, unknown>> | undefined
+    /** A timer preset id does not name a preset. */
+    'contextGate/PRESET_UNKNOWN': Readonly<Record<string, unknown>> | undefined
+    /** An absence id does not name a watcher owned by the session. */
+    'contextGate/ABSENCE_UNKNOWN': Readonly<Record<string, unknown>> | undefined
+    /** An absence definition is invalid. */
+    'contextGate/ABSENCE_INVALID': Readonly<Record<string, unknown>> | undefined
+    /** A rule id does not name a rule owned by the session. */
+    'contextGate/RULE_UNKNOWN': Readonly<Record<string, unknown>> | undefined
+    /** A rule definition is invalid. */
+    'contextGate/RULE_INVALID': Readonly<Record<string, unknown>> | undefined
+    /** A rule script failed or timed out. */
+    'contextGate/RULE_FAILED': Readonly<Record<string, unknown>> | undefined
+    /** A collection exceeded its configured ceiling. */
+    'contextGate/LIMIT_EXCEEDED': Readonly<Record<string, unknown>> | undefined
+    /** A webhook call carried a wrong or missing secret. */
+    'contextGate/WEBHOOK_INVALID': Readonly<Record<string, unknown>> | undefined
   }
 }

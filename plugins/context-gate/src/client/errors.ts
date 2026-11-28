@@ -15,6 +15,17 @@ export const ERROR_KEYS: Readonly<Record<string, ContextGateLocaleKey>> = {
   'contextGate/SESSION_NOT_FOUND': 'errorScopeNotFound',
   'contextGate/STATE_INVALID': 'errorState',
   'contextGate/STATE_WRITE_FAILED': 'errorState',
+  'contextGate/TIMER_INVALID': 'errorTimer',
+  'contextGate/TIMER_UNKNOWN': 'errorTimer',
+  'contextGate/PRESET_UNKNOWN': 'errorTimer',
+  'contextGate/ABSENCE_INVALID': 'errorTimer',
+  'contextGate/ABSENCE_UNKNOWN': 'errorTimer',
+  'contextGate/RULE_INVALID': 'errorRule',
+  'contextGate/RULE_UNKNOWN': 'errorRule',
+  'contextGate/RULE_FAILED': 'errorRule',
+  'contextGate/WEBHOOK_INVALID': 'errorRule',
+  'contextGate/PARAM_INVALID': 'errorParams',
+  'contextGate/PARAM_UNKNOWN': 'errorParams',
 }
 
 /**

@@ -1,11 +1,13 @@
 /**
- * Browser half: two native Conversation views named 事件 and 日志. They render
- * the context gate's per-session subscriptions and recent injection log.
+ * Browser half: three native Conversation views named 事件, 定时, and 日志.
+ * They render context subscriptions and parameters, per-session timers and
+ * absence reminders, custom-event rules, and the recent injection log.
  *
- * Both views are registered unconditionally: context subscriptions belong to
- * the session, not to the tool face, so they must work whether or not the
- * tool editing mode is on and whether or not any tool plugin is
- * mounted.
+ * All three views are registered unconditionally: context subscriptions and
+ * time events belong to the session, not to the tool face, so they must work
+ * whether or not the tool editing mode is on and whether or not any tool
+ * plugin is mounted. Their orders complete the documented strip:
+ * 工具(20) | 预设(21) | 事件(22) | 定时(23) | 日志(24).
  *
  * @module @elysia/context-gate/client
  */
@@ -33,20 +35,22 @@ declare module '@deepseek-ai/dsh-client-ui-slots' {
 export const inject = ['slots', 'locale', 'connection']
 
 /** One top-level view the context gate contributes. */
-interface ContextView {
+export interface ContextView {
   readonly id: string
   readonly tab: PanelTab
-  readonly label: 'tabEvents' | 'tabLog'
+  readonly label: 'tabEvents' | 'tabTimers' | 'tabLog'
   readonly order: number
 }
 
-const VIEWS: readonly ContextView[] = [
+/** The three root views and their documented strip order (22 / 23 / 24). */
+export const CONTEXT_VIEWS: readonly ContextView[] = [
   { id: 'context-gate-events', tab: 'events', label: 'tabEvents', order: 22 },
-  { id: 'context-gate-log', tab: 'log', label: 'tabLog', order: 23 },
+  { id: 'context-gate-timers', tab: 'timers', label: 'tabTimers', order: 23 },
+  { id: 'context-gate-log', tab: 'log', label: 'tabLog', order: 24 },
 ]
 
 /**
- * Register the dictionaries and the two session-scoped views; every
+ * Register the dictionaries and the three session-scoped views; every
  * registration belongs to this plugin's fiber and leaves with it.
  * @param ctx - client root context.
  */
@@ -55,7 +59,7 @@ export function apply(ctx: Context): void {
   ctx.effect(() => ctx.locale.register(NS, { zh, en }), 'context-gate: dictionaries')
   const t = ctx.locale.bind(NS)
   ctx.slots.inject('conversation.view', function* () {
-    for (const view of VIEWS) {
+    for (const view of CONTEXT_VIEWS) {
       yield ctx.slots.register({
         name: 'conversation.view',
         id: view.id,

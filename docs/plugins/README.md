@@ -12,7 +12,7 @@
 | 插件 | 包名 | 当前状态 | 角色 | 管理插件 | 支持 standalone |
 |---|---|---|---|---|---|
 | [VillV-Helix](villv-helix.zh.md) | `@elysia/villv-helix` | 当前启用 | 工具面 / 门禁 / 工具面板 | 无 | 否 |
-| [Context-Gate](context-gate.zh.md) | `@elysia/context-gate` | 当前启用；定时/自定义事件本轮实现 | 事件面板 / 订阅 / 队列 / 时间引擎 / 自定义事件 | 自身是 manager | 作为 manager 独立可用 |
+| [Context-Gate](context-gate.zh.md) | `@elysia/context-gate` | 当前启用 | 事件面板 / 订阅 / 队列 / 时间引擎 / 自定义事件 | 自身是 manager | 作为 manager 独立可用 |
 | [Mobius-Infinity](mobius-infinity.zh.md) | `@elysia/mobius-infinity` | 当前启用 | 预设管理 | 无 | 否 |
 | [Channel-IM](channel-im.zh.md) | `@elysia/channel-im` | 规划 | QQ / KOOK / 飞书入站与出站 | Context-Gate | 是 |
 | [Ayla-Channel](ayla-channel.zh.md) | `@elysia/ayla-channel` | 规划 | Ayla 入站与出站 | Context-Gate | 是 |

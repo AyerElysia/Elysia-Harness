@@ -310,19 +310,29 @@ updatedAt
 旧文档的 `payload` 读取兼容；新字段可选。
 与 `villv-helix-state.json` 分离。
 
-## 10. 当前未完成
+## 10. 当前实现与边界
 
-当前 HEAD 的事件 envelope、订阅、队列、注入和日志已经存在。
-本轮继续实现：
+已实现：
 
-- timer engine；
-- timer preset；
-- absence；
-- 自定义事件规则与脚本宿主；
-- 订阅参数 schema 和未来会话订阅；
-- `定时` 视图；
-- manager 的 source 参数；
-- 工具和测试。
+- 事件 envelope、订阅、队列、注入和日志；
+- 订阅参数 schema、未来会话订阅；
+- timer engine（once/after/RRULE/秒级/时区/重启）；
+- timer preset（采用后独立实例）；
+- absence（全局 lastSeen、重新武装）；
+- 自定义事件规则与隔离脚本；
+- 内部/外部触发器、组合触发；
+- `事件 | 定时 | 日志` 三视图；
+- timer/absence/rule 工具和面板编辑；
+- manager 类型、限流和状态 v2 迁移。
+
+已知边界：
+
+- webhook 入口是 `contextGate/webhook` 这个已认证 Remote 方法，不是公开的 HTTP URL 路由；外部推送应使用 HTTP poll 或后续增加 HTTP route。
+- `not` 组合当前只接受一个内部事件子触发器；组合不能嵌套。
+- 脚本使用 worker thread + `vm` 作为容器，不是正式安全沙箱认证。
+- HTTP poll 的 host allowlist 默认为空，需要显式配置。
+- 组合规则的复杂编辑通过 `event_rule_update` 完成，面板只提供提示。
+- 不读取、不拦截原生 DSH Schedule。
 
 ## 11. 边界
 

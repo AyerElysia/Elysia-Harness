@@ -7,5 +7,8 @@
  */
 
 export type {
-  ContextEntry, ContextOrigin, ContextSnapshot, EventLogEntry, EventOutcome,
+  AbsenceDraft, AbsencePatch, AbsenceTimer, ContextEntry, ContextOrigin, ContextSnapshot, EventLogEntry,
+  EventOutcome, EventParameterOption, EventParameterSchema, EventParameterValues, EventRule, EventRuleDraft,
+  EventRulePatch, RuleCondition, RuleScript, RuleTestResult, RuleTrigger, TimerDraft, TimerInstance, TimerPatch,
+  TimerPreset, TimerSchedule, TimerSnapshot,
 } from '../types.ts'

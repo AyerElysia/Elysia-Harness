@@ -52,10 +52,37 @@ describe('context gate Remote adapter', () => {
     expect(calls[1]?.args).toEqual({ sessionId: 's1', kind: 'app.message', enabled: true })
   })
 
-  it('offers only the context surface, with no status or tool operations', () => {
+  it('offers the context, timer, absence, and rule surface', () => {
     const { rpc } = fakeRpc(() => ({ ok: true, value: snapshot() }))
     const api = createContextGateApi(rpc, 's1')
-    expect(Object.keys(api).sort()).toEqual(['list', 'setContext'])
+    expect(Object.keys(api).sort()).toEqual([
+      'adoptTimerPreset', 'cancelAbsence', 'cancelRule', 'cancelTimer', 'createAbsence', 'createRule',
+      'createTimer', 'createTimerPreset', 'deleteTimerPreset', 'list', 'pauseRule', 'pauseTimer',
+      'setContext', 'setSubscriptionParams', 'subscribeFuture', 'testRule', 'timers', 'updateAbsence',
+      'updateRule', 'updateTimer', 'updateTimerPreset',
+    ])
+  })
+
+  it('binds timer and rule endpoints to the same session scope', async () => {
+    const { rpc, calls } = fakeRpc((call) => {
+      if (call.endpoint === 'contextGate/timers') {
+        return { ok: true, value: { timers: [], presets: [], absences: [], now: 1 } }
+      }
+      return {
+        ok: true,
+        value: {
+          id: 'timer-1', ownerSessionId: 's1', name: 't', content: 'c',
+          schedule: { kind: 'after', afterMs: 1000 }, wake: true, anchorAt: 1, enabled: true, nextDueAt: 2,
+          firedCount: 0, createdAt: 1, updatedAt: 1,
+        },
+      }
+    })
+    const api = createContextGateApi(rpc, 's1')
+    await api.timers(new AbortController().signal)
+    await api.createTimer({ name: 't', content: 'c', afterSeconds: 1 }, new AbortController().signal)
+    expect(calls.map(call => call.endpoint)).toEqual(['contextGate/timers', 'contextGate/createTimer'])
+    expect(calls[0]?.args).toEqual({ sessionId: 's1' })
+    expect(calls[1]?.args).toEqual({ sessionId: 's1', draft: { name: 't', content: 'c', afterSeconds: 1 } })
   })
 
   it('surfaces the Host refusal code', async () => {

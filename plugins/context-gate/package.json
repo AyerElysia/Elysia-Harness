@@ -1,6 +1,6 @@
 {
   "name": "@elysia/context-gate",
-  "description": "Elysia/Context-Gate (爱莉希雅·门扉): provider context kinds, generic context-event envelopes, per-session subscriptions and queues, and one merged context snapshot per step",
+  "description": "Elysia/Context-Gate (爱莉希雅·门扉): provider context kinds, generic event envelopes, per-session subscriptions and queues, one merged snapshot per step, the per-session time engine, and the merged custom-event rule engine",
   "version": "0.1.0",
   "private": true,
   "type": "module",
@@ -47,7 +47,9 @@
     "@deepseek-ai/dsh-client-ui-slots": "workspace:*",
     "@deepseek-ai/dsh-llm": "workspace:*",
     "@deepseek-ai/dsh-session": "workspace:*",
-    "@deepseek-ai/dsh-typert-protocol": "workspace:*"
+    "@deepseek-ai/dsh-tools": "workspace:*",
+    "@deepseek-ai/dsh-typert-protocol": "workspace:*",
+    "@deepseek-ai/dsh-util-time": "workspace:*"
   },
   "devDependencies": {
     "@deepseek-ai/cordis": "link:../../dsh/vendor/cordis",
@@ -61,7 +63,10 @@
     "@deepseek-ai/dsh-client-ui-slots": "link:../../dsh/packages/client/ui-slots",
     "@deepseek-ai/dsh-llm": "link:../../dsh/packages/llm/llm",
     "@deepseek-ai/dsh-session": "link:../../dsh/packages/core/session",
+    "@deepseek-ai/dsh-tools": "link:../../dsh/packages/core/tools",
     "@deepseek-ai/dsh-typert-protocol": "link:../../dsh/packages/typert/protocol",
+    "@deepseek-ai/dsh-util-time": "link:../../dsh/packages/util/time",
+    "@deepseek-ai/dsh-subagent": "link:../../dsh/packages/subagent/subagent",
     "@types/node": "^22.20.1",
     "@types/react": "~18.3.1",
     "@types/react-dom": "~18.3.0",

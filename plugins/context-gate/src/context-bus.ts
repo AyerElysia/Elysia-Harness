@@ -26,7 +26,7 @@ import type { ContentBlock, ContextFormed, UserMessage } from '@deepseek-ai/dsh-
 import { createUserMessage } from '@deepseek-ai/dsh-llm'
 import type {
   ContextEvent, ContextEventInput, ContextKindRegistration, ContextOrigin, ContextVisibility,
-  EventOutcome, PublishReceipt, ResolvedContextKind,
+  EventOutcome, EventParameterOption, EventParameterRegistration, EventParameterType, PublishReceipt, ResolvedContextKind,
 } from './types.ts'
 import type { ContextGateStore } from './state.ts'
 import { QUEUE_HISTORY_LIMIT } from './state.ts'
@@ -84,6 +84,26 @@ export interface ContextBusOptions {
   readonly batchMs: number
   /** Total postponement ceiling from the first active event, in milliseconds. */
   readonly maxWaitMs: number
+}
+
+/** One owner-only injection that is not routed through subscriptions. */
+export interface DirectEventInput {
+  /** Log/persistence kind, such as `agent.timer`. It need not be registered. */
+  readonly kind: string
+  /** Producer identity for the log. */
+  readonly source: string
+  /** One-line summary shown to the model. */
+  readonly summary: string
+  /** Structured body. */
+  readonly params?: unknown
+  /** Admitted content blocks injected with the snapshot. */
+  readonly content?: ContentBlock[]
+  /** True opens a turn after the batch window. */
+  readonly active: boolean
+  /** Dedupe identity within kind and source. */
+  readonly dedupeKey?: string
+  /** Age ceiling for the queued injection. */
+  readonly ttlMs?: number
 }
 
 /** One session's snapshot request while it is being prepared. */
@@ -160,6 +180,7 @@ export class ContextBus {
       ttlMs,
       maxBytes,
       maxQueueDepth,
+      parameters: normalizeParameters(registration.parameters, kind),
     })
     return () => { this.kinds.delete(kind) }
   }
@@ -167,6 +188,19 @@ export class ContextBus {
   /** Registered kinds as the panel lists them. */
   listKinds(): readonly ResolvedContextKind[] {
     return [...this.kinds.values()]
+  }
+
+  /** One registered kind, when this Host knows it. */
+  kind(kind: string): ResolvedContextKind | undefined {
+    return this.kinds.get(kind)
+  }
+
+  /**
+   * Wake one idle session that has an active queued event.
+   * @param sessionId - target session.
+   */
+  wakeSession(sessionId: string): void {
+    this.schedule(sessionId)
   }
 
   /** Whether one kind is registered. */
@@ -233,6 +267,8 @@ export class ContextBus {
     const now = Date.now()
     const token = dedupeToken(event)
     const receipt = { eventId: event.id, delivered: 0, suppressed: 0, failed: 0 }
+    // Absence observes every kind published into the gate, subscribed or not.
+    await this.options.store.noteKindsSeen([event.kind], now)
     const candidates = this.options.candidates()
     for (const candidate of candidates) {
       if (!this.subscribed(candidate, event.kind) || !visibleTo(event.visibility, candidate)) {
@@ -281,6 +317,60 @@ export class ContextBus {
       await this.log(candidate, 'published', `from ${event.source}: ${event.summary}`, event)
     }
     return receipt
+  }
+
+  /**
+   * Queue one owner-only injection without routing it through subscriptions.
+   * Timer and absence events use this path: they belong to their owner and are
+   * not subscribable kinds.
+   * @param sessionId - owner session.
+   * @param input - the injection.
+   * @returns after the queue write is durable.
+   */
+  async deliverDirect(sessionId: string, input: DirectEventInput): Promise<void> {
+    const now = Date.now()
+    const ttlMs = input.ttlMs ?? this.options.defaults.ttlMs
+    const maxDepth = this.kinds.get(input.kind)?.maxQueueDepth ?? this.options.defaults.maxQueueDepth
+    const id = crypto.randomUUID()
+    const dedupeKey = input.dedupeKey ?? id
+    const token = `${input.kind}\u0000${input.source}\u0000${dedupeKey}`
+    const event: ContextEvent = {
+      id,
+      kind: input.kind,
+      source: input.source,
+      summary: input.summary,
+      ...(input.params === undefined ? {} : { params: cloneJson(input.params, input.kind) }),
+      ...(input.content === undefined ? {} : { content: input.content }),
+      visibility: {},
+      active: input.active,
+      dedupeKey,
+      ttlMs,
+      createdAt: now,
+    }
+    const delivered = await this.withQueue(sessionId, async () => {
+      const queue = this.options.store.queue(sessionId)
+      const seenAt = queue.dedupe[token]
+      if (seenAt !== undefined && now - seenAt <= ttlMs) return false
+      const events = [...queue.events, event]
+      const dropped: ContextEvent[] = []
+      let queued = events.filter(entry => entry.kind === event.kind).length
+      while (queued > maxDepth) {
+        const index = events.findIndex(entry => entry.kind === event.kind)
+        if (index < 0) break
+        const [removed] = events.splice(index, 1)
+        queued -= 1
+        if (removed !== undefined) dropped.push(removed)
+      }
+      const dedupe = remember(queue.dedupe, token, now)
+      await this.options.store.mutateQueue(sessionId, () => ({ events, consumed: queue.consumed, dedupe }))
+      for (const removed of dropped) {
+        await this.log(sessionId, 'dropped', 'oldest event removed from the queue', removed)
+      }
+      return true
+    })
+    if (!delivered) return
+    await this.log(sessionId, 'delivered', `queue accepted ${event.kind} ${event.id}`, event)
+    if (event.active) this.schedule(sessionId)
   }
 
   /**
@@ -479,7 +569,7 @@ export class ContextBus {
   }
 
   private subscribed(sessionId: string, kind: string): boolean {
-    return this.options.store.contexts(sessionId)[kind] ?? false
+    return this.options.store.subscription(sessionId, kind).enabled
   }
 
   private normalize(input: ContextEventInput, kind: ResolvedContextKind): ContextEvent {
@@ -739,6 +829,85 @@ function formatOrigin(origin: ContextOrigin): string {
  */
 function dedupeToken(event: ContextEvent): string {
   return `${event.kind}\u0000${event.source}\u0000${event.dedupeKey}`
+}
+
+/**
+ * Validate and detach one provider's subscription parameter declarations.
+ * @param parameters - provider declarations, if any.
+ * @param kind - kind name used in the diagnostic.
+ * @returns the normalized declarations.
+ */
+function normalizeParameters(
+  parameters: readonly EventParameterRegistration[] | undefined,
+  kind: string,
+): readonly EventParameterRegistration[] {
+  if (parameters === undefined) return []
+  if (!Array.isArray(parameters)) {
+    throw new Error(`context-gate: context kind ${JSON.stringify(kind)} parameters must be an array`)
+  }
+  const types: readonly EventParameterType[] = ['session', 'source', 'enum', 'boolean', 'number', 'string']
+  const keys = new Set<string>()
+  return parameters.map((parameter, index) => {
+    if (typeof parameter !== 'object' || parameter === null) {
+      throw new Error(`context-gate: context kind ${JSON.stringify(kind)} parameter ${String(index)} must be an object`)
+    }
+    if (typeof parameter.key !== 'string' || parameter.key.trim() === '') {
+      throw new Error(`context-gate: context kind ${JSON.stringify(kind)} parameter ${String(index)} needs a key`)
+    }
+    const key = parameter.key.trim()
+    if (keys.has(key)) throw new Error(`context-gate: context kind ${JSON.stringify(kind)} repeats parameter ${JSON.stringify(key)}`)
+    keys.add(key)
+    if (typeof parameter.labelZh !== 'string' || parameter.labelZh.trim() === '') {
+      throw new Error(`context-gate: context kind ${JSON.stringify(kind)} parameter ${JSON.stringify(key)} needs a Chinese label`)
+    }
+    if (!types.includes(parameter.type)) {
+      throw new Error(`context-gate: context kind ${JSON.stringify(kind)} parameter ${JSON.stringify(key)} has an unknown type`)
+    }
+    if (parameter.type === 'enum') {
+      const options = parameter.options
+      if (options === undefined) {
+        if (parameter.optionsProvider === undefined) {
+          throw new Error(`context-gate: context kind ${JSON.stringify(kind)} parameter ${JSON.stringify(key)} needs enum options or an options provider`)
+        }
+      } else if (options.length === 0) {
+        throw new Error(`context-gate: context kind ${JSON.stringify(kind)} parameter ${JSON.stringify(key)} needs enum options`)
+      }
+      for (const option of options ?? []) {
+        if (typeof option.value !== 'string' || option.value === ''
+          || typeof option.labelZh !== 'string' || option.labelZh.trim() === '') {
+          throw new Error(`context-gate: context kind ${JSON.stringify(kind)} parameter ${JSON.stringify(key)} has a malformed option`)
+        }
+      }
+    }
+    return {
+      key,
+      labelZh: parameter.labelZh.trim(),
+      ...(parameter.labelEn === undefined ? {} : { labelEn: parameter.labelEn }),
+      type: parameter.type,
+      ...(parameter.multiple === undefined ? {} : { multiple: parameter.multiple }),
+      ...(parameter.allowAll === undefined ? {} : { allowAll: parameter.allowAll }),
+      ...(parameter.allowFuture === undefined ? {} : { allowFuture: parameter.allowFuture }),
+      ...(parameter.options === undefined ? {} : { options: parameter.options.map((option: EventParameterOption) => ({ ...option })) }),
+      ...(parameter.description === undefined ? {} : { description: parameter.description }),
+      ...(parameter.optionsProvider === undefined ? {} : { optionsProvider: parameter.optionsProvider }),
+    }
+  })
+}
+
+/**
+ * Copy one direct-injection body through JSON so no mutable object reaches the queue.
+ * @param value - structured body.
+ * @param kind - kind used in the diagnostic.
+ * @returns the detached JSON value.
+ */
+function cloneJson(value: unknown, kind: string): unknown {
+  try {
+    return JSON.parse(JSON.stringify(value))
+  } catch (error: unknown) {
+    throw new ContextGateError('EVENT_PAYLOAD_INVALID', `direct ${kind} params are not JSON-serializable: ${describeError(error)}`, {
+      eventKind: kind,
+    })
+  }
 }
 
 function safeJson(value: unknown): string {

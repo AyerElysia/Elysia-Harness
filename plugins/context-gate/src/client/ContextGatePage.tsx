@@ -1,6 +1,6 @@
 /**
- * The context gate views for one session: they load the Host snapshot and turn
- * each subscription gesture into one `setContext` write.
+ * The three context views for one session: 事件, 定时, and 日志. Each native
+ * view loads its Host snapshot and turns a gesture into one Remote write.
  *
  * The session whose Conversation view renders it is the only scope. Nothing
  * here depends on 工具编辑模式 or on tool management, so the views work for any
@@ -10,12 +10,15 @@
  */
 import { useEffect, useState, type ReactNode } from 'react'
 import type { InjectFace, PropsLocale, PropsRuntime } from '@deepseek-ai/dsh-client-ui-slots'
-import type { ContextEntry, ContextSnapshot } from '../types.ts'
+import type {
+  AbsenceDraft, ContextEntry, ContextSnapshot, EventParameterValues, EventRule, EventRuleDraft, TimerDraft,
+  TimerSnapshot,
+} from '../types.ts'
 import type { ContextGateApi } from './api.ts'
 import { notifyContextChanged, subscribeContextChanged } from './context-events.ts'
 import { describeFailure } from './errors.ts'
 import {
-  ContextGateFailure, ContextGateLoading, ContextGateView, type PanelTab,
+  ContextGateFailure, ContextGateLoading, EventsView, LogView, TimersView, type PanelTab,
 } from './ContextGateView.tsx'
 import css from './ContextGatePage.module.css'
 
@@ -39,13 +42,16 @@ type LoadState =
   | { readonly status: 'error' }
   | { readonly status: 'ready'; readonly snapshot: ContextSnapshot }
 
-/** Render the context views for the current session. */
+/** Render one context view for the current session. */
 export function ContextGatePage({ api, t, tab, sessionId }: ContextGatePageProps): ReactNode {
   const [request, setRequest] = useState(0)
   const [load, setLoad] = useState<LoadState>({ status: 'loading' })
+  const [timers, setTimers] = useState<TimerSnapshot | undefined>(undefined)
   const [draft, setDraft] = useState<Readonly<Record<string, boolean>>>({})
   const [pendingKind, setPendingKind] = useState<string | undefined>(undefined)
+  const [pending, setPending] = useState(false)
   const [failure, setFailure] = useState<string | undefined>(undefined)
+  const [ruleResult, setRuleResult] = useState<{ readonly id: string; readonly detail: string } | undefined>(undefined)
 
   useEffect(() => {
     let current = true
@@ -53,21 +59,28 @@ export function ContextGatePage({ api, t, tab, sessionId }: ContextGatePageProps
     setLoad(previous => previous.status === 'ready' ? previous : { status: 'loading' })
     void api.list(controller.signal).then(
       (snapshot) => {
-        if (current) setLoad({ status: 'ready', snapshot })
+        if (!current) return
+        setLoad({ status: 'ready', snapshot })
       },
       () => {
         if (current) setLoad({ status: 'error' })
       },
     )
+    if (tab === 'timers') {
+      void api.timers(controller.signal).then(
+        (snapshot) => { if (current) setTimers(snapshot) },
+        (error: unknown) => { if (current) setFailure(describeFailure(error, t)) },
+      )
+    }
     return () => {
       current = false
       controller.abort()
     }
-  }, [api, request])
+  }, [api, request, tab, t])
 
-  // A subscription change is visible to the other context view through the
-  // browser event channel; refreshing on that event and on page visibility
-  // keeps two open views consistent without polling.
+  // Subscription, timer, and rule changes are visible to the other views
+  // through the browser event channel; refreshing on that event and on page
+  // visibility keeps open views consistent without polling.
   useEffect(() => {
     const refresh = (): void => {
       if (document.visibilityState === 'visible') setRequest(value => value + 1)
@@ -80,9 +93,7 @@ export function ContextGatePage({ api, t, tab, sessionId }: ContextGatePageProps
     }
   }, [])
 
-  // Drop a draft entry once the snapshot the Host returns agrees with it; until
-  // then the switch keeps the value the operator just chose instead of snapping
-  // back to the pre-write snapshot while the refresh is in flight.
+  // Drop a draft entry once the snapshot the Host returns agrees with it.
   useEffect(() => {
     if (load.status !== 'ready') return
     const contexts = load.snapshot.contexts
@@ -99,6 +110,21 @@ export function ContextGatePage({ api, t, tab, sessionId }: ContextGatePageProps
       return changed ? next : current
     })
   }, [load, sessionId])
+
+  const run = async (action: () => Promise<unknown>): Promise<void> => {
+    setPending(true)
+    setFailure(undefined)
+    try {
+      await action()
+      notifyContextChanged()
+      setRequest(current => current + 1)
+    } catch (error: unknown) {
+      setFailure(describeFailure(error, t))
+      setRequest(current => current + 1)
+    } finally {
+      setPending(false)
+    }
+  }
 
   const toggle = (entry: ContextEntry, enabled: boolean): void => {
     if (pendingKind !== undefined) return
@@ -124,23 +150,150 @@ export function ContextGatePage({ api, t, tab, sessionId }: ContextGatePageProps
     )
   }
 
-  return (
-    <div className={css.shell} aria-busy={load.status === 'loading' || pendingKind !== undefined}>
-      {failure === undefined ? null : <p className={css.failure} role="alert">{failure}</p>}
+  const saveParams = (kind: string, params: EventParameterValues): void => {
+    void run(() => api.setSubscriptionParams(kind, params, new AbortController().signal))
+  }
 
+  const subscribeFuture = (kind: string, params: EventParameterValues): void => {
+    void run(() => api.subscribeFuture(kind, params, new AbortController().signal))
+  }
+
+  const createRule = (rule: EventRuleDraft): void => {
+    void run(() => api.createRule(rule, new AbortController().signal))
+  }
+
+  const updateRule = (id: string, rule: EventRuleDraft, previous: EventRule): void => {
+    void run(() => api.updateRule(id, {
+      name: rule.name,
+      trigger: rule.trigger,
+      where: rule.where ?? [],
+      contentTemplate: rule.contentTemplate,
+      ...(rule.script === undefined
+        ? (previous.script === undefined ? {} : { script: null })
+        : { script: rule.script }),
+      ...(rule.wake === undefined ? {} : { wake: rule.wake }),
+      ...(rule.webhookSecret === undefined ? {} : { webhookSecret: rule.webhookSecret }),
+    }, new AbortController().signal))
+  }
+
+  const testRule = (id: string): void => {
+    setPending(true)
+    setFailure(undefined)
+    void api.testRule(id, new AbortController().signal).then(
+      (result) => {
+        setRuleResult({ id, detail: result.detail })
+        setPending(false)
+      },
+      (error: unknown) => {
+        setFailure(describeFailure(error, t))
+        setPending(false)
+      },
+    )
+  }
+
+  const pauseRule = (id: string, paused: boolean): void => {
+    void run(() => api.pauseRule(id, !paused, new AbortController().signal))
+  }
+
+  const cancelRule = (id: string): void => {
+    void run(() => api.cancelRule(id, new AbortController().signal))
+  }
+
+  const createTimer = (draftTimer: TimerDraft): void => {
+    void run(() => api.createTimer(draftTimer, new AbortController().signal))
+  }
+
+  const updateTimer = (id: string, draftTimer: TimerDraft): void => {
+    void run(() => api.updateTimer(id, draftTimer, new AbortController().signal))
+  }
+
+  const pauseTimer = (id: string, paused: boolean): void => {
+    void run(() => api.pauseTimer(id, paused, new AbortController().signal))
+  }
+
+  const cancelTimer = (id: string): void => {
+    void run(() => api.cancelTimer(id, new AbortController().signal))
+  }
+
+  const createPreset = (draftTimer: TimerDraft): void => {
+    void run(() => api.createTimerPreset(draftTimer, new AbortController().signal))
+  }
+
+  const updatePreset = (presetId: string, draftTimer: TimerDraft): void => {
+    void run(() => api.updateTimerPreset(presetId, draftTimer, new AbortController().signal))
+  }
+
+  const adoptPreset = (presetId: string): void => {
+    void run(() => api.adoptTimerPreset(presetId, new AbortController().signal))
+  }
+
+  const deletePreset = (presetId: string): void => {
+    void run(() => api.deleteTimerPreset(presetId, new AbortController().signal))
+  }
+
+  const createAbsence = (draftAbsence: AbsenceDraft): void => {
+    void run(() => api.createAbsence(draftAbsence, new AbortController().signal))
+  }
+
+  const updateAbsence = (id: string, draftAbsence: AbsenceDraft): void => {
+    void run(() => api.updateAbsence(id, {
+      ...(draftAbsence.name === undefined ? {} : { name: draftAbsence.name }),
+      kinds: draftAbsence.kinds,
+      quietMs: draftAbsence.quietMs,
+    }, new AbortController().signal))
+  }
+
+  const cancelAbsence = (id: string): void => {
+    void run(() => api.cancelAbsence(id, new AbortController().signal))
+  }
+
+  return (
+    <div className={css.pageHost} aria-busy={load.status === 'loading' || pendingKind !== undefined || pending}>
       {load.status === 'loading' ? <ContextGateLoading t={t} /> : null}
       {load.status === 'error' ? (
         <ContextGateFailure t={t} onRetry={() => { setRequest(value => value + 1) }} />
       ) : null}
-      {load.status === 'ready' ? (
-        <ContextGateView
+      {load.status === 'ready' && tab === 'events' ? (
+        <EventsView
           t={t}
+          pending={pending}
+          failure={failure}
           snapshot={load.snapshot}
           sessionId={sessionId}
-          forcedTab={tab}
           draft={draft}
           pendingKind={pendingKind}
           onToggle={toggle}
+          onParams={saveParams}
+          onSubscribeFuture={subscribeFuture}
+          onRuleCreate={createRule}
+          onRuleUpdate={updateRule}
+          onRuleTest={testRule}
+          onRulePause={pauseRule}
+          onRuleCancel={cancelRule}
+          ruleResult={ruleResult}
+        />
+      ) : null}
+      {load.status === 'ready' && tab === 'log' ? (
+        <LogView t={t} pending={pending} failure={failure} snapshot={load.snapshot} />
+      ) : null}
+      {load.status === 'ready' && tab === 'timers' && timers === undefined ? <ContextGateLoading t={t} /> : null}
+      {load.status === 'ready' && tab === 'timers' && timers !== undefined ? (
+        <TimersView
+          t={t}
+          pending={pending}
+          failure={failure}
+          snapshot={timers}
+          onCreateTimer={createTimer}
+          onUpdateTimer={updateTimer}
+          onPauseTimer={pauseTimer}
+          onCancelTimer={cancelTimer}
+          onCreatePreset={createPreset}
+          onUpdatePreset={updatePreset}
+          onAdoptPreset={adoptPreset}
+          onDeletePreset={deletePreset}
+          onCreateAbsence={createAbsence}
+          onUpdateAbsence={updateAbsence}
+          onCancelAbsence={cancelAbsence}
         />
       ) : null}
     </div>
