@@ -422,23 +422,29 @@ ctx.inject(['contextGate'], scope => {
 await ctx.contextGate.publish({
   kind: '<plugin>.<event>',
   source: '<plugin>',
+  origin: { plugin: '<plugin>', instance: '...', channel: '...', conversation: '...' },
   summary: 'Short, model-readable sentence; no secrets.',
-  payload: { /* JSON-serializable */ },
+  params: { /* JSON-serializable */ },
+  content: [{ type: 'text', text: 'source-admitted content' }],
   active: false,
   dedupeKey: '<stable-key>',
+  causationId: '<event-id-or-action-id>',
   visibility: { sessionIds: ['...'] },
 })
 ```
 
 要求：
 
-- `source` 用稳定插件 id，方便事件日志归因。
-- `summary` 一行，不塞完整 payload 或隐私字段。
-- `payload` 必须 JSON 可序列化、有大小上限。
-- `dedupeKey` 用于重试/重复投递。
+- `source` 用稳定插件 id，方便事件日志归因；`origin` 携带可选的实例、来源会话和渠道元数据。
+- `summary` 一行，不塞完整 `params` 或隐私字段。
+- `params` 必须 JSON 可序列化、有大小上限；旧 `payload` 仍作为兼容别名接受。
+- `content` 只能放源插件已经准入的用户/上下文内容；Context Gate 不重新过滤，只校验序列化和大小。
+- `dedupeKey` 用于重试/重复投递；去重作用域是 kind + source。
+- `causationId` 用于因果链，不参与投递过滤。
+- `source` 和 `origin` 不做通用过滤；订阅者订阅 kind 后收到源插件允许发布的所有事件。
 - `visibility` 只能收窄目标，不能绕过订阅。
 - `publish` 返回投递计数；失败/抑制是正常结果。
-- 事件是上下文注解，不是用户命令；不要把“请执行 X”写进 payload。
+- 事件是上下文注解，不是用户命令；不要把“请执行 X”写进 `params`。
 - 发布前先注册 kind；未注册 kind 应被拒绝。
 
 ### 7.3 Event Adapter 与 Service
@@ -450,7 +456,7 @@ Event Adapter 只做适配，不拥有 Agent 生命周期：
 - 请求归档类 hook 失败时应阻断该次模型调用，不静默吞掉。
 - 发送器、TTS、ASR、SQLite、索引是 Service，不直接注册模型工具；Tool Provider 调用它们。
 - 一个 Event Adapter 没有 Context Gate 时也要能明确降级：不注册私有总线伪装成可订阅上下文。
-- 事件 payload 必须可 JSON 序列化；外部附件只保存引用，不把字节复制进上下文。
+- 事件 `params` 与 `content` 必须可 JSON 序列化；外部附件只保存引用，不把字节复制进上下文。
 
 ## 8. 编排插件规范：Elysia/VillV-Helix
 
@@ -557,9 +563,11 @@ Context Gate 独立注册：
 `@elysia/context-gate` 是上下文事件的独立基础设施，不属于 Helix：
 
 - Remote：`contextGate/list`、`contextGate/setContext`；
+- 管理通用 envelope：`source`/可选 `origin`、`params`、已准入 `content`、`causationId`；
+- 所有 kind 都允许多个会话订阅；`source` 只做元数据、日志、去重和因果，不做通用过滤；
 - 没有 `status`、健康页或健康计数；
 - 不读取 Helix 的 `orchestrated`；
-- 订阅、队列、TTL、dedupe、背压、日志独立持久化到 `context-gate-state.json`；
+- 订阅、队列、TTL、dedupe、按 kind 背压、日志独立持久化到 `context-gate-state.json`；
 - 默认 `batchMs = 1200`、`maxWaitMs = 5000`；忙时只排队，空闲时合并唤醒；
 - 事件注入在 `agent/pre-step`，不创建 session；
 - UI 只在事件/日志两个原生 view 中展示，不注册工具或预设页。

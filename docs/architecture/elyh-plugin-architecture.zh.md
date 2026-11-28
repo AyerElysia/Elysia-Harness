@@ -56,11 +56,11 @@ DSH 原生工具位于 Tool Registry 内，但在本架构中只作为**依赖**
 
 ### `@elysia/context-gate`
 
-- **职责**：上下文事件 kind、session 订阅、持久队列、TTL/dedupe/背压、下一 step 注入、注入日志
+- **职责**：上下文事件 kind、通用 envelope（origin/params/content/causation）、session 订阅、持久队列、TTL/dedupe/按 kind 背压、下一 step 注入、注入日志
 - **模型工具**：无
 - **Remote**：`contextGate/list`、`contextGate/setContext`
 - **不是**：工具面、预设、Session 创建者、健康面板
-- **边界**：独立于 Helix 和工具编辑模式；渠道/内部消息的通用入站缓冲尚未接入，当前只处理上下文事件 publication。
+- **边界**：独立于 Helix 和工具编辑模式；作为 Channel-IM、Ayla-Channel、Session-Communication、Event-Scripts 的 manager，但不实现这些源插件。
 
 详见 [Context Gate](elyh-context-gate.zh.md)。
 

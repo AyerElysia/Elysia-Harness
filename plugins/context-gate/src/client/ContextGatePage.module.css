@@ -199,6 +199,12 @@
   color: var(--dsw-alias-label-secondary);
 }
 
+.eventSource {
+  color: var(--dsw-alias-label-tertiary);
+  font-size: 11px;
+  overflow-wrap: anywhere;
+}
+
 .eventDetail {
   color: var(--dsw-alias-label-tertiary);
   overflow-wrap: anywhere;

@@ -201,14 +201,15 @@ Context Gate 是上下文事件的管理插件，独立于 Helix 的工具编辑
 
 `@elysia/context-gate` 提供上下文事件门：
 
-- Provider 注册 kind；
-- Session 独立订阅；
-- 每 session 持久队列，支持 TTL、dedupe、背压；
-- `agent/pre-step` 合并快照注入；
+- Provider 注册 kind，并发布标准 envelope（`source`/可选 `origin`、`params`、已准入 `content`、`causationId`）；
+- Session 独立订阅；所有 kind 都允许多个会话同时订阅；
+- `source` 只做元数据、日志、去重和因果，不做通用过滤；
+- 每 session 持久队列，支持 TTL、按 kind 的 dedupe 与背压；
+- `agent/pre-step` 合并快照注入，保留 `params` 与 `content`；
 - active 事件有静默窗口 `batchMs` 与上限 `maxWaitMs`；
 - 注入日志由独立的“事件 / 日志”视图读取。
 
-Context Gate 只负责模型可见上下文，不等同于 DSH 的全部生命周期事件；它不处理渠道消息，也不依赖 Helix 的工具编辑模式。
+Context Gate 只负责模型可见上下文，不等同于 DSH 的全部生命周期事件；它不实现渠道消息、Session-Communication、Event-Scripts 或原生 Schedule 拦截，也不依赖 Helix 的工具编辑模式。
 
 健康统计已删除：Helix 与 Context Gate 都不再提供健康页或 `status` 计数接口。
 

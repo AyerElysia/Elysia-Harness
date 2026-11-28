@@ -1,11 +1,14 @@
 /**
- * The context gate's delivery bus: provider publications, per-session queues
- * and cursors, subscription and visibility filtering, dedupe, TTL, and the one
- * merged snapshot injected before a step.
+ * The context gate's delivery bus: generic event-envelope normalization,
+ * provider publications, per-session queues and cursors, subscription and
+ * visibility filtering, dedupe, TTL, and the one merged snapshot injected
+ * before a step.
  *
  * Delivery is subscription AND visibility: a session receives an event only
  * when it subscribed the kind, and only when the publisher's visibility still
- * allows it. A publisher can narrow the target set, never widen it.
+ * allows it. A publisher can narrow the target set, never widen it. The
+ * event's source and origin are metadata for attribution, logging, dedupe, and
+ * causality; they never filter delivery.
  *
  * Active events are coalesced while the Agent is idle. The first active event
  * starts a quiet-window timer; further active events inside that window extend
@@ -19,11 +22,11 @@
 
 import type { Context } from '@deepseek-ai/cordis'
 import type { Session } from '@deepseek-ai/dsh-session'
-import type { ContextFormed, UserMessage } from '@deepseek-ai/dsh-llm'
+import type { ContentBlock, ContextFormed, UserMessage } from '@deepseek-ai/dsh-llm'
 import { createUserMessage } from '@deepseek-ai/dsh-llm'
 import type {
-  ContextEvent, ContextEventInput, ContextKindRegistration, ContextVisibility, EventOutcome,
-  PublishReceipt, ResolvedContextKind,
+  ContextEvent, ContextEventInput, ContextKindRegistration, ContextOrigin, ContextVisibility,
+  EventOutcome, PublishReceipt, ResolvedContextKind,
 } from './types.ts'
 import type { ContextGateStore } from './state.ts'
 import { QUEUE_HISTORY_LIMIT } from './state.ts'
@@ -121,21 +124,42 @@ export class ContextBus {
    * @throws Error when the kind is empty or already declared, which is a provider bug.
    */
   registerKind(registration: ContextKindRegistration): () => void {
+    if (typeof registration !== 'object' || registration === null) {
+      throw new Error('context-gate: a context kind registration must be an object')
+    }
+    if (typeof registration.kind !== 'string' || registration.kind.trim() === '') {
+      throw new Error('context-gate: a context kind needs a name')
+    }
     const kind = registration.kind.trim()
+    if (typeof registration.nameZh !== 'string' || registration.nameZh.trim() === '') {
+      throw new Error(`context-gate: context kind ${JSON.stringify(kind)} needs a Chinese display name`)
+    }
     const nameZh = registration.nameZh.trim()
+    if (typeof registration.description !== 'string' || registration.description.trim() === '') {
+      throw new Error(`context-gate: context kind ${JSON.stringify(kind)} needs a description`)
+    }
     const description = registration.description.trim()
-    if (kind === '') throw new Error('context-gate: a context kind needs a name')
-    if (nameZh === '') throw new Error(`context-gate: context kind ${JSON.stringify(kind)} needs a Chinese display name`)
-    if (description === '') throw new Error(`context-gate: context kind ${JSON.stringify(kind)} needs a description`)
     if (this.kinds.has(kind)) throw new Error(`context-gate: context kind ${JSON.stringify(kind)} is already declared`)
+    const ttlMs = registration.ttlMs ?? this.options.defaults.ttlMs
+    const maxBytes = registration.maxBytes ?? this.options.defaults.maxBytes
+    const maxQueueDepth = registration.maxQueueDepth ?? this.options.defaults.maxQueueDepth
+    if (!Number.isFinite(ttlMs) || ttlMs <= 0) {
+      throw new Error(`context-gate: context kind ${JSON.stringify(kind)} needs a positive ttlMs`)
+    }
+    if (!Number.isFinite(maxBytes) || maxBytes <= 0) {
+      throw new Error(`context-gate: context kind ${JSON.stringify(kind)} needs a positive maxBytes`)
+    }
+    if (!Number.isInteger(maxQueueDepth) || maxQueueDepth <= 0) {
+      throw new Error(`context-gate: context kind ${JSON.stringify(kind)} needs a positive integer maxQueueDepth`)
+    }
     this.kinds.set(kind, {
       kind,
       nameZh,
       description,
       activeByDefault: registration.activeByDefault ?? false,
-      ttlMs: registration.ttlMs ?? this.options.defaults.ttlMs,
-      maxBytes: registration.maxBytes ?? this.options.defaults.maxBytes,
-      maxQueueDepth: registration.maxQueueDepth ?? this.options.defaults.maxQueueDepth,
+      ttlMs,
+      maxBytes,
+      maxQueueDepth,
     })
     return () => { this.kinds.delete(kind) }
   }
@@ -196,6 +220,9 @@ export class ContextBus {
    * @throws ContextGateError `CONTEXT_UNKNOWN`, `EVENT_INVALID`, `EVENT_PAYLOAD_INVALID`, or `EVENT_TOO_LARGE`.
    */
   async publish(input: ContextEventInput): Promise<PublishReceipt> {
+    if (typeof input !== 'object' || input === null) {
+      throw new ContextGateError('EVENT_INVALID', 'a context event publication must be an object')
+    }
     const kind = this.kinds.get(input.kind)
     if (kind === undefined) {
       throw new ContextGateError('CONTEXT_UNKNOWN', `context kind ${JSON.stringify(input.kind)} is not registered in this Host`, {
@@ -204,6 +231,7 @@ export class ContextBus {
     }
     const event = this.normalize(input, kind)
     const now = Date.now()
+    const token = dedupeToken(event)
     const receipt = { eventId: event.id, delivered: 0, suppressed: 0, failed: 0 }
     const candidates = this.options.candidates()
     for (const candidate of candidates) {
@@ -214,19 +242,25 @@ export class ContextBus {
       try {
         const outcome = await this.withQueue(candidate, async () => {
           const queue = this.options.store.queue(candidate)
-          const seenAt = queue.dedupe[event.dedupeKey]
-          if (seenAt !== undefined && now - seenAt <= kind.ttlMs) return 'suppressed' as const
+          // A document written before the source-scoped token used the bare
+          // dedupe key; keep that key working during the additive migration.
+          const seenAt = queue.dedupe[token] ?? queue.dedupe[event.dedupeKey]
+          if (seenAt !== undefined && now - seenAt <= this.ttlOf(event)) return 'suppressed' as const
           const copy = structuredClone(event)
-          let dropped = 0
           const events = [...queue.events, copy]
-          while (events.length > kind.maxQueueDepth) {
-            events.shift()
-            dropped += 1
+          const dropped: ContextEvent[] = []
+          let queued = events.filter(entry => entry.kind === event.kind).length
+          while (queued > kind.maxQueueDepth) {
+            const index = events.findIndex(entry => entry.kind === event.kind)
+            if (index < 0) break
+            const [removed] = events.splice(index, 1)
+            queued -= 1
+            if (removed !== undefined) dropped.push(removed)
           }
-          const dedupe = remember(queue.dedupe, event.dedupeKey, now)
+          const dedupe = remember(queue.dedupe, token, now)
           await this.options.store.mutateQueue(candidate, () => ({ events, consumed: queue.consumed, dedupe }))
-          if (dropped > 0) {
-            await this.log(candidate, event.kind, 'dropped', `${String(dropped)} oldest event(s) removed from the queue`)
+          for (const removed of dropped) {
+            await this.log(candidate, 'dropped', 'oldest event removed from the queue', removed)
           }
           return 'delivered' as const
         })
@@ -235,16 +269,16 @@ export class ContextBus {
           continue
         }
         receipt.delivered += 1
-        await this.log(candidate, event.kind, 'delivered', `queue accepted event ${event.id}`)
+        await this.log(candidate, 'delivered', `queue accepted event ${event.id}`, event)
         if (event.active) this.schedule(candidate)
       } catch (error: unknown) {
         receipt.failed += 1
-        this.fail(candidate, `publish failed: ${describeError(error)}`, event.kind)
+        await this.log(candidate, 'failed', `publish failed: ${describeError(error)}`, event)
       }
     }
     for (const candidate of candidates) {
-      if (!this.subscribed(candidate, event.kind)) continue
-      await this.log(candidate, event.kind, 'published', `from ${event.source}: ${event.summary}`)
+      if (!this.subscribed(candidate, event.kind) || !visibleTo(event.visibility, candidate)) continue
+      await this.log(candidate, 'published', `from ${event.source}: ${event.summary}`, event)
     }
     return receipt
   }
@@ -261,18 +295,20 @@ export class ContextBus {
       const queue = this.options.store.queue(sessionId)
       const now = Date.now()
       const kept: ContextEvent[] = []
-      let expired = 0
+      const expired: ContextEvent[] = []
       for (const event of queue.events) {
         if (now - event.createdAt > this.ttlOf(event)) {
-          expired += 1
+          expired.push(event)
           continue
         }
         kept.push(event)
       }
-      if (expired > 0) await this.log(sessionId, 'context', 'dropped', `${String(expired)} expired event(s)`)
       if (kept.length === 0) {
-        if (expired > 0) {
+        if (expired.length > 0) {
           await this.options.store.mutateQueue(sessionId, () => ({ events: [], consumed: queue.consumed, dedupe: queue.dedupe }))
+          for (const event of expired) {
+            await this.log(sessionId, 'dropped', 'expired before injection', event)
+          }
         }
         return { message: undefined, consumed: 0 }
       }
@@ -282,10 +318,12 @@ export class ContextBus {
       let bytes = 0
       for (const event of kept.slice(0, this.options.maxEventsPerSnapshot)) {
         const rendered = clampBytes(renderEvent(event), Math.max(1, this.options.maxSnapshotBytes - bytes))
-        if (selected.length > 0 && bytes + Buffer.byteLength(rendered, 'utf8') > this.options.maxSnapshotBytes) break
+        const renderedBytes = Buffer.byteLength(rendered, 'utf8')
+        const contentBytes = event.content === undefined ? 0 : Buffer.byteLength(safeJson(event.content), 'utf8')
+        if (selected.length > 0 && bytes + renderedBytes + contentBytes > this.options.maxSnapshotBytes) break
         selected.push(event)
         sections.push({ name: `${RELAY_SECTION}:${event.kind}`, text: rendered })
-        bytes += Buffer.byteLength(rendered, 'utf8')
+        bytes += renderedBytes + contentBytes
       }
       if (selected.length === 0) return { message: undefined, consumed: 0 }
 
@@ -300,15 +338,26 @@ export class ContextBus {
         consumed: [...queue.consumed, ...consumedIds].slice(-QUEUE_HISTORY_LIMIT),
         dedupe: queue.dedupe,
       }))
+      for (const event of expired) {
+        await this.log(sessionId, 'dropped', 'expired before injection', event)
+      }
       for (const event of selected) {
-        await this.log(sessionId, event.kind, 'consumed', `injected ${event.id}`)
+        await this.log(sessionId, 'consumed', `injected ${event.id}`, event)
       }
 
-      const text = `[context] ${String(selected.length)} context event(s) for this step.\n`
-        + sections.map(section => section.text).join('\n')
+      const content: ContentBlock[] = [{
+        type: 'text',
+        text: `[context] ${String(selected.length)} context event(s) for this step.\n`
+          + sections.map(section => section.text).join('\n'),
+      }]
+      for (const event of selected) {
+        if (event.content === undefined || event.content.length === 0) continue
+        content.push({ type: 'text', text: `[context] content for ${event.kind} (${event.id}):` })
+        content.push(...event.content)
+      }
       return {
         message: createUserMessage({
-          content: [{ type: 'text', text }],
+          content,
           source: { kind: RELAY_SOURCE, form: 'snapshot', sections },
         }),
         consumed: selected.length,
@@ -437,10 +486,17 @@ export class ContextBus {
     if (typeof input.summary !== 'string') {
       throw new ContextGateError('EVENT_INVALID', 'a context event needs a summary string', { eventKind: kind.kind })
     }
-    if (typeof input.source !== 'string' || input.source === '') {
+    if (typeof input.source !== 'string' || input.source.trim() === '') {
       throw new ContextGateError('EVENT_INVALID', 'a context event needs a source', { eventKind: kind.kind })
     }
     const id = input.id ?? crypto.randomUUID()
+    if (typeof id !== 'string' || id === '') {
+      throw new ContextGateError('EVENT_INVALID', 'a context event id must be a non-empty string', { eventKind: kind.kind })
+    }
+    const dedupeKey = input.dedupeKey ?? id
+    if (typeof dedupeKey !== 'string' || dedupeKey === '') {
+      throw new ContextGateError('EVENT_INVALID', 'dedupeKey must be a non-empty string', { eventKind: kind.kind, eventId: id })
+    }
     const maxBytes = input.maxBytes ?? kind.maxBytes
     const ttlMs = input.ttlMs ?? kind.ttlMs
     if (!Number.isFinite(ttlMs) || ttlMs <= 0) {
@@ -449,45 +505,86 @@ export class ContextBus {
     if (!Number.isFinite(maxBytes) || maxBytes <= 0) {
       throw new ContextGateError('EVENT_INVALID', `maxBytes must be a positive finite number, got ${String(maxBytes)}`, { eventKind: kind.kind })
     }
+    if (input.active !== undefined && typeof input.active !== 'boolean') {
+      throw new ContextGateError('EVENT_INVALID', 'active must be a boolean', { eventKind: kind.kind })
+    }
+    const origin = normalizeOrigin(input.origin, kind.kind)
+    const content = normalizeContent(input.content, kind.kind)
+    const params = input.params !== undefined ? input.params : input.payload
+    const causationId = normalizeOptionalId(input.causationId, 'causationId', kind.kind)
+    const createdAt = input.createdAt ?? Date.now()
+    if (!Number.isFinite(createdAt)) {
+      throw new ContextGateError('EVENT_INVALID', `createdAt must be a finite number, got ${String(createdAt)}`, { eventKind: kind.kind })
+    }
     let serialized: string
     try {
-      const json = JSON.stringify(input.payload ?? null)
-      if (json === undefined) throw new Error('the payload has no JSON form')
+      const body: Record<string, unknown> = {}
+      if (params !== undefined) body['params'] = params
+      if (content !== undefined) body['content'] = content
+      const json = JSON.stringify(body)
+      if (json === undefined) throw new Error('the event body has no JSON form')
       serialized = json
     } catch (error: unknown) {
-      throw new ContextGateError('EVENT_PAYLOAD_INVALID', `payload is not JSON-serializable: ${describeError(error)}`, {
+      throw new ContextGateError('EVENT_PAYLOAD_INVALID', `params/content are not JSON-serializable: ${describeError(error)}`, {
         eventKind: kind.kind, eventId: id,
       })
     }
     const bytes = Buffer.byteLength(serialized, 'utf8')
     if (bytes > maxBytes) {
-      throw new ContextGateError('EVENT_TOO_LARGE', `payload is ${String(bytes)} bytes; the limit is ${String(maxBytes)}`, {
+      throw new ContextGateError('EVENT_TOO_LARGE', `event body is ${String(bytes)} bytes; the limit is ${String(maxBytes)}`, {
         eventKind: kind.kind, eventId: id, bytes, maxBytes,
       })
+    }
+    const body = JSON.parse(serialized) as { params?: unknown; content?: readonly ContentBlock[] }
+    if (params !== undefined && body.params === undefined) {
+      throw new ContextGateError('EVENT_PAYLOAD_INVALID', 'params has no JSON form', { eventKind: kind.kind, eventId: id })
     }
     return {
       id,
       kind: kind.kind,
       source: input.source,
+      ...(origin === undefined ? {} : { origin }),
       summary: input.summary,
       // A JSON round trip is the canonical copy: no shared mutable object and no
       // value JSON cannot carry reaches a subscriber.
-      payload: JSON.parse(serialized) as unknown,
+      ...(body.params === undefined ? {} : { params: body.params }),
+      ...(input.payload === undefined ? {} : { payload: body.params }),
+      ...(body.content === undefined ? {} : { content: body.content }),
       visibility: normalizeVisibility(input.visibility, kind.kind),
       active: input.active ?? kind.activeByDefault,
-      dedupeKey: input.dedupeKey ?? id,
-      createdAt: input.createdAt ?? Date.now(),
+      dedupeKey,
+      ...(causationId === undefined ? {} : { causationId }),
+      createdAt,
       ttlMs,
       maxBytes,
     }
   }
 
   private fail(sessionId: string, message: string, kind?: string): void {
-    void this.log(sessionId, kind ?? 'context', 'failed', message)
+    void this.log(sessionId, 'failed', message, undefined, kind)
   }
 
-  private async log(sessionId: string, kind: string, outcome: EventOutcome, detail: string): Promise<void> {
-    await this.options.store.logEvent(sessionId, { id: crypto.randomUUID(), kind, outcome, at: Date.now(), detail })
+  private async log(
+    sessionId: string,
+    outcome: EventOutcome,
+    detail: string,
+    event?: ContextEvent,
+    kind = event?.kind ?? 'context',
+  ): Promise<void> {
+    await this.options.store.logEvent(sessionId, {
+      id: crypto.randomUUID(),
+      kind,
+      outcome,
+      at: Date.now(),
+      detail,
+      ...(event === undefined ? {} : {
+        eventId: event.id,
+        source: event.source,
+        ...(event.origin === undefined ? {} : { origin: event.origin }),
+        summary: event.summary,
+        ...(event.causationId === undefined ? {} : { causationId: event.causationId }),
+      }),
+    })
   }
 
   private async withQueue<T>(sessionId: string, run: () => Promise<T>): Promise<T> {
@@ -506,6 +603,9 @@ export class ContextBus {
  */
 function normalizeVisibility(visibility: ContextVisibility | undefined, kind: string): ContextVisibility {
   if (visibility === undefined) return {}
+  if (typeof visibility !== 'object' || visibility === null || Array.isArray(visibility)) {
+    throw new ContextGateError('EVENT_INVALID', 'visibility must be an object', { eventKind: kind })
+  }
   const sessionIds = visibility.sessionIds
   if (sessionIds === undefined) return {}
   if (!Array.isArray(sessionIds) || sessionIds.some(entry => typeof entry !== 'string' || entry === '')) {
@@ -525,15 +625,120 @@ function visibleTo(visibility: ContextVisibility, sessionId: string): boolean {
 }
 
 /**
+ * Normalize the optional provenance of one publication.
+ * @param origin - publisher-supplied origin.
+ * @param kind - kind name, used in the diagnostic.
+ * @returns a detached copy with only non-empty fields.
+ * @throws ContextGateError `EVENT_INVALID` when a field is malformed.
+ */
+function normalizeOrigin(origin: ContextOrigin | undefined, kind: string): ContextOrigin | undefined {
+  if (origin === undefined) return undefined
+  if (typeof origin !== 'object' || origin === null) {
+    throw new ContextGateError('EVENT_INVALID', 'origin must be an object', { eventKind: kind })
+  }
+  if (typeof origin.plugin !== 'string' || origin.plugin.trim() === '') {
+    throw new ContextGateError('EVENT_INVALID', 'origin.plugin must be a non-empty string', { eventKind: kind })
+  }
+  const normalized: {
+    plugin: string
+    instance?: string
+    sessionId?: string
+    channel?: string
+    conversation?: string
+  } = { plugin: origin.plugin.trim() }
+  for (const field of ['instance', 'sessionId', 'channel', 'conversation'] as const) {
+    const value = origin[field]
+    if (value === undefined) continue
+    if (typeof value !== 'string' || value === '') {
+      throw new ContextGateError('EVENT_INVALID', `origin.${field} must be a non-empty string`, { eventKind: kind })
+    }
+    normalized[field] = value
+  }
+  return normalized
+}
+
+/**
+ * Validate the content blocks a source plugin has already admitted.
+ * @param content - publisher-supplied blocks.
+ * @param kind - kind name, used in the diagnostic.
+ * @returns the blocks, or undefined when there are none.
+ * @throws ContextGateError `EVENT_INVALID` when the value is not a block array.
+ */
+function normalizeContent(
+  content: readonly ContentBlock[] | undefined,
+  kind: string,
+): readonly ContentBlock[] | undefined {
+  if (content === undefined) return undefined
+  if (!Array.isArray(content)) {
+    throw new ContextGateError('EVENT_INVALID', 'content must be an array of content blocks', { eventKind: kind })
+  }
+  if (content.length === 0) return undefined
+  for (const [index, block] of content.entries()) {
+    if (typeof block !== 'object' || block === null || typeof block.type !== 'string' || block.type === '') {
+      throw new ContextGateError('EVENT_INVALID', `content[${String(index)}] is not a content block`, { eventKind: kind })
+    }
+    if (block.type === 'text' && typeof block.text !== 'string') {
+      throw new ContextGateError('EVENT_INVALID', `content[${String(index)}] is not a text block`, { eventKind: kind })
+    }
+  }
+  return content
+}
+
+/**
+ * Validate one optional opaque id.
+ * @param value - candidate value.
+ * @param label - field name used in the diagnostic.
+ * @param kind - kind name used in the diagnostic.
+ * @returns the value, or undefined when absent.
+ */
+function normalizeOptionalId(value: string | undefined, label: string, kind: string): string | undefined {
+  if (value === undefined) return undefined
+  if (typeof value !== 'string' || value === '') {
+    throw new ContextGateError('EVENT_INVALID', `${label} must be a non-empty string`, { eventKind: kind })
+  }
+  return value
+}
+
+/**
  * Render one event for the merged snapshot.
  * @param event - the event to render.
  * @returns model-facing text.
  */
 function renderEvent(event: ContextEvent): string {
   const at = new Date(event.createdAt).toISOString()
-  return `- ${event.kind} from ${event.source} (${event.active ? 'active' : 'passive'}) at ${at}\n`
-    + `  summary: ${event.summary}\n`
-    + `  payload: ${safeJson(event.payload)}`
+  const origin = event.origin === undefined ? '' : ` origin ${formatOrigin(event.origin)}`
+  const cause = event.causationId === undefined ? '' : ` causation ${event.causationId}`
+  const params = event.params !== undefined ? event.params : event.payload
+  const lines = [
+    `- ${event.kind} from ${event.source}${origin} (${event.active ? 'active' : 'passive'}) at ${at}${cause}`,
+    `  summary: ${event.summary}`,
+  ]
+  if (params !== undefined) lines.push(`  params: ${safeJson(params)}`)
+  return lines.join('\n')
+}
+
+/**
+ * Render the optional provenance fields as one compact label.
+ * @param origin - normalized origin.
+ * @returns a parenthesized label such as `(plugin, instance=qq-1)`.
+ */
+function formatOrigin(origin: ContextOrigin): string {
+  const parts = [origin.plugin]
+  if (origin.instance !== undefined) parts.push(`instance=${origin.instance}`)
+  if (origin.sessionId !== undefined) parts.push(`session=${origin.sessionId}`)
+  if (origin.channel !== undefined) parts.push(`channel=${origin.channel}`)
+  if (origin.conversation !== undefined) parts.push(`conversation=${origin.conversation}`)
+  return `(${parts.join(', ')})`
+}
+
+/**
+ * Dedupe identity of one event: a key is scoped to its kind and source so two
+ * providers that happen to choose the same key cannot suppress each other.
+ * @param event - normalized event.
+ * @returns the stable dedupe token.
+ */
+function dedupeToken(event: ContextEvent): string {
+  return `${event.kind}\u0000${event.source}\u0000${event.dedupeKey}`
 }
 
 function safeJson(value: unknown): string {

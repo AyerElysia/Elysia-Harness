@@ -15,7 +15,11 @@ function snapshot(): ContextSnapshot {
         backlog: 2, enabledBy: { s1: true },
       },
     ],
-    events: [{ id: 'e1', kind: 'app.message', outcome: 'delivered', at: 1, detail: '1 个会话' }],
+    events: [{
+      id: 'row-1', eventId: 'e1', kind: 'app.message', source: 'channel-im',
+      origin: { plugin: 'channel-im', channel: 'qq', conversation: 'c1' },
+      summary: 'inbound message', causationId: 'cause-1', outcome: 'delivered', at: 1, detail: '1 个会话',
+    }],
   }
 }
 

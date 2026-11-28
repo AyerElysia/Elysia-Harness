@@ -1,10 +1,13 @@
 /**
- * Host entry of Elysia/Context-Gate: mount the context service. The browser
- * half is declared by `dsh.client`; the Conversation views talk to the
- * `contextGate` Remote namespace served here.
+ * Host entry of Elysia/Context-Gate: mount the generic context-event service.
+ * The browser half is declared by `dsh.client`; the Conversation views talk to
+ * the `contextGate` Remote namespace served here.
  *
  * The gate is independent of VillV-Helix and of its tool editing mode. It
  * registers no tools, owns no health surface, and has no global enable flag.
+ * Providers publish the generic envelope (origin/params/content/causation);
+ * the gate owns subscription, queueing, TTL, dedupe, backpressure, and
+ * injection.
  *
  * @module @elysia/context-gate
  */

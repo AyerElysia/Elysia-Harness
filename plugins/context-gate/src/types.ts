@@ -8,6 +8,8 @@
  * @module @elysia/context-gate/types
  */
 
+import type { ContentBlock } from '@deepseek-ai/dsh-llm'
+
 /** Map key of the session scope in the Host's per-session records. */
 export type ScopeKey = string
 
@@ -38,10 +40,20 @@ export type EventOutcome = 'published' | 'delivered' | 'consumed' | 'failed' | '
 
 /** One row of the session's recent context-event log. */
 export interface EventLogEntry {
-  /** Event id minted by the publisher. */
+  /** Stable row identity; one publication or delivery step can produce several rows. */
   readonly id: string
+  /** Event id the row belongs to, when the row names one publication. */
+  readonly eventId?: string
   /** Event kind the entry was published as. */
   readonly kind: string
+  /** Producer id of the event, for attribution. */
+  readonly source?: string
+  /** Structured provenance of the event, when the publisher supplied one. */
+  readonly origin?: ContextOrigin
+  /** One-line publication summary, when the row belongs to one event. */
+  readonly summary?: string
+  /** Causation chain link, when the publisher supplied one. */
+  readonly causationId?: string
   /** What happened to it. */
   readonly outcome: EventOutcome
   /** Epoch milliseconds of the outcome. */
@@ -64,6 +76,27 @@ export interface ContextVisibility {
   readonly sessionIds?: readonly string[]
 }
 
+/**
+ * Structured provenance of one publication.
+ *
+ * `source` stays the compatibility producer id; `origin` carries the
+ * optional channel/instance context a source plugin already knows. Neither
+ * field filters delivery: a subscriber receives every event of a subscribed
+ * kind that visibility allows, regardless of which source published it.
+ */
+export interface ContextOrigin {
+  /** Plugin that produced the event. */
+  readonly plugin: string
+  /** Plugin instance, account, or connection identity. */
+  readonly instance?: string
+  /** Session the event originated from, when it describes a session event. */
+  readonly sessionId?: string
+  /** Channel identity, such as `qq`, `kook`, `feishu`, or `ayla`. */
+  readonly channel?: string
+  /** Conversation identity inside the channel. */
+  readonly conversation?: string
+}
+
 /** One stored context event. */
 export interface ContextEvent {
   /** Stable event identity. */
@@ -72,10 +105,19 @@ export interface ContextEvent {
   readonly kind: string
   /** Producer identity, for the event log. */
   readonly source: string
+  /** Structured provenance, when the publisher supplied one. */
+  readonly origin?: ContextOrigin
   /** One line shown to the model and in the panel. */
   readonly summary: string
   /** Structured body. JSON-serializable and bounded by `maxBytes`. */
-  readonly payload: unknown
+  readonly params?: unknown
+  /**
+   * Compatibility alias for {@link ContextEvent.params}.
+   * @deprecated Use `params`; kept so existing providers keep working.
+   */
+  readonly payload?: unknown
+  /** Source-admitted content blocks injected into the snapshot message. */
+  readonly content?: readonly ContentBlock[]
   /** Hard upper bound the publisher places on the target set. */
   readonly visibility: ContextVisibility
   /** True opens a turn after the batch window; false waits for the next step. */
@@ -86,6 +128,8 @@ export interface ContextEvent {
   readonly ttlMs?: number
   /** Per-event size ceiling; an oversized event is refused, not truncated. */
   readonly maxBytes?: number
+  /** Event that caused this one, for causal chains. */
+  readonly causationId?: string
   /** Publication time in milliseconds since the epoch. */
   readonly createdAt: number
 }
@@ -98,10 +142,19 @@ export interface ContextEventInput {
   readonly kind: string
   /** Producer identity. */
   readonly source: string
+  /** Structured provenance; metadata only, never a delivery filter. */
+  readonly origin?: ContextOrigin
   /** One line shown to the model and in the panel. */
   readonly summary: string
   /** Structured, JSON-serializable body. */
+  readonly params?: unknown
+  /**
+   * Compatibility alias for {@link ContextEventInput.params}.
+   * @deprecated Use `params`; kept so existing providers keep working.
+   */
   readonly payload?: unknown
+  /** Source-admitted content blocks injected into the snapshot message. */
+  readonly content?: readonly ContentBlock[]
   /** Publisher-side restriction; defaults to no restriction. */
   readonly visibility?: ContextVisibility
   /** Defaults to the kind's `activeByDefault`. */
@@ -112,6 +165,8 @@ export interface ContextEventInput {
   readonly ttlMs?: number
   /** Per-event size ceiling. */
   readonly maxBytes?: number
+  /** Event that caused this one, for causal chains. */
+  readonly causationId?: string
   /** Publication time; defaults to now. */
   readonly createdAt?: number
 }
@@ -163,7 +218,7 @@ export interface QueueRecord {
   readonly events: readonly ContextEvent[]
   /** Recently consumed event ids, bounded. */
   readonly consumed: readonly string[]
-  /** Dedupe key to the publication time that set it. */
+  /** Dedupe token to the publication time that set it. */
   readonly dedupe: Readonly<Record<string, number>>
 }
 

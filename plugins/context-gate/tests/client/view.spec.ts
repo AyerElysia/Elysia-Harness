@@ -30,7 +30,10 @@ function snapshot(): ContextSnapshot {
       },
     ],
     events: [
-      { id: 'e1', kind: 'app.message', outcome: 'delivered', at: Date.UTC(2026, 0, 1, 12, 34, 56), detail: '1 个会话' },
+      {
+        id: 'e1', eventId: 'evt-1', kind: 'app.message', source: 'channel-im', outcome: 'delivered',
+        at: Date.UTC(2026, 0, 1, 12, 34, 56), detail: '1 个会话',
+      },
       { id: 'e2', kind: 'unknown.kind', outcome: 'failed', at: Date.UTC(2026, 0, 1, 12, 35, 0) },
     ],
   }
@@ -96,6 +99,7 @@ describe('context gate view', () => {
     expect(markup).toContain('12:34:56')
     expect(markup).toContain('投递')
     expect(markup).toContain('应用消息')
+    expect(markup).toContain('channel-im')
     expect(markup).toContain('1 个会话')
     expect(markup).toContain('失败')
     expect(markup).toContain('unknown.kind')

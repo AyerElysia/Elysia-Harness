@@ -17,8 +17,9 @@
 import { randomUUID } from 'node:crypto'
 import { mkdir, readFile, rename, writeFile } from 'node:fs/promises'
 import { isAbsolute, join } from 'node:path'
+import type { ContentBlock } from '@deepseek-ai/dsh-llm'
 import type {
-  ContextEvent, EventLogEntry, EventOutcome, GateDocument, QueueRecord, SessionRecord,
+  ContextEvent, ContextOrigin, EventLogEntry, EventOutcome, GateDocument, QueueRecord, SessionRecord,
 } from './types.ts'
 import { ContextGateError, describeError } from './errors.ts'
 
@@ -76,22 +77,67 @@ function requiredString(value: unknown, label: string, file: string): string {
   return value
 }
 
+function optionalString(value: unknown, label: string, file: string): string | undefined {
+  if (value === undefined) return undefined
+  if (typeof value !== 'string') throw invalid(file, `${label} must be a string`)
+  return value
+}
+
+function parseOrigin(value: unknown, label: string, file: string): ContextOrigin | undefined {
+  if (value === undefined) return undefined
+  if (!isRecord(value)) throw invalid(file, `${label} must be an object`)
+  const instance = optionalString(value['instance'], `${label}.instance`, file)
+  const sessionId = optionalString(value['sessionId'], `${label}.sessionId`, file)
+  const channel = optionalString(value['channel'], `${label}.channel`, file)
+  const conversation = optionalString(value['conversation'], `${label}.conversation`, file)
+  return {
+    plugin: requiredString(value['plugin'], `${label}.plugin`, file),
+    ...(instance === undefined ? {} : { instance }),
+    ...(sessionId === undefined ? {} : { sessionId }),
+    ...(channel === undefined ? {} : { channel }),
+    ...(conversation === undefined ? {} : { conversation }),
+  }
+}
+
+function isContentBlock(value: unknown): value is ContentBlock {
+  if (!isRecord(value) || typeof value['type'] !== 'string' || value['type'] === '') return false
+  if (value['type'] === 'text' && typeof value['text'] !== 'string') return false
+  return true
+}
+
+function parseContent(value: unknown, label: string, file: string): readonly ContentBlock[] | undefined {
+  if (value === undefined) return undefined
+  if (!Array.isArray(value)) throw invalid(file, `${label} must be a content-block array`)
+  return value.map((entry, index) => {
+    if (!isContentBlock(entry)) throw invalid(file, `${label}[${String(index)}] is not a content block`)
+    return entry
+  })
+}
+
 function parseEvent(value: unknown, label: string, file: string): ContextEvent {
   if (!isRecord(value)) throw invalid(file, `${label} is not an object`)
   const visibility = value['visibility']
   if (!isRecord(visibility)) throw invalid(file, `${label}.visibility must be an object`)
   const sessionIds = visibility['sessionIds']
+  const origin = parseOrigin(value['origin'], `${label}.origin`, file)
+  const content = parseContent(value['content'], `${label}.content`, file)
+  const params = value['params'] !== undefined ? value['params'] : value['payload']
+  const causationId = optionalString(value['causationId'], `${label}.causationId`, file)
   return {
     id: requiredString(value['id'], `${label}.id`, file),
     kind: requiredString(value['kind'], `${label}.kind`, file),
     source: requiredString(value['source'], `${label}.source`, file),
+    ...(origin === undefined ? {} : { origin }),
     summary: requiredString(value['summary'], `${label}.summary`, file),
-    payload: value['payload'],
+    ...(params === undefined ? {} : { params }),
+    ...(value['payload'] === undefined ? {} : { payload: value['payload'] }),
+    ...(content === undefined ? {} : { content }),
     visibility: sessionIds === undefined ? {} : { sessionIds: stringArray(sessionIds, `${label}.visibility.sessionIds`, file) },
     active: value['active'] === true,
     dedupeKey: typeof value['dedupeKey'] === 'string' ? value['dedupeKey'] : '',
     ...(typeof value['ttlMs'] === 'number' ? { ttlMs: value['ttlMs'] } : {}),
     ...(typeof value['maxBytes'] === 'number' ? { maxBytes: value['maxBytes'] } : {}),
+    ...(causationId === undefined ? {} : { causationId }),
     createdAt: typeof value['createdAt'] === 'number' ? value['createdAt'] : 0,
   }
 }
@@ -104,9 +150,19 @@ function parseLogEntry(value: unknown, label: string, file: string): EventLogEnt
     || !outcomes.includes(outcome as EventOutcome) || typeof value['at'] !== 'number') {
     throw invalid(file, `${label} is not an event-log row`)
   }
+  const origin = parseOrigin(value['origin'], `${label}.origin`, file)
+  const eventId = optionalString(value['eventId'], `${label}.eventId`, file)
+  const source = optionalString(value['source'], `${label}.source`, file)
+  const summary = optionalString(value['summary'], `${label}.summary`, file)
+  const causationId = optionalString(value['causationId'], `${label}.causationId`, file)
   return {
     id: value['id'],
+    ...(eventId === undefined ? {} : { eventId }),
     kind: value['kind'],
+    ...(source === undefined ? {} : { source }),
+    ...(origin === undefined ? {} : { origin }),
+    ...(summary === undefined ? {} : { summary }),
+    ...(causationId === undefined ? {} : { causationId }),
     outcome: outcome as EventOutcome,
     at: value['at'],
     ...(typeof value['detail'] === 'string' ? { detail: value['detail'] } : {}),

@@ -126,6 +126,7 @@ function EventRow({
         {outcomeText(t, entry.outcome)}
       </span>
       <span className={css.eventKind}>{label}</span>
+      {entry.source === undefined ? null : <code className={css.eventSource}>{entry.source}</code>}
       {entry.detail === undefined ? null : <span className={css.eventDetail}>{entry.detail}</span>}
     </li>
   )

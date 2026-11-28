@@ -7,5 +7,5 @@
  */
 
 export type {
-  ContextEntry, ContextSnapshot, EventLogEntry, EventOutcome,
+  ContextEntry, ContextOrigin, ContextSnapshot, EventLogEntry, EventOutcome,
 } from '../types.ts'

@@ -149,6 +149,26 @@ export class ContextGate extends TypertRemoteService {
     }
   }
 
+  /**
+   * Subscribe one session to a registered kind.
+   * @param sessionId - target session.
+   * @param kind - registered kind.
+   * @returns after the document write is durable.
+   */
+  async subscribe(sessionId: string, kind: string): Promise<void> {
+    await this.setContext(sessionId, kind, true)
+  }
+
+  /**
+   * Unsubscribe one session from a registered kind.
+   * @param sessionId - target session.
+   * @param kind - registered kind.
+   * @returns after the document write is durable.
+   */
+  async unsubscribe(sessionId: string, kind: string): Promise<void> {
+    await this.setContext(sessionId, kind, false)
+  }
+
   /** Open the document, compose the bus, attach it, and own its teardown. */
   private async start(): Promise<void> {
     const store = await ContextGateStore.open(this.config.stateDir)

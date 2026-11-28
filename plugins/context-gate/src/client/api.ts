@@ -11,7 +11,7 @@
  */
 
 import type { ClientConnectionRpc } from '@deepseek-ai/dsh-client-connection/client'
-import type { ContextEntry, ContextSnapshot, EventLogEntry, EventOutcome } from '../types.ts'
+import type { ContextEntry, ContextOrigin, ContextSnapshot, EventLogEntry, EventOutcome } from '../types.ts'
 
 /** One refused Remote call, carrying the Host's stable code. */
 export class ContextGateRemoteError extends Error {
@@ -67,12 +67,26 @@ function isContextEntry(value: unknown): value is ContextEntry {
     && isBooleanRecord(value['enabledBy'])
 }
 
+function isOrigin(value: unknown): value is ContextOrigin {
+  return isRecord(value)
+    && typeof value['plugin'] === 'string'
+    && isOptionalString(value['instance'])
+    && isOptionalString(value['sessionId'])
+    && isOptionalString(value['channel'])
+    && isOptionalString(value['conversation'])
+}
+
 function isEventEntry(value: unknown): value is EventLogEntry {
   return isRecord(value)
     && typeof value['id'] === 'string'
     && typeof value['kind'] === 'string'
     && EVENT_OUTCOMES.includes(value['outcome'] as EventOutcome)
     && isFiniteNumber(value['at'])
+    && isOptionalString(value['eventId'])
+    && isOptionalString(value['source'])
+    && isOptionalString(value['summary'])
+    && isOptionalString(value['causationId'])
+    && (value['origin'] === undefined || isOrigin(value['origin']))
     && isOptionalString(value['detail'])
 }
 

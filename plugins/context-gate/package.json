@@ -1,6 +1,6 @@
 {
   "name": "@elysia/context-gate",
-  "description": "Elysia/Context-Gate (爱莉希雅·门扉): provider context kinds, per-session subscriptions and queues, and one merged context snapshot per step",
+  "description": "Elysia/Context-Gate (爱莉希雅·门扉): provider context kinds, generic context-event envelopes, per-session subscriptions and queues, and one merged context snapshot per step",
   "version": "0.1.0",
   "private": true,
   "type": "module",
